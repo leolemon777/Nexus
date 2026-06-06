@@ -3,6 +3,7 @@
     <Project Path="src/Nexus.App/Nexus.App.csproj" />
     <Project Path="src/Nexus.Core/Nexus.Core.csproj" />
     <Project Path="src/Nexus.Modbus/Nexus.Modbus.csproj" />
+    <Project Path="src/Nexus.Siemens/Nexus.Siemens.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Modbus.IntegrationTest/Nexus.Modbus.IntegrationTest.csproj" />

@@ -1,0 +1,36 @@
+## Build outputs
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+
+## .NET
+*.nupkg
+*.snupkg
+.project
+.vs/
+*.dll
+*.exe
+*.pdb
+
+## IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Logs
+*.log
+logs/
+
+## Test
+TestResults/
+coverage/
+*.coverage

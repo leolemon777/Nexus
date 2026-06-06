@@ -67,12 +67,12 @@ namespace Nexus.Siemens
                 if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
                 Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
+                RaiseMessageSent(DataConverter.ToHexString(request));
 
                 ns.Write(request, 0, request.Length);
 
                 // 读取 TPKT Header (4 bytes)
-                byte[] tpktHeader = ReadExactNs(ns, 4);
+                byte[]? tpktHeader = ReadExactNs(ns, 4);
                 if (tpktHeader == null) return OperateResult<byte[]>.Failed("读取TPKT头失败");
 
                 int totalLen = (tpktHeader[2] << 8) | tpktHeader[3];
@@ -86,7 +86,7 @@ namespace Nexus.Siemens
                 if (payload.Length > 0) Buffer.BlockCopy(payload, 0, full, 4, payload.Length);
 
                 Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
+                RaiseMessageReceived(DataConverter.ToHexString(full));
 
                 if (!_persistentMode) lock (_lock) DisconnectCore();
 
@@ -95,7 +95,7 @@ namespace Nexus.Siemens
             catch (Exception ex)
             {
                 Log.Error($"通讯异常 — {ex.Message}");
-                OnError?.Invoke(this, ex.Message);
+                RaiseError(ex.Message);
                 if (!_persistentMode) lock (_lock) DisconnectCore();
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }

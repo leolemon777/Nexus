@@ -17,9 +17,9 @@ namespace Nexus
         protected ILogger Log { get; set; }
 
         private TcpClient? _client;
-        private NetworkStream? _stream;
-        private readonly object _lock = new object();
-        private bool _persistentMode;
+        protected NetworkStream? _stream;
+        protected readonly object _lock = new object();
+        protected bool _persistentMode;
 
         // ── 事件 ──────────────────────────────────
 
@@ -121,7 +121,7 @@ namespace Nexus
             lock (_lock) DisconnectCore();
         }
 
-        private void DisconnectCore()
+        protected void DisconnectCore()  // accessible to subclasses (Siemens S7 needs to call it under lock from its own SendAndReceive override)
         {
             bool wasConnected = _client?.Connected == true;
             _stream?.Close();
@@ -134,6 +134,17 @@ namespace Nexus
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
             }
         }
+
+        // ── 事件触发器（供派生类 override SendAndReceive 时调用）──
+
+        /// <summary>触发原始报文发送事件。</summary>
+        protected void RaiseMessageSent(string hex) => OnMessageSent?.Invoke(this, hex);
+
+        /// <summary>触发原始报文接收事件。</summary>
+        protected void RaiseMessageReceived(string hex) => OnMessageReceived?.Invoke(this, hex);
+
+        /// <summary>触发通讯错误事件。</summary>
+        protected void RaiseError(string message) => OnError?.Invoke(this, message);
 
         // ── 网络收发 ──────────────────────────────
 
