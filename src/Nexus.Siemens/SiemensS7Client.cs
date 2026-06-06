@@ -199,116 +199,27 @@ namespace Nexus.Siemens
             });
         }
 
-        /// <summary>构建 S7 Read Var 请求。</summary>
-        private byte[] BuildS7ReadVarRequest(S7Area area, int dbNumber, int address, int bitCount, int byteCount, S7DataType s7Type)
+        /// <summary>
+        /// 构建 S7 Read/Write Var 请求的地址项（13 字节）。
+        /// Read 与 Write 路径的 Param 布局完全相同，只有 function(0x04/0x05)、wordLen、Length 字段不同。
+        /// </summary>
+        private static byte[] BuildS7AddressItem(
+            byte function, byte wordLen, int lengthOrBitCount,
+            S7Area area, int dbNumber, ushort byteAddress)
         {
-            int wordLen = s7Type == S7DataType.Bit ? 0x01 : 0x02;
-
-            byte[] param = new byte[12];
-            param[0] = 0x04;   // Function: Read Var
-            param[1] = 0x01;   // Item count: 1
-
-            // Item spec
-            param[2] = 0x12;   // Variable specification
-            param[3] = 0x0A;   // Length of address specification
-            param[4] = 0x10;   // Syntax ID: S7 Any
-            param[5] = (byte)wordLen;
-            param[6] = (byte)(byteCount >> 8);
-            param[7] = (byte)byteCount;
-            param[8] = (byte)area;
-            param[9] = (byte)(dbNumber >> 8);
-            param[10] = (byte)dbNumber;
-            // Address: byte address * 8 + bit address
-            int addrBits = (area == S7Area.DB ? address : address) * 8;
-            param[10] = (byte)((dbNumber >> 0) & 0xFF);
-            param[11] = 0;
-
-            // Actually let me redo this properly
-            param[5] = (byte)wordLen;
-            // For bits: transport size = bitCount; for others: transport size = byteCount
-            if (s7Type == S7DataType.Bit)
+            return new byte[]
             {
-                param[6] = 0;
-                param[7] = (byte)bitCount;
-            }
-            else
-            {
-                param[6] = (byte)(byteCount >> 8);
-                param[7] = (byte)byteCount;
-            }
-            param[8] = (byte)area;
-            param[9] = (byte)(dbNumber >> 8);
-            param[10] = (byte)dbNumber;
-
-            // Byte address in bits
-            int byteAddr = address * 8 + (s7Type == S7DataType.Bit ? 0 : 0);
-            param[10] = (byte)(dbNumber & 0xFF);
-            byte[] fullAddr = BitConverter.GetBytes((short)0);
-            fullAddr[0] = (byte)((byteAddr >> 8) & 0xFF);
-            fullAddr[1] = (byte)(byteAddr & 0xFF);
-
-            byte[] result = new byte[12];
-            result[0] = 0x04;   // Read Var
-            result[1] = 0x01;   // 1 item
-            result[2] = 0x12;
-            result[3] = 0x0A;
-            result[4] = 0x10;
-            result[5] = (byte)wordLen;
-            if (s7Type == S7DataType.Bit)
-            {
-                result[6] = 0;
-                result[7] = (byte)bitCount;
-            }
-            else
-            {
-                result[6] = (byte)(byteCount >> 8);
-                result[7] = (byte)byteCount;
-            }
-            result[8] = (byte)area;
-            result[9] = (byte)(dbNumber >> 8);
-            result[10] = (byte)(dbNumber & 0xFF);
-            result[11] = 0;
-
-            // Rebuild with proper address encoding
-            byte[] addrBytes = BitConverter.GetBytes((ushort)byteAddr);
-            byte[] paramFinal = new byte[] {
-                0x04, 0x01,             // Read Var, 1 item
-                0x12, 0x0A, 0x10,       // Spec
-                (byte)wordLen,          // Transport size
-                0x00, 0x01,             // Length (1 register)
-                (byte)area,             // Area code
-                (byte)(dbNumber >> 8), (byte)(dbNumber & 0xFF), // DB number
-                addrBytes[1], addrBytes[0]  // Byte address (big endian)
+                function, 0x01,                              // Function, item count = 1
+                0x12, 0x0A, 0x10,                            // Variable spec (S7 Any)
+                wordLen,                                       // Transport size
+                (byte)((lengthOrBitCount >> 8) & 0xFF),       // Length high
+                (byte)(lengthOrBitCount & 0xFF),              // Length low
+                (byte)area,                                   // Area code
+                (byte)((dbNumber >> 8) & 0xFF),               // DB number high
+                (byte)(dbNumber & 0xFF),                      // DB number low
+                (byte)((byteAddress >> 8) & 0xFF),            // Byte address high
+                (byte)(byteAddress & 0xFF)                    // Byte address low
             };
-
-            return BuildCOTPDataRequest(BuildS7Header(0x04, paramFinal, null));
-        }
-
-        /// <summary>构建 S7 Write Var 请求。</summary>
-        private byte[] BuildS7WriteVarRequest(S7Area area, int dbNumber, int address, byte[] data, S7DataType s7Type)
-        {
-            int wordLen = s7Type == S7DataType.Bit ? 0x01 : 0x02;
-            int byteAddr = address * 8;
-            byte[] addrBytes = BitConverter.GetBytes((ushort)byteAddr);
-
-            byte[] param = new byte[] {
-                0x05, 0x01,             // Write Var, 1 item
-                0x12, 0x0A, 0x10,       // Spec
-                (byte)wordLen,          // Transport size
-                (byte)(data.Length >> 8), (byte)(data.Length), // Length
-                (byte)area,             // Area code
-                (byte)(dbNumber >> 8), (byte)(dbNumber & 0xFF), // DB number
-                addrBytes[1], addrBytes[0]  // Byte address
-            };
-
-            byte[] s7Data = new byte[4 + data.Length];
-            s7Data[0] = 0x00;    // Return code
-            s7Data[1] = (byte)wordLen; // Transport size
-            s7Data[2] = (byte)(data.Length >> 8);
-            s7Data[3] = (byte)(data.Length & 0xFF);
-            Buffer.BlockCopy(data, 0, s7Data, 4, data.Length);
-
-            return BuildCOTPDataRequest(BuildS7Header(0x05, param, s7Data));
         }
 
         private byte[] BuildS7Header(byte function, byte[]? param, byte[]? data)
@@ -444,17 +355,10 @@ namespace Nexus.Siemens
             if (wordLen < 1) wordLen = 1;
 
             int addrBits = s7Addr.ByteAddress * 8 + s7Addr.BitOffset;
-            byte[] addrBytes = BitConverter.GetBytes((ushort)addrBits);
+            byte wordLenByte = (byte)(type == S7DataType.Bit ? 0x01 : 0x02);
 
-            byte[] param = new byte[] {
-                0x04, 0x01,             // Read Var, 1 item
-                0x12, 0x0A, 0x10,       // Variable spec
-                (byte)(type == S7DataType.Bit ? 0x01 : 0x02),  // Transport size
-                (byte)(byteCount >> 8), (byte)(byteCount),      // Length
-                (byte)s7Addr.Area,
-                (byte)(s7Addr.DBNumber >> 8), (byte)(s7Addr.DBNumber & 0xFF),
-                addrBytes[1], addrBytes[0]
-            };
+            byte[] param = BuildS7AddressItem(0x04, wordLenByte, byteCount,
+                s7Addr.Area, s7Addr.DBNumber, (ushort)addrBits);
 
             var req = BuildCOTPDataRequest(BuildS7Header(0x04, param, null));
             var resp = SendAndReceive(req);
@@ -560,19 +464,12 @@ namespace Nexus.Siemens
         {
             var s7Addr = ParseS7Address(address);
             int addrBits = s7Addr.ByteAddress * 8 + s7Addr.BitOffset;
-            byte[] addrBytes = BitConverter.GetBytes((ushort)addrBits);
             byte wordLen = (byte)(type == S7DataType.Bit ? 0x01 : 0x02);
 
-            byte[] param = new byte[] {
-                0x05, 0x01,
-                0x12, 0x0A, 0x10,
-                wordLen,
-                (byte)(data.Length >> 8), (byte)(data.Length),
-                (byte)s7Addr.Area,
-                (byte)(s7Addr.DBNumber >> 8), (byte)(s7Addr.DBNumber & 0xFF),
-                addrBytes[1], addrBytes[0]
-            };
+            byte[] param = BuildS7AddressItem(0x05, wordLen, data.Length,
+                s7Addr.Area, s7Addr.DBNumber, (ushort)addrBits);
 
+            // S7 Data Item: 4 字节 return code / transport size / length + 实际数据
             byte[] s7Data = new byte[4 + data.Length];
             s7Data[0] = 0x00;    // Return code
             s7Data[1] = wordLen;  // Transport size
