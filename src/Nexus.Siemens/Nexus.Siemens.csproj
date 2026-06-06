@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.Siemens</RootNamespace>
+    <AssemblyName>Nexus.Siemens</AssemblyName>
+    <Description>Nexus Siemens — S7/FetchWrite/PPI protocol implementation</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
+  </ItemGroup>
+
+</Project>

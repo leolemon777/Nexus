@@ -1,0 +1,56 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "Nexus.Modbus.IntegrationTest/1.0.0": {
+        "dependencies": {
+          "Nexus.Core": "1.0.0",
+          "Nexus.Modbus": "1.0.0"
+        },
+        "runtime": {
+          "Nexus.Modbus.IntegrationTest.dll": {}
+        }
+      },
+      "Nexus.Core/1.0.0": {
+        "runtime": {
+          "Nexus.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Nexus.Modbus/1.0.0": {
+        "dependencies": {
+          "Nexus.Core": "1.0.0"
+        },
+        "runtime": {
+          "Nexus.Modbus.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Nexus.Modbus.IntegrationTest/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Nexus.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Nexus.Modbus/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Color theme: claude -->
+  <Color x:Key="Color.Bg">#EBE8DE</Color>
+  <Color x:Key="Color.Surface">#F6F4EE</Color>
+  <Color x:Key="Color.Surface2">#FBFAF6</Color>
+  <Color x:Key="Color.Surface3">#FFFFFF</Color>
+  <Color x:Key="Color.Line">#1A2D2820</Color>
+  <Color x:Key="Color.Line2">#2B2D2820</Color>
+  <Color x:Key="Color.Text">#262019</Color>
+  <Color x:Key="Color.Text2">#6E6757</Color>
+  <Color x:Key="Color.Text3">#9B9484</Color>
+  <Color x:Key="Color.Accent">#CC785C</Color>
+  <Color x:Key="Color.Accent2">#DD8E72</Color>
+  <Color x:Key="Color.AccentSoft">#24CC785C</Color>
+  <Color x:Key="Color.AccentLine">#6BCC785C</Color>
+  <Color x:Key="Color.Ok">#4F8A5B</Color>
+  <Color x:Key="Color.Warn">#C0892E</Color>
+  <Color x:Key="Color.Alarm">#B23A30</Color>
+  <Color x:Key="Color.OkSoft">#214F8A5B</Color>
+  <Color x:Key="Color.WarnSoft">#21C0892E</Color>
+  <Color x:Key="Color.AlarmSoft">#21B23A30</Color>
+  <Color x:Key="Color.OnAccent">#FFFFFF</Color>
+  <SolidColorBrush x:Key="Brush.Bg" Color="{StaticResource Color.Bg}"/>
+  <SolidColorBrush x:Key="Brush.Surface" Color="{StaticResource Color.Surface}"/>
+  <SolidColorBrush x:Key="Brush.Surface2" Color="{StaticResource Color.Surface2}"/>
+  <SolidColorBrush x:Key="Brush.Surface3" Color="{StaticResource Color.Surface3}"/>
+  <SolidColorBrush x:Key="Brush.Line" Color="{StaticResource Color.Line}"/>
+  <SolidColorBrush x:Key="Brush.Line2" Color="{StaticResource Color.Line2}"/>
+  <SolidColorBrush x:Key="Brush.Text" Color="{StaticResource Color.Text}"/>
+  <SolidColorBrush x:Key="Brush.Text2" Color="{StaticResource Color.Text2}"/>
+  <SolidColorBrush x:Key="Brush.Text3" Color="{StaticResource Color.Text3}"/>
+  <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}"/>
+  <SolidColorBrush x:Key="Brush.Accent2" Color="{StaticResource Color.Accent2}"/>
+  <SolidColorBrush x:Key="Brush.AccentSoft" Color="{StaticResource Color.AccentSoft}"/>
+  <SolidColorBrush x:Key="Brush.AccentLine" Color="{StaticResource Color.AccentLine}"/>
+  <SolidColorBrush x:Key="Brush.Ok" Color="{StaticResource Color.Ok}"/>
+  <SolidColorBrush x:Key="Brush.Warn" Color="{StaticResource Color.Warn}"/>
+  <SolidColorBrush x:Key="Brush.Alarm" Color="{StaticResource Color.Alarm}"/>
+  <SolidColorBrush x:Key="Brush.OkSoft" Color="{StaticResource Color.OkSoft}"/>
+  <SolidColorBrush x:Key="Brush.WarnSoft" Color="{StaticResource Color.WarnSoft}"/>
+  <SolidColorBrush x:Key="Brush.AlarmSoft" Color="{StaticResource Color.AlarmSoft}"/>
+  <SolidColorBrush x:Key="Brush.OnAccent" Color="{StaticResource Color.OnAccent}"/>
+  <LinearGradientBrush x:Key="Brush.AccentGrad" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="{StaticResource Color.Accent2}" Offset="0"/>
+    <GradientStop Color="{StaticResource Color.Accent}" Offset="1"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="Brush.SurfaceGrad" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="{StaticResource Color.Surface2}" Offset="0"/>
+    <GradientStop Color="{StaticResource Color.Surface}" Offset="1"/>
+  </LinearGradientBrush>
+</ResourceDictionary>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Nexus.App</RootNamespace>
+    <AssemblyName>Nexus</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon />
+    <Version>0.1.0</Version>
+    <Description>Nexus — Open-source Industrial Communication Library &amp; Debugger</Description>
+  </PropertyGroup>
+
+</Project>

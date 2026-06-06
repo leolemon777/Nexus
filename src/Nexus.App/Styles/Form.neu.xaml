@@ -1,0 +1,108 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+  <!-- Form style: neu  (若 .NET 报 mscorlib 错，把上面 assembly=mscorlib 改为 System.Runtime) -->
+  <CornerRadius x:Key="Radius.Lg">20</CornerRadius>
+  <CornerRadius x:Key="Radius.Md">14</CornerRadius>
+  <CornerRadius x:Key="Radius.Sm">10</CornerRadius>
+  <Thickness x:Key="Pad.Card">26</Thickness>
+  <Thickness x:Key="Border.Thickness">0</Thickness>
+  <FontFamily x:Key="Font.Family">Manrope, Microsoft YaHei UI, Segoe UI</FontFamily>
+  <sys:Double x:Key="Font.Size">14</sys:Double>
+  <sys:Double x:Key="Font.SizeH">20</sys:Double>
+  <sys:Double x:Key="Font.SizeHero">34</sys:Double>
+  <sys:Double x:Key="Font.SizeReadout">44</sys:Double>
+  <DropShadowEffect x:Key="CardEffect" Opacity="0"/>
+
+  <Style x:Key="Card" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceGrad}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Lg}"/>
+    <Setter Property="Padding" Value="{DynamicResource Pad.Card}"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+  </Style>
+
+  <Style x:Key="Button.Primary" TargetType="Button">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Padding" Value="18,11"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid>
+            <Border CornerRadius="{DynamicResource Radius.Md}" Margin="-2,-2,2,2" Background="{DynamicResource Brush.Surface3}">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="12" ShadowDepth="4" Direction="135" Opacity="0.55" Color="{DynamicResource Color.Surface3}"/>
+              </Border.Effect>
+            </Border>
+            <Border x:Name="darkShadow" CornerRadius="{DynamicResource Radius.Md}" Margin="2,2,-2,-2" Background="{DynamicResource Brush.Surface}">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="5" Direction="315" Opacity="0.20" Color="{DynamicResource Color.Text}"/>
+              </Border.Effect>
+            </Border>
+            <Border x:Name="b" Background="{DynamicResource Brush.AccentGrad}"
+                    CornerRadius="{DynamicResource Radius.Md}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="darkShadow" Property="Opacity" Value="0.88"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="b" Property="Margin" Value="2,2,-2,-2"/>
+              <Setter TargetName="darkShadow" Property="Opacity" Value="0.35"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="b" Property="Opacity" Value="0.38"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="Button.Ghost" TargetType="Button">
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Padding" Value="18,11"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid>
+            <Border CornerRadius="{DynamicResource Radius.Md}" Margin="-2,-2,2,2" Background="{DynamicResource Brush.Surface3}">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="12" ShadowDepth="4" Direction="135" Opacity="0.50" Color="{DynamicResource Color.Surface3}"/>
+              </Border.Effect>
+            </Border>
+            <Border x:Name="darkShadow" CornerRadius="{DynamicResource Radius.Md}" Margin="2,2,-2,-2" Background="{DynamicResource Brush.Surface}">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="5" Direction="315" Opacity="0.18" Color="{DynamicResource Color.Text}"/>
+              </Border.Effect>
+            </Border>
+            <Border x:Name="b" Background="{DynamicResource Brush.Surface2}"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0"
+                    CornerRadius="{DynamicResource Radius.Md}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="b" Property="Background" Value="{DynamicResource Brush.Surface3}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="b" Property="Margin" Value="2,2,-2,-2"/>
+              <Setter TargetName="darkShadow" Property="Opacity" Value="0.35"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+</ResourceDictionary>

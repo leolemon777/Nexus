@@ -1,0 +1,10 @@
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.csproj.AssemblyReference.cache
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.GeneratedMSBuildEditorConfig.editorconfig
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.AssemblyInfoInputs.cache
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.AssemblyInfo.cs
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.csproj.CoreCompileInputs.cache
+E:\Desktop\Nexus\src\Nexus.Core\bin\Debug\netstandard2.0\Nexus.Core.deps.json
+E:\Desktop\Nexus\src\Nexus.Core\bin\Debug\netstandard2.0\Nexus.Core.dll
+E:\Desktop\Nexus\src\Nexus.Core\bin\Debug\netstandard2.0\Nexus.Core.pdb
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.dll
+E:\Desktop\Nexus\src\Nexus.Core\obj\Debug\netstandard2.0\Nexus.Core.pdb

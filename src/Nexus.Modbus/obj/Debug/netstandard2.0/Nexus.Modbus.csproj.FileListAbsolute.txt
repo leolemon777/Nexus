@@ -1,0 +1,13 @@
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.csproj.AssemblyReference.cache
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.GeneratedMSBuildEditorConfig.editorconfig
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.AssemblyInfoInputs.cache
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.AssemblyInfo.cs
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.csproj.CoreCompileInputs.cache
+E:\Desktop\Nexus\src\Nexus.Modbus\bin\Debug\netstandard2.0\Nexus.Modbus.deps.json
+E:\Desktop\Nexus\src\Nexus.Modbus\bin\Debug\netstandard2.0\Nexus.Modbus.dll
+E:\Desktop\Nexus\src\Nexus.Modbus\bin\Debug\netstandard2.0\Nexus.Modbus.pdb
+E:\Desktop\Nexus\src\Nexus.Modbus\bin\Debug\netstandard2.0\Nexus.Core.dll
+E:\Desktop\Nexus\src\Nexus.Modbus\bin\Debug\netstandard2.0\Nexus.Core.pdb
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Mo.7D360185.Up2Date
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.dll
+E:\Desktop\Nexus\src\Nexus.Modbus\obj\Debug\netstandard2.0\Nexus.Modbus.pdb

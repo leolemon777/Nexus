@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus</RootNamespace>
+    <AssemblyName>Nexus.Core</AssemblyName>
+    <Description>Nexus Core — Industrial communication abstractions</Description>
+  </PropertyGroup>
+
+  <PropertyGroup><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+</Project>

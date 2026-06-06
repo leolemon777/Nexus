@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nexus.App/Nexus.App.csproj" />
+    <Project Path="src/Nexus.Core/Nexus.Core.csproj" />
+    <Project Path="src/Nexus.Modbus/Nexus.Modbus.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nexus.Modbus.IntegrationTest/Nexus.Modbus.IntegrationTest.csproj" />
+  </Folder>
+</Solution>
