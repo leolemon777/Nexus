@@ -4,4 +4,17 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <!-- NuGet 包元数据（协议库继承） -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+    <Version>1.0.0</Version>
+    <Authors>Nexus Contributors</Authors>
+    <Company>Nexus</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial-communication PLC protocol</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
 </Project>

@@ -6,7 +6,9 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Options;
 using Nexus;
+using Nexus.App.Configuration;
 using Nexus.Modbus;
 
 namespace Nexus.App.ViewModels;
@@ -21,12 +23,19 @@ namespace Nexus.App.ViewModels;
 ///     处理器统一通过 _dispatcher.BeginInvoke 回到 UI 线程追加 LogLines。
 ///   - LogLines 容量上限 500 行（FIFO 丢弃最早项），避免长时间调试时 UI 失控。
 ///
+/// DI
+///   - 由 DI 容器构造（AddTransient&lt;ModbusTcpViewModel&gt;()），通过 IOptions&lt;ModbusOptions&gt;
+///     注入 appsettings.json 中 Modbus 节的默认值。
+///   - 避免硬编码 IP/Port/超时等业务参数；Server 端口也由配置驱动。
+///
 /// 生命周期
-///   - 由 ModbusTcpPage 在构造时创建并作为 DataContext。
+///   - 由 ModbusTcpPage 通过 App.Services 解析，作为 DataContext。
 ///   - ModbusTcpPage.OnUnloaded 调用 Dispose() 释放 client + server。
 /// </summary>
 public partial class ModbusTcpViewModel : ObservableObject, IDisposable
 {
+    private readonly ModbusOptions _options;
+
     // ── 输入参数 ──────────────────────────────
     [ObservableProperty] private string _ipAddress = "127.0.0.1";
     [ObservableProperty] private int _port = 502;
@@ -73,13 +82,20 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     private bool _disposed;
 
     private const int LogCap = 500;
-    private const int ServerPort = 15020;   // 避开系统 502（需要 root/管理员）
 
-    public ModbusTcpViewModel()
+    /// <summary>内置 Server 端口（来自 appsettings.json 的 <c>Modbus:VirtualServerPort</c>）。</summary>
+    public int VirtualServerPort => _options.VirtualServerPort;
+
+    public ModbusTcpViewModel(IOptions<ModbusOptions> options)
     {
+        _options = options.Value;
+        _ipAddress = _options.DefaultIp;
+        _port = _options.DefaultPort;
+        _slaveId = _options.DefaultSlaveId;
+
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         AppendLog("Modbus TCP 调试器已就绪。");
-        AppendLog("提示：可先点击\"启动内置 Server\"在 127.0.0.1:15020 模拟 PLC，再连接并读写。");
+        AppendLog($"提示：可先点击\"启动内置 Server\"在 127.0.0.1:{VirtualServerPort} 模拟 PLC，再连接并读写。");
     }
 
     // ═══════════════════════════════════════════
@@ -294,7 +310,7 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         if (IsServerRunning) return;
         try
         {
-            var server = new ModbusTcpServer(ServerPort);
+            var server = new ModbusTcpServer(VirtualServerPort);
             // 预设 4 区数据，供联机自测
             server.SetHoldingRegister(0, 0x1234);
             server.SetHoldingRegister(1, 0x5678);
@@ -304,7 +320,7 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
 
             _server = server;
             IsServerRunning = true;
-            AppendLog($"[SRV] 内置 Modbus TCP Server 已启动: 127.0.0.1:{ServerPort}");
+            AppendLog($"[SRV] 内置 Modbus TCP Server 已启动: 127.0.0.1:{VirtualServerPort}");
             AppendLog("[SRV] 预设: HR40001=0x1234, HR40002=0x5678, 线圈00001=ON, 线圈00002=OFF");
         }
         catch (Exception ex)

@@ -1,0 +1,942 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Beckhoff Automation GmbH & Co. KG, Hülshorstweg 20, 33415 Verl, Germany">
+    <meta name="copyright" content="Beckhoff Automation GmbH & Co. KG, Hülshorstweg 20, 33415 Verl, Germany">
+    <meta name="email" content="info@beckhoff.de">
+    <meta name="description" content="Beckhoff New Automation Technology: A decisive step ahead with PC-based control and EtherCAT!">
+    <meta property="og:title" content="Beckhoff | New Automation Technology">
+    <meta property="og:description" content="Beckhoff New Automation Technology: A decisive step ahead with PC-based control and EtherCAT!">
+    <meta property="og:site_name" content="Beckhoff Automation">
+    <meta property="og:image" content="https://www.beckhoff.com/media/layoutassets/img/social.jpg">
+    <meta property="og:url" content="https://www.beckhoff.com/en-en/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="en-en">
+    <meta property="twitter:title" content="Beckhoff | New Automation Technology">
+    <meta property="twitter:description" content="Beckhoff New Automation Technology: A decisive step ahead with PC-based control and EtherCAT!">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:site" content="@Beckhoff">
+    <meta property="twitter:url" content="https://www.beckhoff.com/en-en/">
+    <title>Beckhoff | New Automation Technology | Beckhoff Worldwide</title>
+    <link rel="canonical" href="https://www.beckhoff.com/en-en/">
+		<link rel="alternate" href="https://www.beckhoff.com/de-de/" hreflang="de-DE">
+		<link rel="alternate" href="https://www.beckhoff.com/en-en/" hreflang="x-default">
+		<link rel="alternate" href="https://www.beckhoff.com/de-at/" hreflang="de-AT">
+		<link rel="alternate" href="https://www.beckhoff.com/de-ch/" hreflang="de-CH">
+		<link rel="alternate" href="https://www.beckhoff.com/en-gb/" hreflang="en-GB">
+		<link rel="alternate" href="https://www.beckhoff.com/en-us/" hreflang="en-US">
+		<link rel="alternate" href="https://www.beckhoff.com/en-au/" hreflang="en-AU">
+		<link rel="alternate" href="https://www.beckhoff.com/en-ca/" hreflang="en-CA">
+		<link rel="alternate" href="https://www.beckhoff.com/en-za/" hreflang="en-ZA">
+		<link rel="alternate" href="https://www.beckhoff.com/fr-fr/" hreflang="fr-FR">
+		<link rel="alternate" href="https://www.beckhoff.com/fr-ch/" hreflang="fr-CH">
+		<link rel="alternate" href="https://www.beckhoff.com/fr-be/" hreflang="fr-BE">
+		<link rel="alternate" href="https://www.beckhoff.com/it-it/" hreflang="it-IT">
+		<link rel="alternate" href="https://www.beckhoff.com/it-ch/" hreflang="it-CH">
+		<link rel="alternate" href="https://www.beckhoff.com/es-es/" hreflang="es-ES">
+		<link rel="alternate" href="https://www.beckhoff.com/pt-br/" hreflang="pt-BR">
+		<link rel="alternate" href="https://www.beckhoff.com/nl-be/" hreflang="nl-BE">
+		<link rel="alternate" href="https://www.beckhoff.com.cn/zh-cn/" hreflang="zh-CN">
+		<link rel="alternate" href="https://www.beckhoff.com/zh-sg/" hreflang="zh-SG">
+		<link rel="alternate" href="https://www.beckhoff.com/pl-pl/" hreflang="pl-PL">
+		<link rel="alternate" href="https://www.beckhoff.com/cs-cz/" hreflang="cs-CZ">
+		<link rel="alternate" href="https://www.beckhoff.com/hu-hu/" hreflang="hu-HU">
+		<link rel="alternate" href="https://www.beckhoff.com/sk-sk/" hreflang="sk-SK">
+		<link rel="alternate" href="https://www.beckhoff.com/sl-si/" hreflang="sl-SI">
+		<link rel="alternate" href="https://www.beckhoff.com/fi-fi/" hreflang="fi-FI">
+		<link rel="alternate" href="https://www.beckhoff.com/da-dk/" hreflang="da-DK">
+		<link rel="alternate" href="https://www.beckhoff.com/nn-no/" hreflang="nn-NO">
+		<link rel="alternate" href="https://www.beckhoff.com/sv-se/" hreflang="sv-SE">
+		<link rel="alternate" href="https://www.beckhoff.com/ar-ae/" hreflang="ar-AE">
+		<link rel="alternate" href="https://www.beckhoff.com/tr-tr/" hreflang="tr-TR">
+		<link rel="alternate" href="https://www.beckhoff.com/he-il/" hreflang="he-IL">
+		<link rel="alternate" href="https://www.beckhoff.com/ja-jp/" hreflang="ja-JP">
+		<link rel="alternate" href="https://www.beckhoff.com/id-id/" hreflang="id-ID">
+		<link rel="alternate" href="https://www.beckhoff.com/hi-in/" hreflang="hi-IN">
+		<link rel="alternate" href="https://www.beckhoff.com/ms-my/" hreflang="ms-MY">
+		<link rel="alternate" href="https://www.beckhoff.com/nl-nl/" hreflang="nl-NL">
+		<link rel="alternate" href="https://www.beckhoff.com/en-nz/" hreflang="en-NZ">
+		<link rel="alternate" href="https://www.beckhoff.com/en-ph/" hreflang="en-PH">
+		<link rel="alternate" href="https://www.beckhoff.com/th-th/" hreflang="th-TH">
+		<link rel="alternate" href="https://www.beckhoff.com/vi-vn/" hreflang="vi-VN">
+		<link rel="alternate" href="https://www.beckhoff.com/zh-tw/" hreflang="zh-TW">
+		<link rel="alternate" href="https://www.beckhoff.com/et-ee/" hreflang="et-EE">
+		<link rel="alternate" href="https://www.beckhoff.com/es-mx/" hreflang="es-MX">
+		<link rel="alternate" href="https://www.beckhoff.com/ar-eg/" hreflang="ar-EG">
+		<link rel="alternate" href="https://www.beckhoff.com/ko-kr/" hreflang="ko-KR">
+		<link rel="alternate" href="https://www.beckhoff.com/lt-lt/" hreflang="lt-LT">
+	<link rel="preload" href="/media/layoutassets/fonts/notosans-condensed_woff2.woff2" as="font" type="font/woff2" crossorigin="">
+	<link rel="preload" href="/media/layoutassets/fonts/notosans-condensedsemibold_woff2.woff2" as="font" type="font/woff2" crossorigin="">
+	<link rel="icon" href="/media/layoutassets/fav_icons/favicon.ico?3564817" sizes="48x48">
+	<link rel="icon" href="/media/layoutassets/fav_icons/favicon.svg?3564874" sizes="any" type="image/svg+xml">
+	<link rel="apple-touch-icon" href="/media/layoutassets/fav_icons/apple-touch-icon.png?3565304">
+    <link rel="manifest" href="/media/layoutassets/fav_icons/manifest.json?3565258">
+	<link rel="stylesheet" href="/media/layoutassets/css/main_styles.css?3565105">
+	<link rel="stylesheet" href="/media/layoutassets/css/application-styles.css?3564527">
+	<link rel="stylesheet" href="/media/layoutassets/css/navigation/navigation-expert-styles-min.css?3564804">
+	<!-- /media/layoutassets/css/crm/crm-form-min.css -->
+	<!-- /media/layoutassets/css/crm/crm-form_styles.css -->
+	<script>
+		const contentCreatorView = false;
+		const cmHideModal = false;
+		const exportConsentHideModal = false;
+		const previewClient = false;
+		const fs_dev = false;
+		const fs_q = false;
+	</script>
+	<script src="/media/layoutassets/js/fs-config_en-en.js?3564959"></script>
+	<script src="/media/layoutassets/js/fs-lang_en-en.js?3565066"></script>
+	<script src="/media/layoutassets/js/mybeckhoff/mybeckhoff-service-min.js?3564732"></script>
+    <script src="/media/layoutassets/js/tracking/tracking.js?3564962&errorPage=false"></script>
+	<script src="/media/layoutassets/js/resources/jquery-min.js?3565331"></script>
+    <script src="/media/layoutassets/js/resources/jquery-migrate-min.js?3565143"></script>
+	<script src="/media/layoutassets/js/consent-management/consent-management.js?3564540"></script>
+  </head>
+  <body class="body--home">
+    <div class="page-wrapper">
+      <div class="offcanvas offcanvas-start" id="offcanvas" data-bs-scroll="true" data-bs-backdrop="false" tabindex="-1">
+        <nav class="nav-expert" data-plugin="navigation" data-template="expert" data-cms-native-language="EN-EN" data-cms-id="216814" data-cms-pid="" data-root-cms-id="216814" data-cms-nav-id="216509-216814" data-root-cms-nav-id="216509-216814" data-depth="1"></nav>
+      </div>
+      <div class="page">
+        <div class="sticky-top">
+          <header class="header body--home">
+            <div class="container">
+              <a class="toggle-menu" id="toggleMenu" href="#offcanvas" data-bs-toggle="offcanvas" role="button" aria-controls="offcanvas"><i class="icon-menu"><span class="bar"></span><span class="bar"></span><span class="bar"></span></i></a><a href="/en-en/" class="logo"><span class="aural">Beckhoff - New Automation Technology</span>
+                <div class="logo__name">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="112" height="22" viewBox="0 0 112 22"> <g fill="#FFFFFE" fill-rule="evenodd"> <path d="M6.69231818,20.7828636 C10.5508636,20.7828636 12.8716364,19.0278636 12.8716364,14.9263182 C12.8716364,12.4165455 12.4126364,11.3377727 10.2538636,10.0957727 L10.2538636,10.0417727 C11.9008636,9.15077273 12.5476364,7.559 12.5476364,5.77822727 C12.5476364,1.70368182 9.74086364,0.542681818 6.15231818,0.542681818 L0,0.542681818 L0,20.7828636 L6.69231818,20.7828636 Z M4.74954545,4.18645455 C6.42231818,4.18645455 7.79809091,4.10545455 7.79809091,6.10222727 C7.79809091,8.504 6.82731818,8.369 4.74954545,8.504 L4.74954545,4.18645455 Z M4.74954545,12.1465455 C6.77331818,12.2275455 8.12209091,12.1735455 8.12209091,14.5213182 C8.12209091,17.2470909 7.12431818,17.0838636 4.74954545,17.1390909 L4.74954545,12.1465455 L4.74954545,12.1465455 Z"></path> <polyline points="26.051 20.783 26.051 16.734 19.602 16.734 19.602 12.363 25.538 12.363 25.538 8.315 19.602 8.315 19.602 4.591 25.727 4.591 25.727 .543 14.852 .543 14.852 20.783 26.051 20.783"></polyline> <path d="M40.8043636,7.61422727 L40.8043636,5.91322727 C40.8043636,1.78468182 38.3755909,0.0579090909 34.3280455,0.0579090909 C29.9835,0.0579090909 27.9597273,2.10868182 27.9597273,6.50722727 L27.9597273,14.8195455 C27.9597273,18.9468636 29.6595,21.2664091 34.0310455,21.2664091 C38.8885909,21.2664091 40.8853636,18.8388636 40.8853636,15.3583182 L40.8853636,12.8755455 L36.1358182,12.8755455 L36.1358182,14.7115455 C36.1358182,15.9535455 36.0008182,17.6263182 34.3820455,17.6263182 C33.1400455,17.6263182 32.6810455,16.9500909 32.6810455,15.8160909 L32.7080455,5.80522727 C32.7080455,4.48345455 33.0590455,3.67345455 34.5428182,3.70045455 C35.4338182,3.70045455 36.0548182,4.59145455 36.0548182,6.31822727 L36.0548182,7.61422727 L40.8043636,7.61422727"></path> <polyline points="47.642 20.783 47.642 15.79 48.694 13.738 51.312 20.783 56.331 20.783 51.743 9.476 56.062 .543 51.204 .543 47.696 8.639 47.642 8.639 47.642 .543 42.892 .543 42.892 20.783 47.642 20.783"></polyline> <polyline points="62.359 20.783 62.359 12.363 65.652 12.363 65.652 20.783 70.401 20.783 70.401 .543 65.652 .543 65.652 8.315 62.359 8.315 62.359 .543 57.609 .543 57.609 20.783 62.359 20.783"></polyline> <path d="M85.2525,6.10222727 C85.2525,2.21668182 83.0127273,0.0579090909 78.8571818,0.0579090909 C74.7016364,0.0579090909 72.3808636,2.21668182 72.3808636,6.10222727 L72.3808636,14.3323182 C72.3808636,18.8940909 74.0536364,21.2664091 78.8571818,21.2664091 C83.6607273,21.2664091 85.2525,18.8940909 85.2525,14.3323182 L85.2525,6.10222727 Z M80.5041818,14.7373182 C80.5041818,15.8983182 80.3949545,17.6263182 78.8571818,17.6263182 C77.3194091,17.6263182 77.1304091,15.8983182 77.1304091,14.7373182 L77.1304091,6.42622727 C77.1304091,5.18545455 77.3194091,3.70045455 78.8301818,3.70045455 C80.3949545,3.70045455 80.5041818,5.18545455 80.5041818,6.42622727 L80.5041818,14.7373182 L80.5041818,14.7373182 Z"></path> <polyline points="92.171 20.783 92.171 12.228 98.081 12.228 98.081 8.18 92.171 8.18 92.171 4.591 98.594 4.591 98.594 .543 87.422 .543 87.422 20.783 92.171 20.783"></polyline> <polyline points="105.467 20.783 105.467 12.228 111.377 12.228 111.377 8.18 105.467 8.18 105.467 4.591 111.889 4.591 111.889 .543 100.717 .543 100.717 20.783 105.467 20.783"></polyline> </g> </svg>
+                </div>
+                <div class="logo__claim">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="215" height="19" viewBox="0 0 215 19"> <g fill="#111" fill-rule="evenodd" transform="translate(.988 .268)"> <polyline points="0 13.515 2.091 13.515 2.091 3.716 2.128 3.716 6.29 13.515 9.039 13.515 9.039 .931 6.955 .931 6.955 10.801 6.919 10.801 2.734 .931 0 .931 0 13.515"></polyline> <path d="M13.2729545,8.073 C13.2729545,6.83713636 13.7577273,5.59513636 14.9322273,5.59513636 C15.9435,5.59513636 16.4798182,6.43581818 16.4798182,8.073 L13.2729545,8.073 Z M18.0642273,11.2995 C17.6518636,11.6038636 17.0001818,12.0260455 15.633,12.0260455 C13.9025455,12.0260455 13.2729545,11.07 13.2729545,9.47331818 L18.6435,9.47331818 L18.6435,9.03763636 C18.6435,5.26254545 16.9277727,4.08927273 14.9322273,4.08927273 C12.5721818,4.08927273 11.1178636,6.22840909 11.1178636,9.01309091 C11.1178636,11.5179545 12.4126364,13.6607727 15.4022727,13.6607727 C16.7338636,13.6607727 17.7034091,13.2459545 18.1722273,13.0667727 L18.0642273,11.2995 L18.0642273,11.2995 Z"></path> <polyline points="27.722 13.515 30.153 13.515 32.622 4.234 30.465 4.234 28.969 11.458 28.932 11.458 27.4 4.234 24.861 4.234 23.294 11.458 23.257 11.458 21.768 4.234 19.458 4.234 21.962 13.515 24.407 13.515 26.028 6.291 26.065 6.291 27.722 13.515"></polyline> <path d="M44.9267727 13.5147273L47.3064545 13.5147273 43.254.9315 40.7282727.9315 36.5162727 13.5147273 38.8161818 13.5147273 39.7231364 10.4919545 44.0419091 10.4919545 44.9267727 13.5147273zM40.2066818 8.721L41.9371364 2.84113636 41.9739545 2.84113636 43.5583636 8.721 40.2066818 8.721 40.2066818 8.721zM55.7525455 4.23409091L53.514 4.23409091 53.514 9.54818182C53.514 10.7288182 53.1777273 11.8198636 51.9860455 11.8198636 51.0459545 11.8198636 50.6507727 11.2258636 50.6507727 9.78995455L50.6507727 4.23409091 48.4208182 4.23409091 48.4208182 10.2121364C48.4208182 12.0763636 49.0491818 13.6607727 51.1564091 13.6607727 52.6193182 13.6607727 53.1936818 12.7746818 53.6232273 12.0763636L53.6060455 12.0640909 53.6612727 12.0763636C53.6612727 12.5586818 53.7140455 13.0275 53.7336818 13.5147273L55.8237273 13.5147273C55.7660455 13.0900909 55.7525455 12.5586818 55.7525455 11.9781818L55.7525455 4.23409091M58.5949091 4.23409091L57.1185 4.23409091 57.1185 5.86636364 58.5949091 5.86636364 58.5949091 10.9497273C58.5949091 12.8863636 59.5264091 13.6607727 61.1832273 13.6607727 61.8496364 13.6607727 62.3393182 13.5147273 62.6829545 13.3588636L62.6829545 11.7548182C62.5172727 11.8468636 62.2325455 11.9659091 61.8349091 11.9659091 61.1832273 11.9659091 60.8285455 11.6738182 60.8285455 10.6723636L60.8285455 5.86636364 62.6829545 5.86636364 62.6829545 4.23409091 60.8285455 4.23409091 60.8285455 1.64577273 58.5949091 2.322 58.5949091 4.23409091M63.8464091 8.8695C63.8464091 12.7624091 66.0432273 13.6607727 67.9369091 13.6607727 69.8256818 13.6607727 72.0053182 12.7624091 72.0053182 8.8695 72.0053182 5.076 69.8256818 4.08927273 67.9369091 4.08927273 66.0432273 4.08927273 63.8464091 5.076 63.8464091 8.8695zM66.1512273 8.8695C66.1512273 7.32068182 66.4911818 5.66754545 67.9369091 5.66754545 69.3801818 5.66754545 69.6992727 7.32068182 69.6992727 8.8695 69.6992727 10.4183182 69.3801818 12.0640909 67.9369091 12.0640909 66.4911818 12.0640909 66.1512273 10.4183182 66.1512273 8.8695L66.1512273 8.8695zM73.7136818 13.5147273L75.9497727 13.5147273 75.9497727 7.90118182C75.9497727 6.86781818 76.4738182 5.93018182 77.4642273 5.93018182 78.2938636 5.93018182 78.651 6.51068182 78.651 7.64713636L78.651 13.5147273 80.8846364 13.5147273 80.8846364 7.90118182C80.8846364 6.86781818 81.4099091 5.93018182 82.3990909 5.93018182 83.2238182 5.93018182 83.5870909 6.51068182 83.5870909 7.64713636L83.5870909 13.5147273 85.8145909 13.5147273 85.8145909 7.77845455C85.8145909 5.53377273 85.1739545 4.08927273 83.1538636 4.08927273 81.7866818 4.08927273 81.1190455 4.90909091 80.6698636 5.56445455 80.3974091 5.05513636 79.8966818 4.08927273 78.3294545 4.08927273 77.0494091 4.08927273 76.329 4.97290909 75.9890455 5.69945455L75.9497727 5.69945455C75.9497727 5.19872727 75.8957727 4.72254545 75.8785909 4.23409091L73.6437273 4.23409091C73.6805455 4.57772727 73.7136818 5.076 73.7136818 5.74240909L73.7136818 13.5147273M92.6333182 9.48559091C92.6333182 11.1534545 92.1399545 12.1365 90.8095909 12.1365 89.9406818 12.1365 89.3896364 11.5535455 89.3896364 10.7226818 89.3896364 9.37513636 90.5187273 8.96522727 92.4295909 8.96522727L92.6333182 8.96522727 92.6333182 9.48559091zM88.3624091 6.58186364C88.7968636 6.21981818 89.7823636 5.66754545 90.8955 5.66754545 92.178 5.66754545 92.6333182 6.52295455 92.6333182 7.43113636L92.6333182 7.77845455 92.178 7.77845455C89.3503636 7.77845455 87.2959091 8.42154545 87.2959091 10.9374545 87.2959091 12.6544091 88.6324091 13.6607727 90.072 13.6607727 91.4023636 13.6607727 92.1080455 13.0066364 92.6627727 12.2543182L92.7057273 12.2543182C92.7057273 12.7022727 92.7192273 13.1502273 92.8223182 13.5147273L94.8473182 13.5147273C94.7896364 13.1502273 94.7172273 12.5439545 94.7172273 11.88L94.7172273 7.82631818C94.7172273 5.49204545 94.0508182 4.08927273 91.1716364 4.08927273 89.7492273 4.08927273 88.8705 4.47218182 88.2323182 4.76672727L88.3624091 6.58186364 88.3624091 6.58186364zM97.6246364 4.23409091L96.1396364 4.23409091 96.1396364 5.86636364 97.6246364 5.86636364 97.6246364 10.9497273C97.6246364 12.8863636 98.5549091 13.6607727 100.224 13.6607727 100.889182 13.6607727 101.362909 13.5147273 101.713909 13.3588636L101.713909 11.7548182C101.556818 11.8468636 101.264727 11.9659091 100.8585 11.9659091 100.224 11.9659091 99.8607273 11.6738182 99.8607273 10.6723636L99.8607273 5.86636364 101.713909 5.86636364 101.713909 4.23409091 99.8607273 4.23409091 99.8607273 1.64577273 97.6246364 2.322 97.6246364 4.23409091M103.314273 2.48890909L105.616636 2.48890909 105.616636.289636364 103.314273.289636364 103.314273 2.48890909zM103.343727 13.5147273L105.577364 13.5147273 105.577364 4.23409091 103.343727 4.23409091 103.343727 13.5147273zM107.552045 8.8695C107.552045 12.7624091 109.752545 13.6607727 111.643773 13.6607727 113.536227 13.6607727 115.720773 12.7624091 115.720773 8.8695 115.720773 5.076 113.536227 4.08927273 111.643773 4.08927273 109.752545 4.08927273 107.552045 5.076 107.552045 8.8695zM109.867909 8.8695C109.867909 7.32068182 110.2005 5.66754545 111.643773 5.66754545 113.079682 5.66754545 113.4135 7.32068182 113.4135 8.8695 113.4135 10.4183182 113.079682 12.0640909 111.643773 12.0640909 110.2005 12.0640909 109.867909 10.4183182 109.867909 8.8695L109.867909 8.8695zM117.480682 13.5147273L119.711864 13.5147273 119.711864 8.09509091C119.711864 6.90831818 120.134045 5.93018182 121.298727 5.93018182 122.214273 5.93018182 122.577545 6.52295455 122.577545 7.93677273L122.577545 13.5147273 124.806273 13.5147273 124.806273 7.53913636C124.806273 5.64668182 124.1865 4.08927273 122.070682 4.08927273 120.562364 4.08927273 119.929091 5.09809091 119.608773 5.64668182L119.625955 5.64668182 119.565818 5.64668182C119.565818 5.19136364 119.521636 4.70045455 119.492182 4.23409091L117.411955 4.23409091C117.4635 4.65136364 117.480682 5.19136364 117.480682 5.7645L117.480682 13.5147273"></path> <polyline points="132.689 13.515 135.001 13.515 135.001 2.768 137.796 2.768 137.796 .931 129.881 .931 129.881 2.768 132.689 2.768 132.689 13.515"></polyline> <path d="M139.554409 8.073C139.554409 6.83713636 140.041636 5.59513636 141.214909 5.59513636 142.223727 5.59513636 142.7625 6.43581818 142.7625 8.073L139.554409 8.073zM144.348136 11.2995C143.929636 11.6038636 143.285318 12.0260455 141.913227 12.0260455 140.188909 12.0260455 139.554409 11.07 139.554409 9.47331818L144.918818 9.47331818 144.918818 9.03763636C144.918818 5.26254545 143.214136 4.08927273 141.214909 4.08927273 138.857318 4.08927273 137.393182 6.22840909 137.393182 9.01309091 137.393182 11.5179545 138.690409 13.6607727 141.677591 13.6607727 143.015318 13.6607727 143.987318 13.2459545 144.458591 13.0667727L144.348136 11.2995 144.348136 11.2995zM152.832273 11.5179545C152.530364 11.6995909 151.789091 11.9659091 151.249091 11.9659091 149.540727 11.9659091 148.709864 10.6355455 148.709864 8.89036364 148.709864 6.90831818 149.447455 5.78290909 151.142318 5.78290909 151.754727 5.78290909 152.311909 6.03081818 152.714455 6.22840909L152.832273 4.46359091C152.423591 4.30895455 151.5915 4.08927273 150.885818 4.08927273 147.775909 4.08927273 146.398909 6.22840909 146.398909 8.88177273 146.398909 11.5179545 147.702273 13.6607727 150.760636 13.6607727 151.659 13.6607727 152.437091 13.4644091 152.957455 13.2827727L152.832273 11.5179545M154.333227 13.5147273L156.561955 13.5147273 156.561955 8.09509091C156.561955 6.90831818 156.979227 5.93018182 158.150045 5.93018182 159.063136 5.93018182 159.426409 6.52295455 159.426409 7.93677273L159.426409 13.5147273 161.655136 13.5147273 161.655136 7.53913636C161.655136 5.64668182 161.026773 4.08927273 158.919545 4.08927273 157.535182 4.08927273 157.007455 4.83790909 156.620864 5.41718182L156.561955 5.41718182 156.561955 1.04643567e-13 154.333227 1.04643567e-13 154.333227 13.5147273M163.667864 13.5147273L165.908864 13.5147273 165.908864 8.09509091C165.908864 6.90831818 166.321227 5.93018182 167.489591 5.93018182 168.4125 5.93018182 168.767182 6.52295455 168.767182 7.93677273L168.767182 13.5147273 171.000818 13.5147273 171.000818 7.53913636C171.000818 5.64668182 170.374909 4.08927273 168.270136 4.08927273 166.754455 4.08927273 166.121182 5.09809091 165.799636 5.64668182L165.814364 5.64668182 165.761591 5.64668182C165.761591 5.19136364 165.705136 4.70045455 165.690409 4.23409091L163.594227 4.23409091C163.655591 4.65136364 163.667864 5.19136364 163.667864 5.7645L163.667864 13.5147273M172.769318 8.8695C172.769318 12.7624091 174.957545 13.6607727 176.848773 13.6607727 178.742455 13.6607727 180.918409 12.7624091 180.918409 8.8695 180.918409 5.076 178.742455 4.08927273 176.848773 4.08927273 174.957545 4.08927273 172.769318 5.076 172.769318 8.8695zM175.068 8.8695C175.068 7.32068182 175.416545 5.66754545 176.848773 5.66754545 178.2945 5.66754545 178.617273 7.32068182 178.617273 8.8695 178.617273 10.4183182 178.2945 12.0640909 176.848773 12.0640909 175.416545 12.0640909 175.068 10.4183182 175.068 8.8695L175.068 8.8695z"></path> <polygon points="182.91 13.515 185.14 13.515 185.14 0 182.91 0"></polygon> <path d="M187.116136 8.8695C187.116136 12.7624091 189.312955 13.6607727 191.202955 13.6607727 193.095409 13.6607727 195.276273 12.7624091 195.276273 8.8695 195.276273 5.076 193.095409 4.08927273 191.202955 4.08927273 189.312955 4.08927273 187.116136 5.076 187.116136 8.8695zM189.424636 8.8695C189.424636 7.32068182 189.763364 5.66754545 191.202955 5.66754545 192.648682 5.66754545 192.970227 7.32068182 192.970227 8.8695 192.970227 10.4183182 192.648682 12.0640909 191.202955 12.0640909 189.763364 12.0640909 189.424636 10.4183182 189.424636 8.8695L189.424636 8.8695zM197.203091 16.9240909C197.743091 17.1315 198.912682 17.5045909 200.389091 17.5045909 203.794773 17.5045909 204.679636 15.4378636 204.679636 12.5439545L204.679636 5.69945455C204.679636 5.19872727 204.715227 4.72254545 204.747136 4.23409091L202.740545 4.23409091C202.717227 4.72254545 202.664455 5.19136364 202.664455 5.66754545L202.588364 5.66754545C202.120773 4.85631818 201.493636 4.08927273 200.139955 4.08927273 197.7075 4.08927273 196.785818 6.34868182 196.785818 8.89036364 196.785818 12.6421364 198.739636 13.5147273 200.0295 13.5147273 201.493636 13.5147273 202.120773 12.6544091 202.485273 11.9278636L202.515955 11.9278636 202.515955 12.8102727C202.515955 14.2744091 202.176 15.7373182 200.067545 15.7373182 198.899182 15.7373182 197.854773 15.2304545 197.330727 14.9432727L197.203091 16.9240909zM199.091864 8.75904545C199.091864 6.885 199.547182 5.79272727 200.715545 5.78290909 201.779591 5.7645 202.515955 6.81259091 202.515955 8.74677273 202.515955 10.8662727 201.957545 11.88 200.556 11.88 199.795091 11.88 199.091864 10.9497273 199.091864 8.75904545L199.091864 8.75904545zM208.1025 4.23409091L205.795227 4.23409091 208.874455 13.6006364 208.713682 14.3971364C208.427727 15.3519545 208.134409 15.7483636 207.466773 15.7373182 207.124364 15.7373182 206.877682 15.6526364 206.623636 15.5704091L206.492318 17.2750909C206.823682 17.3720455 207.321955 17.5045909 207.918409 17.5045909 209.415682 17.5045909 210.174136 16.551 210.565636 15.2807727L213.951682 4.23409091 211.791682 4.23409091 210.015818 11.2418182 209.972864 11.2418182 208.1025 4.23409091"></path> </g> </svg>
+                </div>
+              </a>
+              <div class="pull-right">
+                <ul class="nav-meta" data-plugin="navigation" data-template="flyout">
+                  <li class="has-dropdown">
+                    <a href="" class="has-flag" title="Country or region and language"> <i class="flag flag-en"></i><span class="btn-text">Beckhoff Worldwide</span></a>
+                    <div role="menu" class="dropdown"><a href="#" data-close-text="Close" class="close"><i class="icon icon-close"></i></a>
+                      <div class="container">
+                        <h2 class="title">Please choose your country or region and language</h2>
+                        <ul class="grid grid-25 region">
+                          <li class="grid-item active"><a href="/en-en/" title="" class="has-flag" data-locale="EN-EN"><i class="flag flag-en flag-has-border"></i>Beckhoff Worldwide</a></li>
+                          <li class="grid-item"><a href="/en-au/" title="" class="has-flag" data-locale="EN-AU"><i class="flag flag-au flag-has-border"></i>Australia</a></li>
+                          <li class="grid-item"><a href="/fr-be/" title="" class="has-flag" data-locale="FR-BE"><i class="flag flag-be flag-has-border"></i>Belgique (Français)</a></li>
+                          <li class="grid-item"><a href="/nl-be/" title="" class="has-flag" data-locale="NL-BE"><i class="flag flag-be flag-has-border"></i>België (Nederlands)</a></li>
+                          <li class="grid-item"><a href="/pt-br/" title="" class="has-flag" data-locale="PT-BR"><i class="flag flag-br flag-has-border"></i>Brasil</a></li>
+                          <li class="grid-item"><a href="/en-ca/" title="" class="has-flag" data-locale="EN-CA"><i class="flag flag-ca flag-has-border"></i>Canada</a></li>
+                          <li class="grid-item"><a href="/cs-cz/" title="" class="has-flag" data-locale="CS-CZ"><i class="flag flag-cz flag-has-border"></i>Česká republika</a></li>
+                          <li class="grid-item"><a href="/da-dk/" title="" class="has-flag" data-locale="DA-DK"><i class="flag flag-dk flag-has-border"></i>Danmark</a></li>
+                          <li class="grid-item"><a href="/de-de/" title="" class="has-flag" data-locale="DE-DE"><i class="flag flag-de flag-has-border"></i>Deutschland</a></li>
+                          <li class="grid-item"><a href="/et-ee/" title="" class="has-flag" data-locale="ET-EE"><i class="flag flag-ee flag-has-border"></i>Eesti</a></li>
+                          <li class="grid-item"><a href="/es-es/" title="" class="has-flag" data-locale="ES-ES"><i class="flag flag-es flag-has-border"></i>España</a></li>
+                          <li class="grid-item"><a href="/fr-fr/" title="" class="has-flag" data-locale="FR-FR"><i class="flag flag-fr flag-has-border"></i>France</a></li>
+                          <li class="grid-item"><a href="/hi-in/" title="" class="has-flag" data-locale="HI-IN"><i class="flag flag-in flag-has-border"></i>India</a></li>
+                          <li class="grid-item"><a href="/id-id/" title="" class="has-flag" data-locale="ID-ID"><i class="flag flag-id flag-has-border"></i>Indonesia</a></li>
+                          <li class="grid-item"><a href="/it-it/" title="" class="has-flag" data-locale="IT-IT"><i class="flag flag-it flag-has-border"></i>Italia</a></li>
+                          <li class="grid-item"><a href="/lt-lt/" title="" class="has-flag" data-locale="LT-LT"><i class="flag flag-lt flag-has-border"></i>Lietuva</a></li>
+                          <li class="grid-item"><a href="/hu-hu/" title="" class="has-flag" data-locale="HU-HU"><i class="flag flag-hu flag-has-border"></i>Magyarország</a></li>
+                          <li class="grid-item"><a href="/ms-my/" title="" class="has-flag" data-locale="MS-MY"><i class="flag flag-my flag-has-border"></i>Malaysia</a></li>
+                          <li class="grid-item"><a href="/es-mx/" title="" class="has-flag" data-locale="ES-MX"><i class="flag flag-mx flag-has-border"></i>México</a></li>
+                          <li class="grid-item"><a href="/nl-nl/" title="" class="has-flag" data-locale="NL-NL"><i class="flag flag-nl flag-has-border"></i>Nederland</a></li>
+                          <li class="grid-item"><a href="/en-nz/" title="" class="has-flag" data-locale="EN-NZ"><i class="flag flag-nz flag-has-border"></i>New Zealand</a></li>
+                          <li class="grid-item"><a href="/nn-no/" title="" class="has-flag" data-locale="NN-NO"><i class="flag flag-no flag-has-border"></i>Norge</a></li>
+                          <li class="grid-item"><a href="/de-at/" title="" class="has-flag" data-locale="DE-AT"><i class="flag flag-at flag-has-border"></i>Österreich</a></li>
+                          <li class="grid-item"><a href="/pl-pl/" title="" class="has-flag" data-locale="PL-PL"><i class="flag flag-pl flag-has-border"></i>Polska</a></li>
+                          <li class="grid-item"><a href="/en-ph/" title="" class="has-flag" data-locale="EN-PH"><i class="flag flag-ph flag-has-border"></i>Republika ng Pilipinas (English)</a></li>
+                          <li class="grid-item"><a href="/de-ch/" title="" class="has-flag" data-locale="DE-CH"><i class="flag flag-ch flag-has-border"></i>Schweiz (Deutsch)</a></li>
+                          <li class="grid-item"><a href="/zh-sg/" title="" class="has-flag" data-locale="ZH-SG"><i class="flag flag-sg flag-has-border"></i>Singapore</a></li>
+                          <li class="grid-item"><a href="/sl-si/" title="" class="has-flag" data-locale="SL-SI"><i class="flag flag-si flag-has-border"></i>Slovenija</a></li>
+                          <li class="grid-item"><a href="/sk-sk/" title="" class="has-flag" data-locale="SK-SK"><i class="flag flag-sk flag-has-border"></i>Slovenská republika</a></li>
+                          <li class="grid-item"><a href="/en-za/" title="" class="has-flag" data-locale="EN-ZA"><i class="flag flag-za flag-has-border"></i>South Africa</a></li>
+                          <li class="grid-item"><a href="/fr-ch/" title="" class="has-flag" data-locale="FR-CH"><i class="flag flag-ch flag-has-border"></i>Suisse (Français)</a></li>
+                          <li class="grid-item"><a href="/fi-fi/" title="" class="has-flag" data-locale="FI-FI"><i class="flag flag-fi flag-has-border"></i>Suomi</a></li>
+                          <li class="grid-item"><a href="/sv-se/" title="" class="has-flag" data-locale="SV-SE"><i class="flag flag-se flag-has-border"></i>Sverige</a></li>
+                          <li class="grid-item"><a href="/it-ch/" title="" class="has-flag" data-locale="IT-CH"><i class="flag flag-ch flag-has-border"></i>Svizzera (Italiano)</a></li>
+                          <li class="grid-item"><a href="/tr-tr/" title="" class="has-flag" data-locale="TR-TR"><i class="flag flag-tr flag-has-border"></i>Türkiye</a></li>
+                          <li class="grid-item"><a href="/en-us/" title="" class="has-flag" data-locale="EN-US"><i class="flag flag-us flag-has-border"></i>USA</a></li>
+                          <li class="grid-item"><a href="/en-gb/" title="" class="has-flag" data-locale="EN-GB"><i class="flag flag-gb flag-has-border"></i>United Kingdom</a></li>
+                          <li class="grid-item"><a href="/vi-vn/" title="" class="has-flag" data-locale="VI-VN"><i class="flag flag-vn flag-has-border"></i>Việt Nam</a></li>
+                          <li class="grid-item"><a href="/he-il/" title="" class="has-flag" data-locale="HE-IL"><i class="flag flag-il flag-has-border"></i>ישראל</a></li>
+                          <li class="grid-item"><a href="/ar-ae/" title="" class="has-flag" data-locale="AR-AE"><i class="flag flag-ae flag-has-border"></i>الإمارات (UAE)</a></li>
+                          <li class="grid-item"><a href="/ar-eg/" title="" class="has-flag" data-locale="AR-EG"><i class="flag flag-eg flag-has-border"></i>مصر</a></li>
+                          <li class="grid-item"><a href="/th-th/" title="" class="has-flag" data-locale="TH-TH"><i class="flag flag-th flag-has-border"></i>ประเทศไทย</a></li>
+                          <li class="grid-item"><a href="/zh-cn/" title="" class="has-flag" data-locale="ZH-CN"><i class="flag flag-cn flag-has-border"></i>中国</a></li>
+                          <li class="grid-item"><a href="/ja-jp/" title="" class="has-flag" data-locale="JA-JP"><i class="flag flag-jp flag-has-border"></i>日本</a></li>
+                          <li class="grid-item"><a href="/ko-kr/" title="" class="has-flag" data-locale="KO-KR"><i class="flag flag-kr flag-has-border"></i>대한민국</a></li>
+                          <li class="grid-item"><a href="/zh-tw/" title="" class="has-flag" data-locale="ZH-TW"><i class="flag flag-tw flag-has-border"></i>台灣（中華台北）</a></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </li>
+                  <li class="has-dropdown has-dropdown-small" id="toggle-mybeckhoff" data-plugin="mybeckhoff" data-template="login" data-cms-language="EN-EN">
+                    <a href="" class="toggle-mybeckhoff"><i class="icon icon-account"></i><span class="btn-text">myBeckhoff <small class="mybeckhoff__logged-in-hidden">Sign in</small><small class="mybeckhoff__logged-in-visible">Signed in</small></span></a>
+                    <div role="menu" class="dropdown dropdown-mybeckhoff">
+                      <a href="#" data-close-text="Close" class="close"><i class="icon icon-close"></i></a>
+                      <div class="dropdown-mybeckhoff__header"><strong><span class="mybeckhoff__logged-in-hidden">myBeckhoff Login</span><span class="mybeckhoff__logged-in-visible">Welcome, <span class="dropdown-mybeckhoff__username"></span></span></strong></div>
+                      <form class="dropdown-mybeckhoff__form" data-mybeckhoff-url="/en-en/mybeckhoff/index.aspx" autocomplete="off">
+                        <div class="form-row mybeckhoff__logged-in-hidden">
+                          <div class="ctrl custom-ctrl-input">
+                            <label for="dropdown-mybeckhoff-username">E-mail address</label>
+                            <input id="dropdown-mybeckhoff-username" type="email" autocomplete="username" required pattern="\w+([\-+.]+\w+)*@\w+([\-.]\w+)*\.\w+([\-.]\w+)*">
+                            <span class="validation-message text-red" style="display:none;">Please insert a valid e-mail address.</span>
+                          </div>
+                        </div>
+                        <div class="form-row mybeckhoff__logged-in-hidden">
+                          <div class="ctrl custom-ctrl-input password-ctrl">
+                            <label for="dropdown-mybeckhoff-password">Password</label>
+                            <input id="dropdown-mybeckhoff-password" type="password" data-visibility-toggle="true" autocomplete="current-password" required>
+                            <span class="validation-message text-red" style="display:none;">Please enter your password.</span>
+                          </div>
+                        </div>
+                        <div class="form-row mybeckhoff__logged-in-hidden">
+                          <div class="ctrl">
+                            <span class="custom-checkbox">
+                              <input type="checkbox" id="dropdown-mybeckhoff-cookie">
+                              <label for="dropdown-mybeckhoff-cookie">Stay logged in</label>
+                            </span>
+                          </div>
+                        </div>
+                        <div class="alert alert-warning compact hidden" role="alert">
+                          <div class="message"></div>
+                        </div>
+                        <div class="form-row mybeckhoff__logged-in-visible">
+                          <p>Would you like to unsubscribe from myBeckhoff?</p>
+                        </div>
+                        <div class="form-row d-flex">
+                          <button class="btn btn-primary flex-grow-1" type="submit"> <svg class="material-symbols material-symbols-24 mybeckhoff__loading-spinner hidden"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#progress_activity_400"></use> </svg> <span class="btn-text mybeckhoff__logged-in-hidden">Login</span> <span class="btn-text mybeckhoff__logged-in-visible">Logout</span> </button>
+                        </div>
+                        <div class="form-row mybeckhoff__logged-in-hidden">
+                          <a href="/en-en/mybeckhoff-forget-password/index.aspx">Forgot password?</a>
+                        </div>
+                      </form>
+                      <div class="dropdown-mybeckhoff__register">
+                        <div class="form-row mybeckhoff__logged-in-hidden"><strong>You are not yet registered for myBeckhoff?</strong></div>
+                        <div class="form-row d-flex mybeckhoff__logged-in-hidden">
+                          <a class="btn btn-secondary flex-grow-1" href="/en-en/mybeckhoff-registration/index.aspx" role="button"><span>Register</span></a>
+                        </div>
+                        <div class="form-row mybeckhoff__logged-in-visible">Do you need any help using myBeckhoff? Please contact us at <a href="mailto:mybeckhoff@beckhoff.com">mybeckhoff@beckhoff.com</a>.</div>
+                      </div>
+                    </div>
+                  </li>
+                  <li class="df-header__bookmarks">
+                    <a class="df-header__bookmarks__link" href="/en-en/support/download-finder/bookmark-list/">
+                      <span class="df-header__bookmarks__icon">
+                        <svg class="material-symbols icon-inactive"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#keep_400"></use> </svg>
+                        <svg class="material-symbols icon-active"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#keep_400-fill"></use> </svg>
+                      </span>
+                      <em class="df-header__bookmarks__text">Bookmark list</em>
+                      <span class="df-header__bookmarks__count"></span>
+                    </a>
+                  </li>
+                </ul>
+                <div class="has-dropdown-search pull-left">
+                  <div class="toggle-search">
+                    <button class="btn-search" id="toggleSearch" type="button">
+                      <span class="btn-text">Search</span>
+                      <svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#search_400"></use> </svg>
+                    </button>
+                  </div>
+                  <div class="dropdown dropdown-search" role="menu" data-plugin="search" data-template="flyout" data-cms-native-language="EN-EN" data-pim-language="en">
+                    <button class="close" type="button">
+                      <span class="btn-text">Close</span>
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+                    </button>
+                    <div class="container">
+                      <div class="row">
+                        <div class="col col-12">
+                          <h2 class="title">Search</h2>
+                          <div class="search">
+                            <form class="search__form" id="form_search_flyout_216812" action="/en-en/search-results/" autocomplete="off" method="get">
+                              <div class="search__input-wrapper">
+                                <label class="aural" for="form_input_search_flyout_216812">Enter search value ...</label>
+                                <div class="input-group input-group--border">
+                                  <span class="input-group-text">
+                                    <svg class="material-symbols material-symbols-24 search__input-icon"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#search_400"></use> </svg>
+                                    <svg class="material-symbols material-symbols-24 search__input-spinner d-none"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#progress_activity_400"></use> </svg>
+                                  </span>
+                                  <input class="search__input" id="form_input_search_flyout_216812" type="search" name="q" placeholder="Enter search value ..." autocomplete="off" tabindex="0">
+                                  <span class="input-group-text">
+                                    <button class="search__input-clear-button invisible" type="button">
+                                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+                                    </button>
+                                  </span>
+                                </div>
+                                <button class="btn btn-primary search__button" title="start search" type="submit" form="form_search_flyout_216812"><span>Search</span></button>
+                              </div>
+                              <div class="search__typeahead d-none">
+                                <div class="row mt-3">
+                                  <div class="col col-3">
+                                    <h3 class="search__typeahead-title">Suggested Terms</h3>
+                                    <ul class="search__typeahead-terms">
+                                    </ul>
+                                  </div>
+                                  <div class="col col-5">
+                                    <h3 class="search__typeahead-title">Suggested Pages</h3>
+                                    <ul class="search__typeahead-pages">
+                                    </ul>
+                                  </div>
+                                  <div class="col col-4">
+                                    <h3 class="search__typeahead-title">Suggested downloads</h3>
+                                    <ul class="search__typeahead-downloads">
+                                    </ul>
+                                  </div>
+                                </div>
+                                <div class="row mt-2">
+                                  <div class="col col-12">
+                                    <h3 class="search__typeahead-title">Suggested Products</h3>
+                                    <div class="search__typeahead-products">
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+          <nav class="nav-main" data-plugin="navigation" data-template="flyout">
+            <div class="container">
+              <a class="toggle-menu" id="toggleMenu2" href="#offcanvas" data-bs-toggle="offcanvas" role="button" aria-controls="offcanvas"><i class="icon-menu"><span class="bar"></span><span class="bar"></span><span class="bar"></span></i></a>
+              <ul class="level-1" data-testid="header--navigation-flyout--level-1">
+                <li data-dropdown-src="/en-en/navigation/flyout/company/">
+                  <a href="/en-en/company/">Company</a>
+                </li>
+                <li data-dropdown-src="/en-en/navigation/flyout/products/">
+                  <a href="/en-en/products/">Products</a>
+                </li>
+                <li data-dropdown-src="/en-en/navigation/flyout/industries/">
+                  <a href="/en-en/industries/">Industries</a>
+                </li>
+                <li data-dropdown-src="/en-en/navigation/flyout/support/">
+                  <a href="/en-en/support/">Support</a>
+                </li>
+                <li class="mybeckhoff__logged-in-visible" data-dropdown-src="/en-en/navigation/flyout/flyout-mybeckhoff/">
+                  <a href="/en-en/mybeckhoff/index.aspx" class="nav-item--mybeckhoff">myBeckhoff</a>
+                </li>
+              </ul>
+            </div>
+          </nav>
+          <nav class="nav-breadcrumb nav-breadcrumb--phone nav-breadcrumb--long" data-plugin="navigation" data-template="breadcrumb" data-cms-native-language="EN-EN">
+            <div class="container">
+              <div class="row">
+                <div class="col col-12 flex">
+                  <div class="nav-deeplink">
+                    <a href="/en-en/company/news/" title="News" class="nav-deeplink__item">
+                      <span class="nav-deeplink__icon">
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#newsmode_200"></use> </svg>
+                      </span>
+                      <span class="nav-deeplink__title">News</span>
+                    </a>
+                    <a href="/en-en/products/product-news/" title="Product news" class="nav-deeplink__item">
+                      <span class="nav-deeplink__icon">
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#breaking_news_200"></use> </svg>
+                      </span>
+                      <span class="nav-deeplink__title">Product news</span>
+                    </a>
+                    <a href="/en-en/products/product-finder/" title="Product finder" class="nav-deeplink__item">
+                      <span class="nav-deeplink__icon">
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#find_in_page_200"></use> </svg>
+                      </span>
+                      <span class="nav-deeplink__title">Product finder</span>
+                    </a>
+                    <a href="https://infosys.beckhoff.com" title="Information System" class="nav-deeplink__item" target="_blank">
+                      <span class="nav-deeplink__icon icon-infosys-wrapper">
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#tooltip_200"></use> </svg>
+                      <svg class="material-symbols info_i"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#info_i_200"></use> </svg>
+                      </span>
+                      <span class="nav-deeplink__title">Information System</span>
+                    </a>
+                    <a href="/en-en/support/download-finder/" title="Download finder" class="nav-deeplink__item">
+                      <span class="nav-deeplink__icon">
+                      <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#cloud_download_200"></use> </svg>
+                      </span>
+                      <span class="nav-deeplink__title">Download finder</span>
+                    </a>
+                  </div>
+                  <ol class="breadcrumb">
+                    <li class="breadcrumb-item" data-cms-id="216814">
+                      <a href="/en-en/">
+                        <span class="aural">Home page</span>
+                        <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#home_200"></use> </svg>
+                      </a>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </nav>
+      </div>
+<div class="section-contact-flyout">
+          <div class="container">
+            <div id="js-contact-position-container" class="contact-position-container">
+              <div id="js-contact" class="contact">
+                <div id="js-contact-flyout" class="contact-flyout">
+                  <button id="js-contact-button" type="button" aria-label="Show Contact" title="Show contact" class="contact-button"><span class="contact-button__icon"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="47" viewBox="0 0 36 47">
+  <path fill="#FFF" fill-rule="evenodd" d="M15.9844834 0C20.1313406 0 23.8846077 1.67936221 26.6014869 4.39352736 29.3192818 7.10860735 31 10.859202 31 15 31 19.140798 29.3192818 22.8913926 26.6014869 25.6064726 23.8846077 28.3206378 20.1313406 30 15.9844834 30 11.8457269 30 8.10052263 28.3208975 5.38957728 25.6072386 2.67708477 22.892031 1 19.1411147 1 15 1 10.8588853 2.67708476 7.10796901 5.38957728 4.3927614 8.10052262 1.6791025 11.8457268 0 15.9844834 0zM19.6854198 20.7441016L12.3145802 20.7441016 12.4148721 21.0959706C13.103104 23.4334294 14.1824941 25.6033028 15.5796502 27.5518554 15.716735 27.7430417 15.8568195 27.9320144 15.9998778 28.1186915 16.1431035 27.9321248 16.2832296 27.7430972 16.4203543 27.5518548 17.8873635 25.5058747 19.0040407 23.2158885 19.6854198 20.7441016L19.6854198 20.7441016zM10.240314 20.7441016L4.52659089 20.7441016 4.63048161 20.954052C6.11027685 23.8772432 8.64974313 26.119789 11.7469332 27.1946409 12.15917 27.3377039 12.5764651 27.458407 12.9971782 27.5569185 12.7785777 27.1973601 12.570114 26.8323792 12.3729133 26.4625972 11.4255078 24.6860639 10.7149641 22.7553941 10.240314 20.7441016L10.240314 20.7441016zM27.4759598 20.7441016L21.7596907 20.7441016 21.6616143 21.1452634C21.189244 23.0121316 20.5113319 24.8044995 19.6270867 26.4625972 19.4301346 26.8319131 19.2219477 27.19644 19.0030794 27.5558171 19.4238283 27.4580164 19.841075 27.3376189 20.2530668 27.1946409 23.4258548 26.0935534 26.0137105 23.7481236 27.4759598 20.7441016L27.4759598 20.7441016zM9.78076875 11.4882033L3.73988573 11.4882033 3.66496531 11.7683891C3.39908058 12.8004275 3.2323049 13.883522 3.2323049 15 3.2323049 16.217976 3.43078175 17.3962229 3.73988573 18.5117967L3.73988573 18.5117967 9.78076875 18.5117967 9.72531303 18.0762879C9.59949567 17.0605656 9.50202517 16.046477 9.50202517 15 9.50202517 13.8040263 9.62933358 12.6503558 9.78076875 11.4882033L9.78076875 11.4882033zM20.2868097 11.4882033L12.2576608 11.4882033 12.2019683 11.8680408C12.0569949 12.8850826 11.9437387 13.9345687 11.9437387 15 11.9437387 16.1954879 12.0863004 17.350715 12.25634 18.5117967L12.25634 18.5117967 20.2881305 18.5117967 20.343633 18.1249231C20.4880845 17.0935008 20.600726 16.0626559 20.600726 15 20.600726 13.8013898 20.4573859 12.6229601 20.2868097 11.4882033L20.2868097 11.4882033zM28.2601143 11.4882033L22.219228 11.4882033 22.2746864 11.9237121C22.4005085 12.9394344 22.4979748 13.953523 22.4979748 15 22.4979748 16.1959737 22.3706718 17.3496442 22.219228 18.5117967L22.219228 18.5117967 28.2601143 18.5117967 28.3350347 18.2316109C28.6009194 17.1995725 28.7676951 16.116478 28.7676951 15 28.7676951 13.782024 28.5692183 12.6037771 28.2601143 11.4882033L28.2601143 11.4882033zM16.0001279 1.88130906C15.8568195 2.06798564 15.716735 2.2569583 15.5796502 2.44814457 14.1126363 4.49412487 12.9959594 6.78411129 12.3145802 9.25589837L12.3145802 9.25589837 19.6854198 9.25589837 19.5851279 8.90402942C18.8968961 6.56657089 17.817506 4.39669767 16.4203543 2.44814518 16.2832698 2.25695892 16.1431858 2.06798624 16.0001279 1.88130906zM12.9975075 2.44327426C12.5768542 2.54147922 12.1593626 2.66222927 11.7469332 2.80535914 8.57600797 3.90580013 5.98967968 6.23011876 4.52660116 9.25589837L4.52660116 9.25589837 10.2403137 9.25589837 10.3383892 8.85473803C10.810755 6.9878716 11.4886654 5.19544487 12.3729096 3.53740977 12.5700349 3.1677825 12.7784198 2.80294973 12.9975075 2.44327426zM19.0033459 2.44395903C19.2218247 2.8033778 19.4300807 3.16799935 19.6270904 3.53740977 20.5744949 5.31387598 21.2850367 7.24461825 21.759691 9.25589837L21.759691 9.25589837 27.4759494 9.25589837 27.3721123 9.04738549C25.8930152 6.1433753 23.3520616 3.88083734 20.2530668 2.80535914 19.8411708 2.66241435 19.424023 2.54203859 19.0033459 2.44395903zM36 36.4999897C36 35.6749995 35.2800009 35 34.3999996 35L21.6 35C20.7199999 35 20 35.6749995 20 36.4999897L20 45.4999828C20 46.3250005 20.7199999 47 21.6 47L34.3999996 47C35.2800009 47 36 46.3250005 36 45.4999828L36 36.4999897zM34.6666667 36.3333333L28.0000002 40.3333333 21.3333333 36.3333333 34.6666667 36.3333333zM28 41.5679587L21.3333333 37.6666667 21.3333333 45.6666667 34.6666667 45.6666667 34.6666667 37.6666667 28 41.5679587zM2.41333334 40.1933333C3.37333334 42.08 4.92 43.62 6.80666666 44.5866667L8.27333334 43.12C8.45333334 42.94 8.72 42.88 8.95333334 42.96 9.7 43.2066667 10.5066667 43.34 11.3333333 43.34 11.7 43.34 12 43.64 12 44.0066667L12 46.3333333C12 46.7 11.7 47 11.3333333 47 5.07333334 47 0 41.9266667 0 35.6666667 0 35.3.3 35 .666666664 35L3 35C3.36666666 35 3.66666666 35.3 3.66666666 35.6666667 3.66666666 36.5 3.8 37.3 4.04666666 38.0466667 4.12 38.28 4.06666666 38.54 3.88 38.7266667L2.41333334 40.1933333z"></path>
+</svg>
+</span><span class="contact-button__text">Contact</span></button>
+                  <div class="contact-flyout__container">
+                    <button id="js-contact-close" type="button" aria-label="Close" title="Close" class="contact-flyout__close"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 25 25">
+  <polygon fill-rule="evenodd" points="12 10.5 1.5 0 0 1.5 10.5 12 0 22.5 1.5 24 12 13.5 22.5 24 24 22.5 13.5 12 24 1.5 22.5 0" transform="translate(.186 .94)"></polygon>
+</svg>
+                    </button>
+                    <div class="content-flyout__body">
+                      <div class="content-flyout__block">
+                        <div itemscope="" itemtype="http://schema.org/LocalBusiness">
+                            <p itemprop="name">
+                                      <strong>Headquarters Germany</strong><br>
+                                      	Beckhoff Automation GmbH &amp; Co. KG
+                                    </p>
+                                    <address itemprop="address" itemscope="" itemtype="http://schema.org/PostalAddress">
+                                 <meta itemprop="addressCountry" content="de">
+                                      <meta itemprop="addressLocality" content="Verl">
+                                      <meta itemprop="postalCode" content="33415">
+                                      <meta itemprop="streetAddress" content="Hülshorstweg 20">                                    
+				                     
+						Hülshorstweg 20
+					<br>
+			33415 Verl, Germany
+                                     </address>
+                          <p class="mt-2">
+                                          <a class="link link--phone" href="tel:+4952469630"><span itemprop="telephone">+49 5246 963-0</span></a>
+                                         <br><a class="link link--mail" href="mailto:info@beckhoff.com"><span itemprop="email">info@beckhoff.com</span></a>
+		                             <br>
+			                            <a class="link link--web" href="https://www.beckhoff.com/en-en/">www.beckhoff.com/en-en/</a>
+                          </p>
+                        </div>
+                      </div>
+			                      <div class="content-flyout__block">
+							<h3>Sales</h3>
+								<a class="link link--phone" href="tel:+4952469630"> 
+								+49 5246 963-0
+								</a><br>
+							<a class="link link--mail" href="mailto:sales@beckhoff.com">
+								sales@beckhoff.com
+							</a><br>
+						<a class="link link--mail" href="/en-en/company/sales-contact-form/index.aspx">Contact form</a><br>
+							<a class="link link--cal" href="/en-en/company/sales-appointment/index.aspx">
+							Make an appointment
+							</a>
+			                      </div>
+			                      <div class="content-flyout__block">
+							<h3>Technical Support</h3>
+							 <a class="link link--phone" href="tel:+495246963157"> 
+							+49 5246 963-157
+							 </a><br>
+							<a class="link link--mail" href="mailto:support@beckhoff.com">
+								support@beckhoff.com
+							</a><br>
+						<a class="link link--mail" href="/en-en/support/support-form/index.aspx">Contact form</a><br>
+			                      </div>
+			                      <div class="content-flyout__block">
+							<h3>Service</h3>
+							 <a class="link link--phone" href="tel:+495246963460"> 
+							+49 5246 963-460
+							 </a><br>
+							<a class="link link--mail" href="mailto:service@beckhoff.com">
+								service@beckhoff.com
+							</a><br>
+						<a class="link link--mail" href="/en-en/support/service-form/index-2.aspx">Contact form</a><br>
+			                      </div>
+                     <div class="content-flyout__block"><a href="/en-en/company/global-presence/germany.html" class="link link--arrow">Contact information</a></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+        <main data-language="EN-EN"  class="main">
+	<div class="section-content section-stage frameless">
+		<div class="container">
+				<div class="media-stage" data-stage="{&#34;autoplay&#34;:true,&#34;autoplayControl&#34;:true,&#34;firstInterval&#34;:11000,&#34;interval&#34;:5000,&#34;intervalIndicator&#34;:true,&#34;items&#34;:[{&#34;copyright&#34;:{&#34;color&#34;:&#34;white&#34;,&#34;label&#34;:&#34;© Beckhoff&#34;,&#34;orientation&#34;:&#34;vertical&#34;,&#34;position&#34;:&#34;right&#34;},&#34;source&#34;:{&#34;alt&#34;:&#34;application-report-komax-stage&#34;,&#34;copyright&#34;:{&#34;color&#34;:&#34;white&#34;,&#34;label&#34;:&#34;© Beckhoff&#34;,&#34;orientation&#34;:&#34;vertical&#34;,&#34;position&#34;:&#34;right&#34;},&#34;desktopUrl&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_rs04euasc16ojfj49td01oa237/-S1160x520-FWEBP-C1760x789%2C219%2C433/komax_sle_application_01.webp&#34;,&#34;mobileUrl&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_rs04euasc16ojfj49td01oa237/-S580x260-FWEBP-C1760x789%2C219%2C433/komax_sle_application_01.webp&#34;,&#34;mobileUrlRetina&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_rs04euasc16ojfj49td01oa237/-S1160x520-FWEBP-C1760x789%2C219%2C433/komax_sle_application_01.webp&#34;,&#34;type&#34;:&#34;picture&#34;},&#34;textbox&#34;:{&#34;background&#34;:&#34;light&#34;,&#34;button&#34;:{&#34;href&#34;:&#34;/en-en/company/applications-and-references/machine-footprint-reduced-by-45.html&#34;,&#34;text&#34;:&#34;Learn more&#34;,&#34;title&#34;:&#34;Learn more&#34;,&#34;type&#34;:&#34;internal&#34;},&#34;position&#34;:&#34;centerBottom&#34;,&#34;subtitle&#34;:&#34;Compact and precise wire harness production for the automotive industry&#34;,&#34;subtitleAlignment&#34;:&#34;subline&#34;,&#34;title&#34;:&#34;Machine footprint reduced by 45%&#34;}},{&#34;source&#34;:{&#34;alt&#34;:&#34;Product portfolio in a hygienic design&#34;,&#34;desktopUrl&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_n5e0tj6ab55b7e8krj8b27ru0d/-S1160x520-FWEBP-C3371x1512%2C316%2C1494/hygienic_design_cp3916_ath9011_apm4330_eq2339_eq1008.webp&#34;,&#34;desktopUrlRetina&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_n5e0tj6ab55b7e8krj8b27ru0d/-S2320x1040-FWEBP-C3371x1512%2C316%2C1494/hygienic_design_cp3916_ath9011_apm4330_eq2339_eq1008.webp&#34;,&#34;mobileUrl&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_n5e0tj6ab55b7e8krj8b27ru0d/-S580x260-FWEBP-C2709x1215%2C591%2C1439/hygienic_design_cp3916_ath9011_apm4330_eq2339_eq1008.webp&#34;,&#34;mobileUrlRetina&#34;:&#34;https://media.beckhoff.com/image/730335350110/image_n5e0tj6ab55b7e8krj8b27ru0d/-S1160x520-FWEBP-C2709x1215%2C591%2C1439/hygienic_design_cp3916_ath9011_apm4330_eq2339_eq1008.webp&#34;,&#34;type&#34;:&#34;picture&#34;},&#34;textbox&#34;:{&#34;background&#34;:&#34;light&#34;,&#34;button&#34;:{&#34;href&#34;:&#34;/en-en/products/stainless-steel-products/&#34;,&#34;text&#34;:&#34;Learn more&#34;,&#34;title&#34;:&#34;Learn more&#34;,&#34;type&#34;:&#34;internal&#34;},&#34;position&#34;:&#34;centerBottom&#34;,&#34;subtitle&#34;:&#34;The highest hygiene and cleanroom standards for sensitive production environments&#34;,&#34;subtitleAlignment&#34;:&#34;subline&#34;,&#34;title&#34;:&#34;Product portfolio in a hygienic design&#34;}},{&#34;source&#34;:{&#34;desktopUrl&#34;:&#34;/media/pictures/stages/news/intel-core-series-2-stage-lowres_webp_85.webp&#34;,&#34;desktopUrlRetina&#34;:&#34;/media/pictures/stages-highres/intel-core-series-2-stage-highres_webp_85.webp&#34;,&#34;type&#34;:&#34;picture&#34;},&#34;textbox&#34;:{&#34;background&#34;:&#34;light&#34;,&#34;button&#34;:{&#34;href&#34;:&#34;/en-en/products/product-news/industrial-pcs-with-intel-r-core-series-2/&#34;,&#34;text&#34;:&#34;Learn more&#34;,&#34;title&#34;:&#34;Learn more&#34;,&#34;type&#34;:&#34;internal&#34;},&#34;position&#34;:&#34;centerBottom&#34;,&#34;subtitle&#34;:&#34;Industrial PCs with Intel&lt;sup&gt;®&lt;\/sup&gt; Core™ Series 2 processors&#34;,&#34;subtitleAlignment&#34;:&#34;subline&#34;,&#34;title&#34;:&#34;CPU update boosts performance significantly&#34;}},{&#34;source&#34;:{&#34;desktopUrl&#34;:&#34;/media/pictures/stages/pc-control/oper-leipzig-aduart-stage_webp_85.webp&#34;,&#34;desktopUrlRetina&#34;:&#34;/media/pictures/stages-highres/oper-leipzig-aduart-stage-highres_webp_85.webp&#34;,&#34;type&#34;:&#34;picture&#34;},&#34;textbox&#34;:{&#34;background&#34;:&#34;light&#34;,&#34;button&#34;:{&#34;href&#34;:&#34;/en-en/company/applications-and-references/innovative-control-station-for-theaters-and-opera-houses.html&#34;,&#34;text&#34;:&#34;Learn more&#34;,&#34;title&#34;:&#34;Learn more&#34;,&#34;type&#34;:&#34;internal&#34;},&#34;position&#34;:&#34;centerBottom&#34;,&#34;subtitle&#34;:&#34;IoT-based stage management system enables synchronized building service and stage technology&#34;,&#34;subtitleAlignment&#34;:&#34;subline&#34;,&#34;title&#34;:&#34;Innovative control station for theaters and opera houses&#34;}},{&#34;source&#34;:{&#34;desktopUrl&#34;:&#34;/media/pictures/stages/news/cybersecurity-stage-starting-page-lowres_webp_85.webp&#34;,&#34;desktopUrlRetina&#34;:&#34;/media/pictures/stages-highres/cybersecurity-stage-starting-page-highres_webp_85.webp&#34;,&#34;type&#34;:&#34;picture&#34;},&#34;textbox&#34;:{&#34;background&#34;:&#34;light&#34;,&#34;button&#34;:{&#34;href&#34;:&#34;/en-en/cybersecurity/&#34;,&#34;text&#34;:&#34;Learn more&#34;,&#34;title&#34;:&#34;Learn more&#34;,&#34;type&#34;:&#34;internal&#34;},&#34;position&#34;:&#34;right&#34;,&#34;subtitle&#34;:&#34;Beckhoff is building the framework for effective protection.&#34;,&#34;subtitleAlignment&#34;:&#34;subline&#34;,&#34;title&#34;:&#34;Cybersecurity in automation technology&#34;}}]}"></div>
+		</div>
+	</div>
+           <div class="section-content section-title">
+            <div class="container">
+              <div class="row">
+                <div class="col col-12">
+                  <div class="title-container">
+                    <h1>Beckhoff New Automation Technology: A decisive step ahead with PC-based control and EtherCAT!</h1>
+                    <div class="title-favorite" data-plugin="mybeckhoff" data-template="bookmark-toggle" data-cms-language="EN-EN" data-cms-id="216814" data-cms-templatename="startseite">
+                      <a class="title-favorite__toggle-popover login-request mybeckhoff__logged-in-hidden" tabindex="0" role="button" data-bs-toggle="popover" data-bs-title="Add to favorites" data-bs-content="To use this feature, you’ll need to <a href='/en-en/mybeckhoff-login/index.aspx?ReturnUrl=/en-en/'>sign in</a> to myBeckhoff or <a href='/en-en/mybeckhoff-registration/index.aspx'>register</a> free of charge.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="23" viewBox="0 0 24 23">
+                          <path d="M24,8.688 L15.372,7.944 L12,1.13686838e-13 L8.628,7.956 L0,8.688 L6.552,14.364 L4.584,22.8 L12,18.324 L19.416,22.8 L17.46,14.364 L24,8.688 Z M12,16.08 L7.488,18.804 L8.688,13.668 L4.704,10.212 L9.96,9.756 L12,4.92 L14.052,9.768 L19.308,10.224 L15.324,13.68 L16.524,18.816 L12,16.08 Z"></path>
+                        </svg>
+                      </a>
+                      <a href="#" class="mybeckhoff__add-bookmark mybeckhoff__logged-in-visible" title="Add to favorites" role="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="23" viewBox="0 0 24 23">
+                          <path d="M24,8.688 L15.372,7.944 L12,1.13686838e-13 L8.628,7.956 L0,8.688 L6.552,14.364 L4.584,22.8 L12,18.324 L19.416,22.8 L17.46,14.364 L24,8.688 Z M12,16.08 L7.488,18.804 L8.688,13.668 L4.704,10.212 L9.96,9.756 L12,4.92 L14.052,9.768 L19.308,10.224 L15.324,13.68 L16.524,18.816 L12,16.08 Z"></path>
+                        </svg>
+                      </a>
+                      <a href="#" class="mybeckhoff__remove-bookmark mybeckhoff__logged-in-visible hidden" title="Remove from favorites" role="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="23" viewBox="0 0 24 23">
+                          <polygon points="12 18.324 19.416 22.8 17.448 14.364 24 8.688 15.372 7.956 12 0 8.628 7.956 0 8.688 6.552 14.364 4.584 22.8"></polygon>
+                        </svg>
+                      </a>
+        <div class="modal fade" id="mybeckhoff__bookmark-modal" aria-hidden="true" tabindex="-1">
+          <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Add page to favorites</h5>
+                <button class="btn-close" type="button" aria-label="Close" data-bs-dismiss="modal">
+                  <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+                </button>
+              </div>
+              <div class="modal-body">
+                <div class="iframe-wrapper mb-20">
+                  <iframe src="about:blank" data-src="/en-en/mybeckhoff/favorites/add-favorite/index.aspx?cmsId=216814&cmsTemplatename=startseite"></iframe>
+                </div>
+                <div class="d-flex column-gap-1 mybeckhoff__bookmark-modal-controls">
+                  <button class="btn btn-primary mybeckhoff__bookmark-modal-button-submit" type="button"><span>Submit</span></button>
+                  <button class="btn btn-secondary mybeckhoff__bookmark-modal-button-close" type="button" data-bs-dismiss="modal"><span>Quit</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="section-content productline">
+            <div class="container">
+	<div class="tile-grid">
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/ipc/ipc_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/ipc/ipc.png" loading="lazy" alt="IPC">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>IPC</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>We deliver panels and industrial PCs for every application – with the latest technology for all performance classes.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/ipc/" title="IPC"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/i-o/io_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/i-o/io.png" loading="lazy" alt="I/O">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>I/O</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>Use our I/O components to implement simple or complex applications with EtherCAT and other common fieldbus systems.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/i-o/" title="I/O"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/motion/motion_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/motion/motion.png" loading="lazy" alt="Motion">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>Motion</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>Our innovative drive technologies give you almost unlimited capabilities when it comes to realizing your application.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/motion/" title="Motion"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/automation/automation_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/automation/automation.png" loading="lazy" alt="Automation">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>Automation</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>TwinCAT offers many features and various software function blocks for all automation tasks.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/automation/" title="Automation"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/mx-system/mx-system_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/mx-system/mx-system.png" loading="lazy" alt="MX-System">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>MX-System</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>Our MX-System combines all technological innovations in automation technology in an IP67-capable modular system.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/mx-system/" title="MX-System"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+                <div class="tile-grid__item">
+                  <div class="tile-card">
+                    <div class="tile-card__image">
+	                    	<picture>
+							  <source srcset="/media/pictures/tiles/products/vision/vision_webp_85.webp" type="image/webp">
+							  <img src="/media/pictures/tiles/products/vision/vision.png" loading="lazy" alt="Vision">
+							</picture>
+                    </div>
+                    <div class="tile-card__title">
+                      <h3>Vision</h3>
+                    </div>
+                    <div class="tile-card__body">
+                      <p>The balanced hardware portfolio for industrial machine vision offers complete system integration from a single source.</p>
+                    </div>
+                    <div class="tile-card__link"><a href="/en-en/products/vision/" title="Vision"><span>Learn more</span></a></div>
+                  </div>
+                </div>
+	</div>
+            </div>
+          </div>
+		<div
+			class="section-content section-context">
+			<a href="#"
+			   id="text_bild"
+			   class="section-anchor"
+			   name="text_bild"></a>
+			<div class="container">
+				<div class="row">
+					<div class="col col-12">
+		<div class="block-content block-context">
+		<h2 class="heading">All products at a glance</h2>
+		<div class="text">
+			<h3>Locate the components you need quickly and easily with our product finders.</h3>
+		</div>
+		<div class="text text--cta text--cta-lg">
+			<a class="btn btn-primary" href="/en-en/products/ipc/product-finder-ipc/" role="button"><span>Product finder IPC</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+<a class="btn btn-primary" href="/en-en/products/i-o/product-finder-i-o/" role="button"><span>Product finder I/O</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+<a class="btn btn-primary" href="/en-en/products/motion/product-finder-motion/" role="button"><span>Product finder Motion</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+<a class="btn btn-primary" href="/en-en/products/automation/product-finder-automation/" role="button"><span>Product finder Automation</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+<a class="btn btn-primary" href="/en-en/products/mx-system/product-finder-mx-system/" role="button"><span>Product finder MX-System</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+<a class="btn btn-primary" href="/en-en/products/vision/product-finder-vision/" role="button"><span>Product finder Vision</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+		</div>
+		</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div
+			class="section-content section-context">
+			<a href="#"
+			   id="text_bild_1"
+			   class="section-anchor"
+			   name="text_bild_1"></a>
+			<div class="container">
+				<div class="row">
+					<div class="col col-12">
+		<div class="block-content block-context">
+		<h2 class="heading">Our latest product news</h2>
+		<div class="text">
+			<h3>Discover our product news and find out how they can boost the performance of your application.</h3>
+		</div>
+		<div class="text text--cta text--cta-lg">
+			<a class="btn btn-primary" href="/en-en/products/product-news/" role="button"><span>Product news</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+		</div>
+		</div>
+					</div>
+				</div>
+			</div>
+		</div>
+          <a id="news_liste" class="section-anchor" name="news_liste"></a> 
+          <div id="listing_news_354917" class="section-content hidden" data-plugin="listing" data-template="news-tiles" data-subtemplate="highlight" data-cms-native-language="EN-EN" data-cms-page-id="216812" data-search="{&quot;tagging_page_ss&quot;:[216812],&quot;cms_templatename&quot;:[&quot;Teaser.card&quot;]}">
+            <div class="listing listing--tiles">
+              <div class="container">
+                <div class="row">
+                  <div class="col col-12">
+                    <h2 class="heading">News: Explore our world of automation technology</h2>
+                  </div>
+                </div>
+                <div class="row item-list">
+                  <div class="col col-12">Loading content ...</div>
+                </div>
+                <div class="row">
+                  <div class="col col-12">
+                    <div class="d-flex justify-content-center">
+                      <a class="btn btn-primary" href="/en-en/company/news/" role="button"><span>More news</span><svg class="material-symbols material-symbols-20"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#arrow_forward_400"></use> </svg></a>
+                    </div>
+                  </div>
+                </div>
+			  </div>
+			</div>
+            <div class="item-list__limit">
+              <input type="hidden" value="5">
+            </div>
+          </div>
+        </main>
+        <footer class="footer">
+          <div class="container">
+            <div class="row">
+              <div class="footer-links footer-links--collapsible">
+                <div class="footer-links__col footer-links__col--first">
+                  <div class="footer-info">
+                  	<div class="footer-info__logo">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272.1 20.14"> <g fill="#FFFFFE" fill-rule="evenodd"> <polygon points="97.77 16.89 99.47 16.89 99.47 8.9 99.5 8.9 102.89 16.89 105.13 16.89 105.13 6.63 103.44 6.63 103.44 14.68 103.41 14.68 100 6.63 97.77 6.63 97.77 16.89 97.77 16.89"/> <path d="M112.49,15.08c-.34.25-.87.59-1.98.59-1.41,0-1.92-.78-1.92-2.08h4.38v-.36c0-3.08-1.4-4.03-3.02-4.03-1.92,0-3.11,1.74-3.11,4.01,0,2.04,1.06,3.79,3.49,3.79,1.08,0,1.88-.34,2.26-.48l-.09-1.44h0ZM108.58,12.45c0-1.01.39-2.02,1.35-2.02.82,0,1.26.69,1.26,2.02h-2.61Z"/> <polygon points="120.36 16.89 122.34 16.89 124.35 9.33 122.59 9.33 121.37 15.21 121.34 15.21 120.09 9.33 118.03 9.33 116.75 15.21 116.72 15.21 115.5 9.33 113.62 9.33 115.66 16.89 117.65 16.89 118.98 11 119.01 11 120.36 16.89 120.36 16.89"/> <path d="M130.53,12.98l1.41-4.79h.03l1.29,4.79h-2.73ZM134.37,16.89h1.94l-3.3-10.25h-2.06l-3.43,10.25h1.87l.74-2.46h3.52l.72,2.46h0Z"/> <path d="M143.2,9.33h-1.82v4.33c0,.96-.27,1.85-1.25,1.85-.77,0-1.09-.48-1.09-1.65v-4.53h-1.82v4.87c0,1.52.51,2.81,2.23,2.81,1.19,0,1.66-.72,2.01-1.29h-.01s.04,0,.04,0c0,.39.04.78.06,1.17h1.7c-.05-.35-.06-.78-.06-1.25v-6.31h0Z"/> <path d="M145.51,9.33h-1.2v1.33h1.2v4.14c0,1.58.76,2.21,2.11,2.21.54,0,.94-.12,1.22-.25v-1.31c-.13.07-.37.17-.69.17-.53,0-.82-.24-.82-1.05v-3.92h1.51v-1.33h-1.51v-2.11l-1.82.55v1.56h0Z"/> <path d="M151.67,13.1c0-1.26.28-2.61,1.45-2.61s1.44,1.35,1.44,2.61-.26,2.6-1.44,2.6-1.45-1.34-1.45-2.6h0ZM149.79,13.1c0,3.17,1.79,3.9,3.33,3.9s3.32-.73,3.32-3.9-1.78-3.89-3.32-3.89-3.33.8-3.33,3.89h0Z"/> <path d="M157.83,16.89h1.82v-4.57c0-.84.43-1.61,1.23-1.61.68,0,.97.47.97,1.4v4.78h1.82v-4.57c0-.84.43-1.61,1.23-1.61.67,0,.97.47.97,1.4v4.78h1.82v-4.67c0-1.83-.52-3.01-2.17-3.01-1.11,0-1.66.67-2.02,1.2-.22-.41-.63-1.2-1.91-1.2-1.04,0-1.63.72-1.91,1.31h-.03c0-.41-.04-.8-.06-1.19h-1.82c.03.28.06.69.06,1.23v6.33h0Z"/> <path d="M169.77,11.24c.35-.29,1.16-.75,2.06-.75,1.04,0,1.42.7,1.42,1.44v.28h-.37c-2.3,0-3.98.52-3.98,2.57,0,1.4,1.09,2.22,2.26,2.22,1.08,0,1.66-.53,2.11-1.15h.04c0,.37.01.73.1,1.03h1.65c-.05-.3-.11-.79-.11-1.33v-3.3c0-1.9-.54-3.04-2.89-3.04-1.16,0-1.87.31-2.39.55l.11,1.48h0ZM173.25,13.6c0,1.36-.4,2.16-1.49,2.16-.71,0-1.16-.47-1.16-1.15,0-1.1.92-1.43,2.48-1.43h.17v.42h0Z"/> <path d="M177.31,9.33h-1.21v1.33h1.21v4.14c0,1.58.76,2.21,2.12,2.21.54,0,.93-.12,1.21-.25v-1.31c-.13.07-.37.17-.7.17-.52,0-.81-.24-.81-1.05v-3.92h1.51v-1.33h-1.51v-2.11l-1.82.55v1.56h0Z"/> <path d="M181.97,16.89h1.82v-7.56h-1.82v7.56h0ZM181.95,7.9h1.88v-1.79h-1.88v1.79h0Z"/> <path d="M187.29,13.1c0-1.26.27-2.61,1.45-2.61s1.44,1.35,1.44,2.61-.27,2.6-1.44,2.6-1.45-1.34-1.45-2.6h0ZM185.4,13.1c0,3.17,1.79,3.9,3.33,3.9s3.32-.73,3.32-3.9-1.78-3.89-3.32-3.89-3.33.8-3.33,3.89h0Z"/> <path d="M193.49,16.89h1.82v-4.42c0-.97.34-1.76,1.29-1.76.75,0,1.04.48,1.04,1.64v4.54h1.82v-4.87c0-1.54-.5-2.81-2.23-2.81-1.23,0-1.75.82-2.01,1.27h.01-.05c0-.37-.04-.77-.06-1.15h-1.7c.04.34.06.78.06,1.25v6.31h0Z"/> <polygon points="205.88 16.89 207.77 16.89 207.77 8.13 210.05 8.13 210.05 6.63 203.6 6.63 203.6 8.13 205.88 8.13 205.88 16.89 205.88 16.89"/> <path d="M215.38,15.08c-.34.25-.87.59-1.98.59-1.41,0-1.92-.78-1.92-2.08h4.37v-.36c0-3.08-1.39-4.03-3.02-4.03-1.92,0-3.11,1.74-3.11,4.01,0,2.04,1.06,3.79,3.49,3.79,1.09,0,1.88-.34,2.27-.48l-.09-1.44h0ZM211.48,12.45c0-1.01.4-2.02,1.35-2.02.82,0,1.26.69,1.26,2.02h-2.61Z"/> <path d="M222.3,15.26c-.25.15-.85.37-1.29.37-1.39,0-2.07-1.08-2.07-2.51,0-1.62.6-2.53,1.98-2.53.5,0,.95.2,1.28.36l.1-1.44c-.33-.13-1.01-.3-1.59-.3-2.53,0-3.66,1.74-3.66,3.9s1.06,3.89,3.55,3.89c.73,0,1.37-.16,1.79-.31l-.1-1.44h0Z"/> <path d="M223.52,16.89h1.82v-4.42c0-.97.34-1.76,1.29-1.76.74,0,1.04.48,1.04,1.64v4.54h1.82v-4.87c0-1.54-.51-2.81-2.23-2.81-1.13,0-1.56.61-1.87,1.08h-.05v-4.41h-1.82v11.01h0Z"/> <path d="M231.13,16.89h1.83v-4.42c0-.97.34-1.76,1.29-1.76.75,0,1.04.48,1.04,1.64v4.54h1.82v-4.87c0-1.54-.51-2.81-2.22-2.81-1.24,0-1.75.82-2.01,1.27h.01-.04c0-.37-.05-.77-.06-1.15h-1.71c.05.34.06.78.06,1.25v6.31h0Z"/> <path d="M240.42,13.1c0-1.26.28-2.61,1.45-2.61s1.44,1.35,1.44,2.61-.26,2.6-1.44,2.6-1.45-1.34-1.45-2.6h0ZM238.54,13.1c0,3.17,1.78,3.9,3.32,3.9s3.32-.73,3.32-3.9-1.77-3.89-3.32-3.89-3.32.8-3.32,3.89h0Z"/> <polygon points="246.81 16.89 248.62 16.89 248.62 5.88 246.81 5.88 246.81 16.89 246.81 16.89"/> <path d="M252.11,13.1c0-1.26.28-2.61,1.45-2.61s1.44,1.35,1.44,2.61-.26,2.6-1.44,2.6-1.45-1.34-1.45-2.6h0ZM250.23,13.1c0,3.17,1.79,3.9,3.33,3.9s3.32-.73,3.32-3.9-1.78-3.89-3.32-3.89-3.33.8-3.33,3.89h0Z"/> <path d="M259.99,13.01c0-1.53.37-2.42,1.32-2.43.87-.01,1.47.84,1.47,2.42,0,1.73-.46,2.55-1.6,2.55-.62,0-1.19-.76-1.19-2.54h0ZM258.45,19.67c.44.17,1.39.47,2.6.47,2.78,0,3.5-1.68,3.5-4.04v-5.58c0-.41.03-.8.05-1.19h-1.63c-.02.4-.06.78-.06,1.17h-.06c-.38-.66-.89-1.29-2-1.29-1.98,0-2.73,1.84-2.73,3.91,0,3.06,1.59,3.77,2.64,3.77,1.19,0,1.7-.7,2-1.29h.03v.72c0,1.19-.28,2.38-2,2.38-.95,0-1.8-.41-2.23-.65l-.1,1.61h0Z"/> <path d="M267.33,9.33h-1.88l2.51,7.63-.13.65c-.23.78-.47,1.1-1.02,1.09-.28,0-.48-.07-.69-.14l-.11,1.39c.27.08.68.19,1.16.19,1.22,0,1.84-.78,2.16-1.81l2.76-9h-1.76l-1.45,5.71h-.03l-1.52-5.71h0Z"/> <path d="M3.87,9.85c1.65.07,2.75.02,2.75,1.94,0,2.22-.81,2.09-2.75,2.13v-4.07h0ZM3.87,3.36c1.36,0,2.48-.07,2.48,1.56,0,1.96-.79,1.85-2.48,1.96v-3.52h0ZM5.45,16.89c3.14,0,5.04-1.43,5.04-4.77,0-2.05-.37-2.92-2.13-3.94v-.04c1.34-.73,1.87-2.02,1.87-3.47C10.22,1.34,7.94.4,5.01.4H0v16.49h5.45Z"/> <polygon points="21.23 16.89 21.23 13.59 15.97 13.59 15.97 10.03 20.81 10.03 20.81 6.73 15.97 6.73 15.97 3.69 20.96 3.69 20.96 .4 12.1 .4 12.1 16.89 21.23 16.89 21.23 16.89"/> <path d="M33.25,6.16v-1.39c0-3.36-1.98-4.77-5.28-4.77-3.54,0-5.19,1.67-5.19,5.25v6.77c0,3.36,1.39,5.25,4.95,5.25,3.96,0,5.58-1.98,5.58-4.81v-2.02h-3.87v1.5c0,1.01-.11,2.38-1.43,2.38-1.01,0-1.39-.55-1.39-1.47l.02-8.16c0-1.08.29-1.74,1.5-1.71.73,0,1.23.73,1.23,2.13v1.06h3.87Z"/> <polygon points="38.82 16.89 38.82 12.82 39.68 11.15 41.81 16.89 45.9 16.89 42.16 7.67 45.68 .4 41.72 .4 38.86 6.99 38.82 6.99 38.82 .4 34.95 .4 34.95 16.89 38.82 16.89 38.82 16.89"/> <polygon points="50.81 16.89 50.81 10.03 53.49 10.03 53.49 16.89 57.36 16.89 57.36 .4 53.49 .4 53.49 6.73 50.81 6.73 50.81 .4 46.94 .4 46.94 16.89 50.81 16.89 50.81 16.89"/> <path d="M65.6,11.96c0,.95-.09,2.35-1.34,2.35s-1.41-1.41-1.41-2.35v-6.77c0-1.01.15-2.22,1.39-2.22s1.36,1.21,1.36,2.22v6.77h0ZM69.47,4.93c0-3.17-1.83-4.93-5.21-4.93s-5.28,1.76-5.28,4.93v6.71c0,3.72,1.36,5.65,5.28,5.65s5.21-1.93,5.21-5.65v-6.71h0Z"/> <polygon points="75.1 16.89 75.1 9.92 79.92 9.92 79.92 6.62 75.1 6.62 75.1 3.69 80.34 3.69 80.34 .4 71.23 .4 71.23 16.89 75.1 16.89 75.1 16.89"/> <polygon points="85.94 16.89 85.94 9.92 90.75 9.92 90.75 6.62 85.94 6.62 85.94 3.69 91.17 3.69 91.17 .4 82.07 .4 82.07 16.89 85.94 16.89 85.94 16.89"/> </g> </svg>
+                    </div>
+			        <p class="text-bold">Headquarters Germany</p>
+                    <p>
+                      Beckhoff Automation GmbH & Co. KG<br>
+                      Hülshorstweg 20 <br> 33415 Verl <br>
+                    </p>
+                    <ul>
+                      <li>
+                        <a class="link link--phone" href="tel:+4952469630" title="Phone">+49 5246 963-0</a>
+                      </li>
+                      <li>
+                        <a class="link link--mail" href="mailto:info@beckhoff.com" title="E-mail">info@beckhoff.com</a>
+                      </li>
+                    </ul>
+                    <ul>
+                      <li>
+                        <a class="link link--location" href="/en-en/company/global-presence/germany.html" title="Contact information">Contact information</a> 
+                      </li>
+                      <li>
+                        <a class="link link--web" href="https://www.beckhoff.com/en-en/" title="Website">www.beckhoff.com/en-en/</a>
+                      </li>
+                    </ul>
+                    <ul>
+                      <li>
+                        <a class="link link--mail" href="/en-en/newsletter/index.aspx" title="Newsletter">Newsletter</a>
+                      </li>
+                      <li>
+                        <button class="link link--print" onclick="window.print()" type="button" title="Print page">Print page</button>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="footer-links__col">
+                  <div class="footer-links__collapse-wrapper">
+                    <h3 class="footer-links__headline">Company</h3>
+                    <button class="footer-links__collapse-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#footer-collapse-1-1" aria-expanded="false" aria-controls="footer-collapse-1-1">Company</button>
+                    <ul class="footer-links__list collapse" id="footer-collapse-1-1">
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/" title="Company profile">Company profile</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/global-presence/" title="Global presence">Global presence</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/job-opportunities/" title="Job opportunities">Job opportunities</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/news/" title="News">News</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/pc-control-customer-magazine/" title="PC Control magazine">PC Control magazine</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/company/events-and-dates/" title="Events and dates">Events and dates</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/whistleblower-system/" title="Whistleblower system">Whistleblower system</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="footer-links__col">
+                  <div class="footer-links__collapse-wrapper">
+                    <h3 class="footer-links__headline">Products and industries</h3>
+                    <button class="footer-links__collapse-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#footer-collapse-2-1" aria-expanded="false" aria-controls="footer-collapse-2-1">Products and industries</button>
+                    <ul class="footer-links__list collapse" id="footer-collapse-2-1">
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/ipc/" title="IPC">IPC</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/i-o/" title="I/O">I/O</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/motion/" title="Motion">Motion</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/automation/" title="Automation">Automation</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/mx-system/" title="MX-System">MX-System</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/products/vision/" title="Vision">Vision</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/industries/" title="Industries">Industries</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="footer-links__col">
+                  <div class="footer-links__collapse-wrapper">
+                    <h3 class="footer-links__headline">Support</h3>
+                    <button class="footer-links__collapse-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#footer-collapse-3-1" aria-expanded="false" aria-controls="footer-collapse-3-1">Support</button>
+                    <ul class="footer-links__list collapse" id="footer-collapse-3-1">
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/support/our-support-services/" title="Technical support">Technical support</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/support/our-service-offerings/" title="Service">Service</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/support/training-offerings/" title="Training">Training</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/support/webinars/" title="Webinars">Webinars</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="https://infosys.beckhoff.com/" target="_blank" title="Beckhoff Information System">Beckhoff Information System</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link" href="/en-en/support/download-finder/" title="Download finder">Download finder</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="footer-links__col">
+                  <div class="footer-links__collapse-wrapper">
+                    <h3 class="footer-links__headline">Social media</h3>
+                    <button class="footer-links__collapse-toggle collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#footer-collapse-4-1" aria-expanded="false" aria-controls="footer-collapse-4-1">Social media</button>
+                    <ul class="footer-links__list collapse" id="footer-collapse-4-1">
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link footer-links__link--icon" href="https://www.linkedin.com/company/beckhoff-automation" target="_blank" title="LinkedIn"><i class="icon icon-linkedin"></i> LinkedIn</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link footer-links__link--icon" href="https://www.instagram.com/beckhoff_com/" target="_blank" title=" Instagram"><i class="icon icon-instagram"></i>  Instagram</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link footer-links__link--icon" href="https://www.facebook.com/Beckhoff" target="_blank" title="Facebook"><i class="icon icon-facebook"></i> Facebook</a>
+                      </li>
+                      <li class="footer-links__list-item">
+                        <a class="footer-links__link footer-links__link--icon" href="https://www.youtube.com/BeckhoffAutomationWorldwide" target="_blank" title="YouTube"><i class="icon icon-youtube"></i> YouTube</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="footer-lastline">
+            <div class="container">
+              <div class="footer-lastline__container">
+			    <div class="footer-lastline__left">
+                   <a href="/en-en/legal-notice/">Legal notice</a>
+                   <a href="/en-en/terms-of-use/">Terms of use</a>
+                   <a href="/en-en/data-privacy-policy/">Data privacy policy</a>
+                   <a href="/en-en/general-terms-and-conditions/">General terms and conditions</a>
+                   <a data-target="consent-modal" href="#">Privacy settings</a>
+                </div>
+	            <div class="footer-lastline__right">
+                   <a href="/en-en/trademarks/">Trademarks</a>
+	              <span>© Beckhoff Automation 2026</span>
+	            </div>
+              </div>
+            </div>
+          </div>
+          <div class="toplink invisible">
+            <a href="#top" title="Scroll to top"><i class="icon icon-arrow-up"></i></a>
+          </div>
+        </footer>
+        <div class="modal fade" id="modal_lang_region" aria-hidden="true" tabindex="-1">
+          <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Please choose your country or region and language</h5>
+                <button class="btn-close" type="button" aria-label="Close" data-bs-dismiss="modal">
+                  <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+                </button>
+              </div>
+              <div class="modal-body">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="toast-container position-fixed top-0 end-0 mt-3 me-3">
+          <div id="jsToastCopyPaste" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+              <div class="toast-body">The link was copied to the clipboard.</div>
+              <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close">
+                <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+              </button>
+            </div>
+          </div>
+          <div id="jsToastLoggedIn" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+              <div class="toast-body">You have successfully logged into myBeckhoff.</div>
+              <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close">
+                <svg class="material-symbols material-symbols-24"> <use href="/media/layoutassets/img/material-symbols.svg?3564801#close_400"></use> </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="multimedia-popup" class="mfp-hide">
+          <div class="mfp-iframe-scaler">
+<div class="cm-consent-query" data-type="placeholder" data-name="vimeo">
+  <div class="cm-consent-message">
+    <p>When you click on "Accept", we show the video and adjust the privacy settings; external content from Video is loaded during this process. Please refer here to our <a href="/en-en/data-privacy-policy/">Privacy Policy.</a></p>
+    <button class="btn btn-primary consent-accept" type="button" data-consent-service="vimeo"><span>Accept</span></button>
+  </div>
+  <div class="cm-consent-backdrop"></div>
+</div>
+            <iframe id="multimedia-iframe" frameborder="0" allowfullscreen="" src="about:blank" class="mfp-iframe"></iframe>
+          </div>
+        </div>
+        <div id="video-popup" class="mfp-hide" style="width: 100%; height: 100%;"></div>
+        <div class="modal fade" data-cms-language="EN-EN" data-plugin="mybeckhoff" data-template="export-control-consent" id="export-control-consent__modal" aria-hidden="true" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Consent to export control and sanctions compliance terms</h5>
+              </div>
+              <div class="modal-body">
+                <div class="block-content block-context">
+                  <div class="text">
+                    <p>In order to continue to use myBeckhoff, you need to agree to the <a href="/media/downloads/general-terms-and-conditions/export_control_and_sanctions_compliance.pdf" target="_blank">export control and sanctions compliance</a> terms.<br><br>If you do not agree to these terms, you will automatically be logged out of myBeckhoff.</p>
+                  </div>
+                  <div class="text text--cta">
+                    <button class="btn btn-secondary" type="button" id="export-control-consent__button-decline"><span>Decline</span></button>
+                    <button class="btn btn-secondary" type="button" id="export-control-consent__button-accept"><span>Accept</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/media/layoutassets/js/main.js?3564907"></script>
+    <script src="/media/layoutassets/js/mybeckhoff/mybeckhoff-min.js?3564699"></script>
+    <script src="/media/layoutassets/js/navigation/navigation-expert-min.js?3564597"></script>
+    <script src="/media/layoutassets/js/search/search-min.js?3564833"></script>
+    <script src="/media/layoutassets/js/navigation/navigation-min.js?3565265"></script>
+    <script src="/media/layoutassets/js/datepicker/datepicker-bundle-min.js?3564742"></script>
+    <script src="/media/layoutassets/js/listing/listing-min.js?3564630"></script>
+    <script type="text/plain" data-type="application/javascript" data-service-name="crmForm" data-name="crmForm" data-src="https://cxppusa1formui01cdnsa01-endpoint.azureedge.net/eur/FormLoader/FormLoader.bundle.js"></script>
+    <!-- /media/layoutassets/js/crm/crm-form-min.js -->
+    <script src="/media/layoutassets/js/application.js?3565296"></script>
+  </body>
+</html>

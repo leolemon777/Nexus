@@ -1,0 +1,278 @@
+using System;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Nexus.Siemens
+{
+    public class SiemensPpiClient : SerialDeviceBase
+    {
+        public byte MasterAddress { get; set; } = 1;
+        public byte SlaveAddress { get; set; } = 2;
+        public SiemensPpiClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
+
+        protected override int ResponseHeaderLength => 8;
+        protected override int GetResponsePayloadLength(byte[] header)
+        {
+            if (header.Length < 8 || header[0] != 0x68 || header[3] != 0x68) return 0;
+            int len = header[1];
+            int remaining = len - 2;
+            return remaining > 0 ? remaining : 0;
+        }
+
+        private byte[] BuildPpiFrame(byte control, byte functionCode, byte[] data)
+        {
+            int dataLen = data?.Length ?? 0;
+            int lenField = 4 + dataLen;
+            byte[] frame = new byte[4 + lenField + 1];
+            frame[0] = 0x68; frame[1] = (byte)lenField; frame[2] = (byte)lenField; frame[3] = 0x68;
+            frame[4] = control; frame[5] = SlaveAddress; frame[6] = MasterAddress; frame[7] = functionCode;
+            if (dataLen > 0) Buffer.BlockCopy(data, 0, frame, 8, dataLen);
+            byte bcc = 0;
+            for (int i = 4; i < 8 + dataLen; i++) bcc ^= frame[i];
+            frame[8 + dataLen] = bcc;
+            frame[9 + dataLen] = 0x16;
+            return frame;
+        }
+
+        private bool VerifyPpiFrame(byte[] response, out byte functionCode, out byte[] data)
+        {
+            functionCode = 0; data = Array.Empty<byte>();
+            if (response.Length < 9 || response[0] != 0x68 || response[3] != 0x68 || response[response.Length - 1] != 0x16) return false;
+            int lenField = response[1];
+            if (response.Length != 4 + lenField + 1) return false;
+            byte bcc = 0;
+            for (int i = 4; i < response.Length - 2; i++) bcc ^= response[i];
+            if (bcc != response[response.Length - 2]) return false;
+            functionCode = response[7];
+            int dataLen = lenField - 4;
+            if (dataLen > 0) { data = new byte[dataLen]; Buffer.BlockCopy(response, 8, data, 0, dataLen); }
+            return true;
+        }
+
+        protected async Task<OperateResult<byte[]>> SendPpiAsync(byte control, byte functionCode, byte[] data, CancellationToken ct)
+        {
+            byte[] request = BuildPpiFrame(control, functionCode, data);
+            var result = await base.SendAndReceiveAsync(request, ct).ConfigureAwait(false);
+            if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
+            if (!VerifyPpiFrame(result.Content, out byte respFc, out byte[] respData))
+                return OperateResult<byte[]>.Failed("PPI 响应帧格式或 BCC 校验失败");
+            if (respFc == 0x01 || respFc == 0x03) return OperateResult<byte[]>.Failed($"PPI 设备返回错误码: 0x{respFc:X2}");
+            return OperateResult<byte[]>.Success(respData);
+        }
+
+        protected OperateResult<byte[]> SendPpi(byte control, byte functionCode, byte[] data)
+            => SendPpiAsync(control, functionCode, data, CancellationToken.None).GetAwaiter().GetResult();
+
+        private static readonly Regex _ppiAddrRegex = new Regex(@"^([VMIQSMC]|SM)(\d+)(?:\.(\d+))?$", RegexOptions.IgnoreCase);
+        private class PpiAddress { public byte AreaCode; public int ByteAddress; public int BitOffset; public bool IsBit; }
+        private static PpiAddress ParseAddress(string address)
+        {
+            var match = _ppiAddrRegex.Match(address.ToUpper());
+            if (!match.Success) throw new ArgumentException($"无效的 PPI 地址格式: {address}");
+            string area = match.Groups[1].Value;
+            int byteAddr = int.Parse(match.Groups[2].Value);
+            int bitOffset = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
+            byte areaCode = area switch { "V" => 0x85, "I" => 0x81, "Q" => 0x82, "M" => 0x83, "S" => 0x84, "SM" => 0x86, "C" => 0x1C, _ => 0x85 };
+            return new PpiAddress { AreaCode = areaCode, ByteAddress = byteAddr, BitOffset = bitOffset, IsBit = match.Groups[3].Success };
+        }
+
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var addr = ParseAddress(address);
+            if (!addr.IsBit) throw new ArgumentException("读取 Bool 需要位地址 (如 V100.0)");
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x01, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, (byte)addr.BitOffset };
+            var result = SendPpi(0x00, 0x01, cmd);
+            return result.IsSuccess && result.Content.Length > 1 && result.Content[0] == 0xFF 
+                ? OperateResult<bool>.Success((result.Content[1] & (1 << addr.BitOffset)) != 0) 
+                : OperateResult<bool>.Failed("PPI 读取位响应异常");
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x02, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendPpi(0x00, 0x01, cmd);
+            return result.IsSuccess && result.Content.Length >= 3 && result.Content[0] == 0xFF
+                ? OperateResult<short>.Success((short)((result.Content[1] << 8) | result.Content[2]))
+                : OperateResult<short>.Failed("PPI 读取字响应异常");
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x04, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendPpi(0x00, 0x01, cmd);
+            return result.IsSuccess && result.Content.Length >= 5 && result.Content[0] == 0xFF
+                ? OperateResult<int>.Success((result.Content[1] << 24) | (result.Content[2] << 16) | (result.Content[3] << 8) | result.Content[4])
+                : OperateResult<int>.Failed("PPI 读取双字响应异常");
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<float>.Success(BitConverter.ToSingle(BitConverter.GetBytes(r.Content), 0)) : OperateResult<float>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendPpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess || result.Content.Length < 2 || result.Content[0] != 0xFF) return OperateResult<string>.Failed("PPI 读取字符串响应异常");
+            byte[] data = new byte[length];
+            Buffer.BlockCopy(result.Content, 1, data, 0, Math.Min(length, result.Content.Length - 1));
+            return OperateResult<string>.Success(Encoding.ASCII.GetString(data).TrimEnd('\0'));
+        }
+
+        public override OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendPpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess || result.Content.Length < 2 || result.Content[0] != 0xFF) return OperateResult<byte[]>.Failed("PPI 读取字节响应异常");
+            byte[] data = new byte[length];
+            Buffer.BlockCopy(result.Content, 1, data, 0, Math.Min(length, result.Content.Length - 1));
+            return OperateResult<byte[]>.Success(data);
+        }
+
+        public override OperateResult Write(string address, bool value)
+        {
+            var addr = ParseAddress(address);
+            if (!addr.IsBit) throw new ArgumentException("写入 Bool 需要位地址 (如 V100.0)");
+            byte val = value ? (byte)(1 << addr.BitOffset) : (byte)0;
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x01, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, (byte)addr.BitOffset, val };
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, short value)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x02, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00, (byte)(value >> 8), (byte)(value & 0xFF) };
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, int value)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x04, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00, (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)(value & 0xFF) };
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, float value) => Write(address, BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
+
+        public override OperateResult Write(string address, string value)
+        {
+            var addr = ParseAddress(address);
+            byte[] data = Encoding.ASCII.GetBytes(value);
+            if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            byte[] cmd = new byte[7 + data.Length];
+            cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
+            cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
+            Buffer.BlockCopy(data, 0, cmd, 7, data.Length);
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, byte[] data)
+        {
+            var addr = ParseAddress(address);
+            if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            byte[] cmd = new byte[7 + data.Length];
+            cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
+            cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
+            Buffer.BlockCopy(data, 0, cmd, 7, data.Length);
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
+        public override Task<OperateResult<short>> ReadInt16Async(string address) => Task.Run(() => ReadInt16(address));
+        public override Task<OperateResult<int>> ReadInt32Async(string address) => Task.Run(() => ReadInt32(address));
+        public override Task<OperateResult<float>> ReadFloatAsync(string address) => Task.Run(() => ReadFloat(address));
+        public override Task<OperateResult<string>> ReadStringAsync(string address, ushort length) => Task.Run(() => ReadString(address, length));
+        public override Task<OperateResult<byte[]>> ReadBytesAsync(string address, ushort length) => Task.Run(() => ReadBytes(address, length));
+        public override Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+
+        // ── 无符号 / 大类型读取 ──────────────────
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadInt16(address);
+            return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x08, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendPpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess || result.Content.Length < 9 || result.Content[0] != 0xFF)
+                return OperateResult<long>.Failed("PPI 读取长整型响应异常");
+            return OperateResult<long>.Success(
+                ((long)result.Content[1] << 56) | ((long)result.Content[2] << 48) |
+                ((long)result.Content[3] << 40) | ((long)result.Content[4] << 32) |
+                ((long)result.Content[5] << 24) | ((long)result.Content[6] << 16) |
+                ((long)result.Content[7] << 8)  | (long)result.Content[8]);
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadInt64(address);
+            return r.IsSuccess ? OperateResult<ulong>.Success((ulong)r.Content) : OperateResult<ulong>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadInt64(address);
+            return r.IsSuccess
+                ? OperateResult<double>.Success(BitConverter.ToDouble(BitConverter.GetBytes(r.Content), 0))
+                : OperateResult<double>.Failed(r.Message, r.ErrorCode);
+        }
+
+        // ── 无符号 / 大类型写入 ──────────────────
+
+        public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
+        public override OperateResult Write(string address, uint value) => Write(address, (int)value);
+
+        public override OperateResult Write(string address, long value)
+        {
+            var addr = ParseAddress(address);
+            byte[] cmd = new byte[]
+            {
+                0x01, 0x00, 0x08, addr.AreaCode,
+                (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00,
+                (byte)(value >> 56), (byte)(value >> 48), (byte)(value >> 40), (byte)(value >> 32),
+                (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8),  (byte)(value & 0xFF)
+            };
+            var result = SendPpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, ulong value) => Write(address, unchecked((long)value));
+        public override OperateResult Write(string address, double value) => Write(address, BitConverter.ToInt64(BitConverter.GetBytes(value), 0));
+
+        // ── 异步覆写（ushort/uint/long/ulong/double）──
+
+        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
+    }
+}

@@ -1,0 +1,191 @@
+<Page x:Class="Nexus.App.Views.AlarmPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource Brush.Bg}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+
+            <!-- 添加报警规则 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="添加报警规则" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Row 0 -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="标签名" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding TagName, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,8">
+                            <TextBlock Text="地址" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding Address, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,0,8" MinWidth="160">
+                            <TextBlock Text="协议" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding ProtocolName, Mode=TwoWay}" MinWidth="150"/>
+                        </StackPanel>
+
+                        <!-- Row 1 -->
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="条件" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding Conditions}" SelectedIndex="{Binding SelectedConditionIndex, Mode=TwoWay}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,8,8">
+                            <TextBlock Text="阈值" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding Threshold, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,8" MinWidth="160">
+                            <TextBlock Text="严重程度" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding Severities}" SelectedIndex="{Binding SelectedSeverityIndex, Mode=TwoWay}"/>
+                        </StackPanel>
+
+                        <!-- Row 2 -->
+                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,8,8">
+                            <TextBlock Text="描述（可选）" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding Description, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,8">
+                            <Button Content="➕ 添加规则" Style="{DynamicResource Button.Primary}" Command="{Binding AddRuleCommand}" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 活跃报警 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="活跃报警" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                            <Border Background="#33FF4444" CornerRadius="10" Padding="8,2" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding ActiveAlarmCount}" FontWeight="Bold" Foreground="#FF4444"/>
+                            </Border>
+                        </StackPanel>
+                        <Button Content="全部确认" Style="{DynamicResource Button.Primary}" HorizontalAlignment="Right" Command="{Binding AcknowledgeAllCommand}"/>
+                    </Grid>
+
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" MinHeight="80">
+                        <ListView ItemsSource="{Binding ActiveAlarms}" Background="Transparent" BorderThickness="0">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="时间" Width="140">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding TriggeredAt, StringFormat='{}{0:HH:mm:ss}'}" FontFamily="Consolas" FontSize="12"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="标签" Width="120">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding TagName}" FontWeight="Medium"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="报警信息" Width="300">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Message}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="级别" Width="60">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Severity}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="操作" Width="80">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="确认" FontSize="11" Padding="8,2" Command="{Binding DataContext.AcknowledgeAlarmCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 报警规则列表 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="报警规则" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                            <Border Background="#224488FF" CornerRadius="10" Padding="8,2" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding TotalRuleCount}" Foreground="{DynamicResource Brush.Accent}"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" MinHeight="60">
+                        <ListView ItemsSource="{Binding Rules}" Background="Transparent" BorderThickness="0">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="标签名" Width="120">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding TagName}" FontWeight="Medium"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="地址" Width="100">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Address}" FontFamily="Consolas"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="条件" Width="100">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Condition}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="阈值" Width="80">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Threshold}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="启用" Width="50">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding IsEnabled}" Command="{Binding DataContext.ToggleRuleCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="操作" Width="60">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="删除" FontSize="11" Padding="8,2" Foreground="#FF4444" Command="{Binding DataContext.RemoveRuleCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,112 @@
+<Page x:Class="Nexus.App.Views.ModbusAsciiPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource Brush.Bg}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+
+            <!-- 协议简介 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="Modbus ASCII" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,8"/>
+                    <TextBlock Text="Modbus ASCII 串口通讯协议，ASCII 模式传输，LRC 校验，适用于支持 ASCII 模式的 Modbus 设备。" Style="{DynamicResource Body}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 连接配置 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="连接配置" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="IP" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{DynamicResource Input}" Text="192.168.1.1" Width="140" Margin="0,0,16,0"/>
+                            <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{DynamicResource Input}" Text="502" Width="80" Margin="0,0,16,0"/>
+                            <TextBlock Text="站号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{DynamicResource Input}" Text="1" Width="60"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="连接" Style="{DynamicResource Button.Primary}" Margin="12,0,0,0"/>
+                        <Button Grid.Column="2" Content="断开" Style="{DynamicResource Button.Ghost}" Margin="8,0,0,0"/>
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <Ellipse Width="10" Height="10" Fill="{DynamicResource Brush.Text3}" VerticalAlignment="Center"/>
+                            <TextBlock Text="未连接" Style="{DynamicResource Body}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 数据读写 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="数据读写" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <Grid Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="起始地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{DynamicResource Input}" Text="D100" Width="100" Margin="0,0,16,0"/>
+                            <TextBlock Text="数量" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{DynamicResource Input}" Text="1" Width="80" Margin="0,0,16,0"/>
+                            <TextBlock Text="数据类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Width="100" SelectedIndex="0">
+                                <ComboBoxItem Content="Int16"/>
+                                <ComboBoxItem Content="Int32"/>
+                                <ComboBoxItem Content="Float"/>
+                                <ComboBoxItem Content="Bool"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="读取" FontWeight="Bold" Foreground="{DynamicResource Brush.Accent}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <Button Grid.Column="1" Content="读取" Style="{DynamicResource Button.Primary}" MinWidth="100"/>
+                        <TextBlock Grid.Column="2" Text="结果" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="24,0,8,0"/>
+                        <Border Grid.Column="3" Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="10,4" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" MinHeight="32">
+                            <TextBlock Text="--" Style="{DynamicResource Readout}" FontSize="16" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="写入" FontWeight="Bold" Foreground="{DynamicResource Brush.Warn}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <TextBox Grid.Column="1" Style="{DynamicResource Input}"/>
+                        <Button Grid.Column="2" Content="写入" Style="{DynamicResource Button.Danger}" MinWidth="100" Margin="24,0,0,0"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 通讯日志 -->
+            <Border Style="{DynamicResource Card}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="通讯日志" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                        <Button Content="清空" Style="{DynamicResource Button.Text}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" Height="180">
+                        <ListBox Background="Transparent" BorderThickness="0"
+                                 Foreground="{DynamicResource Brush.Text2}"
+                                 FontFamily="Consolas, Courier New" FontSize="12"
+                                 VirtualizingStackPanel.IsVirtualizing="True"
+                                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

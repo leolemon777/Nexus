@@ -2,28 +2,13 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource Brush.Bg}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
 
-            <!-- 外观设置 -->
-            <Border Style="{DynamicResource Card}" Margin="0,0,0,16">
-                <StackPanel>
-                    <TextBlock Text="外观" Style="{DynamicResource Label}" Margin="0,0,0,16"/>
-
-                    <!-- 配色选择 -->
-                    <TextBlock Text="配色方案" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,10"/>
-                    <WrapPanel x:Name="ColorPanel" Margin="0,0,0,20"/>
-
-                    <!-- 款式选择 -->
-                    <TextBlock Text="界面款式" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,10"/>
-                    <WrapPanel x:Name="FormPanel"/>
-                </StackPanel>
-            </Border>
-
             <!-- 关于 -->
-            <Border Style="{DynamicResource Card}" Margin="0,0,0,16">
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
-                    <TextBlock Text="关于" Style="{DynamicResource Label}" Margin="0,0,0,12"/>
+                    <TextBlock Text="关于" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
                     <TextBlock Style="{DynamicResource H1}" Margin="0,0,0,4">
                         <Run Text="Nexus"/> <Run Text="v0.1.0" FontSize="14" Foreground="{DynamicResource Brush.Text3}"/>
                     </TextBlock>
@@ -31,9 +16,19 @@
                     <TextBlock Style="{DynamicResource Body}" Margin="0,0,0,4">
                         <Run Foreground="{DynamicResource Brush.Text3}" Text="协议: MIT · 永久免费 · 无任何限制"/>
                     </TextBlock>
-                    <TextBlock Style="{DynamicResource Body}">
+                    <TextBlock Style="{DynamicResource Body}" Margin="0,0,0,4">
                         <Run Foreground="{DynamicResource Brush.Text3}" Text="目标: 支持 Modbus / Siemens / Mitsubishi / Omron / AB 等主流 PLC 协议"/>
                     </TextBlock>
+
+                    <!-- 当前主题信息 -->
+                    <Border Background="{DynamicResource Brush.AccentSoft}" CornerRadius="{DynamicResource Radius.Sm}" Padding="12,8" Margin="0,16,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🎨" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Foreground="{DynamicResource Brush.Text2}" VerticalAlignment="Center">
+                                <Run Text="配色: mono · 款式: soft"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 

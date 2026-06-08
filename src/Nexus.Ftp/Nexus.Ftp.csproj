@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Nexus.Ftp</RootNamespace>
+    <Description>Nexus FTP — 简易 FTP 客户端（PLC 程序上传/下载场景）</Description>
+    <Version>1.0.0</Version>
+    <Authors>Nexus Contributors</Authors>
+    <Company>Nexus</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial-communication FTP file-transfer protocol</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+  </ItemGroup>
+</Project>

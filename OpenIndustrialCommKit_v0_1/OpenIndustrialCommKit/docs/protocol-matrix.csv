@@ -1,0 +1,76 @@
+priority,domain,protocol,transport,pattern,implementation_note
+P0,PLC/Instrument,Modbus TCP,TCP/502,Client/Server register read-write,Open/public; implement first
+P0,PLC/Instrument,Modbus RTU,RS-485/RS-232,Master/Slave register read-write,CRC16; serial timing important
+P0,PLC/Instrument,Modbus ASCII,RS-485/RS-232,ASCII framed Modbus,LRC; less common but easy
+P0,PLC,Siemens S7comm ISO-on-TCP,TCP/102,S7 area read-write,Client first; handle DB/M/I/Q
+P0,PLC,Mitsubishi MC 3E/4E,TCP/UDP/Serial,Device memory read-write,Binary + ASCII variants
+P0,PLC,Omron FINS,TCP/UDP/Serial,Memory area read-write,TCP/UDP + HostLink bridge
+P0,PLC,Allen-Bradley EtherNet/IP CIP,"TCP/UDP/44818,2222","Tag read-write, explicit/implicit",Explicit messaging first
+P0,OT Middleware,OPC UA,TCP/HTTPS/MQTT/UADP,Client/Server/PubSub information model,Use official spec/library adapter first
+P0,IoT,MQTT 3.1.1/5,TCP/TLS/WebSocket,Pub/Sub telemetry,Core edge-to-cloud protocol
+P0,Web/IoT,HTTP/HTTPS REST,TCP/TLS,Request/Response API,Adapter; not device-specific
+P0,Web/IoT,WebSocket,TCP/TLS,Full-duplex stream,Gateway and web console
+P0,Custom,Custom Binary/ASCII DSL,TCP/UDP/Serial,Declarative private protocols,Core differentiator
+P1,PLC,Mitsubishi FX/Q Serial,RS-232/RS-485,PLC serial read-write,Variant per CPU family
+P1,PLC,Panasonic MEWTOCOL,TCP/Serial,PLC read-write,ASCII framing
+P1,PLC,Delta DVP/AS,TCP/Serial,PLC read-write,Often Modbus-compatible plus vendor frames
+P1,PLC,Keyence MC/HostLink variants,TCP/Serial,PLC read-write,MC-compatible + vendor extensions
+P1,PLC,Beckhoff ADS/AMS,TCP/48898,TwinCAT symbols and IO,Client first
+P1,PLC,GE SRTP,TCP,PLC memory read-write,Legacy/installed base
+P1,PLC,Schneider UMAS/Modbus extensions,TCP,PLC programming/data access,Be careful with safety/write operations
+P1,PLC,Yokogawa FA-M3,TCP/Serial,PLC read-write,Vendor plugin
+P1,PLC,LS XGT/FEnet,TCP,PLC read-write,Vendor plugin
+P1,PLC,Fuji SPH,TCP/Serial,PLC read-write,Vendor plugin
+P1,IoT,CoAP,UDP/DTLS/TCP,Constrained REST,IoT constrained devices
+P1,IoT Device Mgmt,LwM2M,CoAP/DTLS/TCP/SMS,Device management/telemetry,Client/server adapter
+P1,Messaging,AMQP 1.0,TCP/TLS/WebSocket,Reliable business messaging,Broker integration
+P1,Realtime Middleware,DDS/RTPS,UDP/TCP,Data-centric pub/sub QoS,Robotics/defense/real-time
+P1,IoT Model,Sparkplug B,MQTT,Industrial MQTT payload/session model,Implement payload/model adapter
+P1,Data Pipeline,Kafka Protocol,TCP/TLS,Streaming events,Gateway sink/source
+P1,Cache/Message,Redis RESP,TCP/TLS,Cache/stream/pubsub,Gateway sink/source
+P1,RPC,gRPC,HTTP/2/TLS,Service RPC,Gateway API
+P2,Power,IEC 60870-5-101,Serial,Telecontrol,Master/slave
+P2,Power,IEC 60870-5-104,TCP,Telecontrol,Client/server
+P2,Power,DNP3,Serial/TCP/UDP,SCADA telecontrol,Secure auth optional
+P2,Power,IEC 61850 MMS,TCP,Substation data model,Complex SCL and services
+P2,Power,IEC 61850 GOOSE,Ethernet L2,Fast event messaging,Raw Ethernet and timing
+P2,Power,IEC 61850 Sampled Values,Ethernet L2,Sampled analog values,Raw Ethernet/high throughput
+P2,Power,ICCP/TASE.2,TCP/MMS,Control center exchange,Complex/utility-specific
+P2,Metering,DL/T 645,RS-485/Infrared,Chinese energy meters,Common in CN
+P2,Metering,CJ/T 188,M-Bus/RS-485,Water/heat/gas meters,Common in CN utilities
+P2,Metering,DLMS/COSEM IEC 62056,HDLC/TCP/Serial,Smart metering,Security profiles
+P2,Energy,SunSpec Modbus,Modbus TCP/RTU,Solar/inverter model,Model layer over Modbus
+P2,Demand Response,OpenADR,HTTP/XML,Demand response,Cloud/API side
+P2,Building,BACnet/IP,UDP/IP,Building automation objects,Client/server + discovery
+P2,Building,BACnet MS/TP,RS-485,Building automation serial,Timing sensitive
+P2,Building,KNX/IP,UDP/IP,Building automation,Tunneling/routing
+P2,Building,KNX TP,Twisted Pair,Building automation fieldbus,Needs interface hardware
+P2,Building,M-Bus,M-Bus/Serial,Metering,Wired meters
+P2,Building,Wireless M-Bus,Sub-GHz RF,Wireless metering,Radio/hardware dependent
+P2,Building,DALI/DALI-2,DALI bus,Lighting control,Gateway dependent
+P2,Building,LonWorks/LonTalk,TP/IP,Building/controls,Legacy ecosystem
+P2,Building,EnOcean,Sub-GHz RF,Energy harvesting sensors,Gateway dependent
+P2,Sensor/Actuator,IO-Link,3-wire point-to-point,Sensor actuator data/diagnostics,Usually via IO-Link master API
+P2,Fieldbus,CANopen,CAN,Device profiles and PDO/SDO,CiA profiles
+P2,Vehicle/Industrial,SAE J1939,CAN,Heavy vehicle/engine data,PGN/SPN decoding
+P2,Fieldbus,DeviceNet,CAN/CIP,Industrial fieldbus,CIP over CAN
+P2,Fieldbus,ControlNet,Coax/Fiber/CIP,Deterministic control,Legacy CIP family
+P2,Fieldbus,PROFIBUS DP,RS-485,Fieldbus I/O,GSD + master stack
+P2,Fieldbus,PROFIBUS PA,MBP,Process instrumentation,Process industry
+P2,Process,HART,4-20mA FSK/HART-IP,Smart instruments,HART-IP easier first
+P2,Process,Foundation Fieldbus H1/HSE,MBP/Ethernet,Process control,Complex stack
+P2,Wireless Process,WirelessHART,802.15.4,Wireless instruments,Gateway integration first
+P2,Wireless Process,ISA100.11a,802.15.4,Wireless industrial sensors,Gateway integration first
+P2,Robot/CNC,FANUC FOCAS,TCP/Library,CNC data/program,License/library dependency
+P2,Robot/CNC,MTConnect,HTTP/XML/JSON,Machine tool telemetry,Read-only agent model
+P2,Robot,Universal Robots RTDE,TCP,Robot real-time data exchange,Client plugin
+P2,Robot,ABB RAPID/PC SDK,TCP/SDK,Robot control/data,Vendor SDK dependency
+P2,Robot,KUKA EKI/RSI,TCP/UDP/XML,Robot integration/realtime,Project-specific
+P2,Robot,Yaskawa MotoCOM,TCP/SDK,Robot control/data,Vendor SDK dependency
+P3,Industrial Ethernet,PROFINET,Ethernet/TCP/UDP/L2,Real-time automation,Certification/RT constraints
+P3,Industrial Ethernet,EtherCAT,Ethernet L2,Hard real-time fieldbus,Master timing/ESC/ESI
+P3,Industrial Ethernet,EtherNet/IP Adapter/Implicit I/O,TCP/UDP,CIP implicit I/O,ODVA conformance important
+P3,Industrial Ethernet,POWERLINK,Ethernet,Real-time control,Complex master/slave stack
+P3,Industrial Ethernet,Sercos III,Ethernet,Motion/control,Complex real-time stack
+P3,Industrial Ethernet,CC-Link IE Field/Basic,Ethernet/UDP,Industrial Ethernet,Spec/cert ecosystem
+P3,Industrial Ethernet,TSN/OPC UA FX,Ethernet TSN,Deterministic converged network,Emerging/complex

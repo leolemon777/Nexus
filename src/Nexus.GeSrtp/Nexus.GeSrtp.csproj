@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.GeSrtp</RootNamespace>
+    <AssemblyName>Nexus.GeSrtp</AssemblyName>
+    <Description>Nexus GE SRTP protocol implementation</Description>
+<Version>1.0.0</Version>
+    <Authors>Nexus Contributors</Authors>
+    <Company>Nexus</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial-communication PLC protocol</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
+  </ItemGroup>
+</Project>

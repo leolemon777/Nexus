@@ -13,11 +13,11 @@ public static class ThemeManager
     private static ResourceDictionary? _form;
 
     public static string CurrentColor { get; private set; } = "mono";
-    public static string CurrentForm { get; private set; } = "brutal";
+    public static string CurrentForm { get; private set; } = "soft";
 
     public static string[] AvailableColors { get; } =
     {
-        "claude","obsidian","apple","ferrari","nord","daylight","business","tiffany","hermes",
+        "industrial","claude","obsidian","apple","ferrari","nord","daylight","business","tiffany","hermes",
         "mono","platinum","mercedes","bmw","mclaren","aston","linear","lambo","rolls","dracula",
         "spotify","porsche","bugatti","cyber","fluentc","materialc"
     };

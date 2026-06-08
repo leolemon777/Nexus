@@ -24,7 +24,7 @@ namespace Nexus.Siemens
     /// <summary>
     /// S7 数据区类型（Variable Type）。
     /// </summary>
-    internal enum S7Area : byte
+    public enum S7Area : byte
     {
         PE = 0x81,  // 输入区 I
         PA = 0x82,  // 输出区 Q
@@ -32,5 +32,6 @@ namespace Nexus.Siemens
         DB = 0x84,  // 数据块 DB
         CT = 0x1C,  // 计数器
         TM = 0x1D,  // 定时器
+        V = 0x85,   // V 存储区 (S7-200/SMART)
     }
 }

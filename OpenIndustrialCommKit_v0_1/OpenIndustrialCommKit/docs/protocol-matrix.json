@@ -1,0 +1,602 @@
+[
+  {
+    "priority": "P0",
+    "domain": "PLC/Instrument",
+    "protocol": "Modbus TCP",
+    "transport": "TCP/502",
+    "pattern": "Client/Server register read-write",
+    "implementation_note": "Open/public; implement first"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC/Instrument",
+    "protocol": "Modbus RTU",
+    "transport": "RS-485/RS-232",
+    "pattern": "Master/Slave register read-write",
+    "implementation_note": "CRC16; serial timing important"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC/Instrument",
+    "protocol": "Modbus ASCII",
+    "transport": "RS-485/RS-232",
+    "pattern": "ASCII framed Modbus",
+    "implementation_note": "LRC; less common but easy"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC",
+    "protocol": "Siemens S7comm ISO-on-TCP",
+    "transport": "TCP/102",
+    "pattern": "S7 area read-write",
+    "implementation_note": "Client first; handle DB/M/I/Q"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC",
+    "protocol": "Mitsubishi MC 3E/4E",
+    "transport": "TCP/UDP/Serial",
+    "pattern": "Device memory read-write",
+    "implementation_note": "Binary + ASCII variants"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC",
+    "protocol": "Omron FINS",
+    "transport": "TCP/UDP/Serial",
+    "pattern": "Memory area read-write",
+    "implementation_note": "TCP/UDP + HostLink bridge"
+  },
+  {
+    "priority": "P0",
+    "domain": "PLC",
+    "protocol": "Allen-Bradley EtherNet/IP CIP",
+    "transport": "TCP/UDP/44818,2222",
+    "pattern": "Tag read-write, explicit/implicit",
+    "implementation_note": "Explicit messaging first"
+  },
+  {
+    "priority": "P0",
+    "domain": "OT Middleware",
+    "protocol": "OPC UA",
+    "transport": "TCP/HTTPS/MQTT/UADP",
+    "pattern": "Client/Server/PubSub information model",
+    "implementation_note": "Use official spec/library adapter first"
+  },
+  {
+    "priority": "P0",
+    "domain": "IoT",
+    "protocol": "MQTT 3.1.1/5",
+    "transport": "TCP/TLS/WebSocket",
+    "pattern": "Pub/Sub telemetry",
+    "implementation_note": "Core edge-to-cloud protocol"
+  },
+  {
+    "priority": "P0",
+    "domain": "Web/IoT",
+    "protocol": "HTTP/HTTPS REST",
+    "transport": "TCP/TLS",
+    "pattern": "Request/Response API",
+    "implementation_note": "Adapter; not device-specific"
+  },
+  {
+    "priority": "P0",
+    "domain": "Web/IoT",
+    "protocol": "WebSocket",
+    "transport": "TCP/TLS",
+    "pattern": "Full-duplex stream",
+    "implementation_note": "Gateway and web console"
+  },
+  {
+    "priority": "P0",
+    "domain": "Custom",
+    "protocol": "Custom Binary/ASCII DSL",
+    "transport": "TCP/UDP/Serial",
+    "pattern": "Declarative private protocols",
+    "implementation_note": "Core differentiator"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Mitsubishi FX/Q Serial",
+    "transport": "RS-232/RS-485",
+    "pattern": "PLC serial read-write",
+    "implementation_note": "Variant per CPU family"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Panasonic MEWTOCOL",
+    "transport": "TCP/Serial",
+    "pattern": "PLC read-write",
+    "implementation_note": "ASCII framing"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Delta DVP/AS",
+    "transport": "TCP/Serial",
+    "pattern": "PLC read-write",
+    "implementation_note": "Often Modbus-compatible plus vendor frames"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Keyence MC/HostLink variants",
+    "transport": "TCP/Serial",
+    "pattern": "PLC read-write",
+    "implementation_note": "MC-compatible + vendor extensions"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Beckhoff ADS/AMS",
+    "transport": "TCP/48898",
+    "pattern": "TwinCAT symbols and IO",
+    "implementation_note": "Client first"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "GE SRTP",
+    "transport": "TCP",
+    "pattern": "PLC memory read-write",
+    "implementation_note": "Legacy/installed base"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Schneider UMAS/Modbus extensions",
+    "transport": "TCP",
+    "pattern": "PLC programming/data access",
+    "implementation_note": "Be careful with safety/write operations"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Yokogawa FA-M3",
+    "transport": "TCP/Serial",
+    "pattern": "PLC read-write",
+    "implementation_note": "Vendor plugin"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "LS XGT/FEnet",
+    "transport": "TCP",
+    "pattern": "PLC read-write",
+    "implementation_note": "Vendor plugin"
+  },
+  {
+    "priority": "P1",
+    "domain": "PLC",
+    "protocol": "Fuji SPH",
+    "transport": "TCP/Serial",
+    "pattern": "PLC read-write",
+    "implementation_note": "Vendor plugin"
+  },
+  {
+    "priority": "P1",
+    "domain": "IoT",
+    "protocol": "CoAP",
+    "transport": "UDP/DTLS/TCP",
+    "pattern": "Constrained REST",
+    "implementation_note": "IoT constrained devices"
+  },
+  {
+    "priority": "P1",
+    "domain": "IoT Device Mgmt",
+    "protocol": "LwM2M",
+    "transport": "CoAP/DTLS/TCP/SMS",
+    "pattern": "Device management/telemetry",
+    "implementation_note": "Client/server adapter"
+  },
+  {
+    "priority": "P1",
+    "domain": "Messaging",
+    "protocol": "AMQP 1.0",
+    "transport": "TCP/TLS/WebSocket",
+    "pattern": "Reliable business messaging",
+    "implementation_note": "Broker integration"
+  },
+  {
+    "priority": "P1",
+    "domain": "Realtime Middleware",
+    "protocol": "DDS/RTPS",
+    "transport": "UDP/TCP",
+    "pattern": "Data-centric pub/sub QoS",
+    "implementation_note": "Robotics/defense/real-time"
+  },
+  {
+    "priority": "P1",
+    "domain": "IoT Model",
+    "protocol": "Sparkplug B",
+    "transport": "MQTT",
+    "pattern": "Industrial MQTT payload/session model",
+    "implementation_note": "Implement payload/model adapter"
+  },
+  {
+    "priority": "P1",
+    "domain": "Data Pipeline",
+    "protocol": "Kafka Protocol",
+    "transport": "TCP/TLS",
+    "pattern": "Streaming events",
+    "implementation_note": "Gateway sink/source"
+  },
+  {
+    "priority": "P1",
+    "domain": "Cache/Message",
+    "protocol": "Redis RESP",
+    "transport": "TCP/TLS",
+    "pattern": "Cache/stream/pubsub",
+    "implementation_note": "Gateway sink/source"
+  },
+  {
+    "priority": "P1",
+    "domain": "RPC",
+    "protocol": "gRPC",
+    "transport": "HTTP/2/TLS",
+    "pattern": "Service RPC",
+    "implementation_note": "Gateway API"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "IEC 60870-5-101",
+    "transport": "Serial",
+    "pattern": "Telecontrol",
+    "implementation_note": "Master/slave"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "IEC 60870-5-104",
+    "transport": "TCP",
+    "pattern": "Telecontrol",
+    "implementation_note": "Client/server"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "DNP3",
+    "transport": "Serial/TCP/UDP",
+    "pattern": "SCADA telecontrol",
+    "implementation_note": "Secure auth optional"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "IEC 61850 MMS",
+    "transport": "TCP",
+    "pattern": "Substation data model",
+    "implementation_note": "Complex SCL and services"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "IEC 61850 GOOSE",
+    "transport": "Ethernet L2",
+    "pattern": "Fast event messaging",
+    "implementation_note": "Raw Ethernet and timing"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "IEC 61850 Sampled Values",
+    "transport": "Ethernet L2",
+    "pattern": "Sampled analog values",
+    "implementation_note": "Raw Ethernet/high throughput"
+  },
+  {
+    "priority": "P2",
+    "domain": "Power",
+    "protocol": "ICCP/TASE.2",
+    "transport": "TCP/MMS",
+    "pattern": "Control center exchange",
+    "implementation_note": "Complex/utility-specific"
+  },
+  {
+    "priority": "P2",
+    "domain": "Metering",
+    "protocol": "DL/T 645",
+    "transport": "RS-485/Infrared",
+    "pattern": "Chinese energy meters",
+    "implementation_note": "Common in CN"
+  },
+  {
+    "priority": "P2",
+    "domain": "Metering",
+    "protocol": "CJ/T 188",
+    "transport": "M-Bus/RS-485",
+    "pattern": "Water/heat/gas meters",
+    "implementation_note": "Common in CN utilities"
+  },
+  {
+    "priority": "P2",
+    "domain": "Metering",
+    "protocol": "DLMS/COSEM IEC 62056",
+    "transport": "HDLC/TCP/Serial",
+    "pattern": "Smart metering",
+    "implementation_note": "Security profiles"
+  },
+  {
+    "priority": "P2",
+    "domain": "Energy",
+    "protocol": "SunSpec Modbus",
+    "transport": "Modbus TCP/RTU",
+    "pattern": "Solar/inverter model",
+    "implementation_note": "Model layer over Modbus"
+  },
+  {
+    "priority": "P2",
+    "domain": "Demand Response",
+    "protocol": "OpenADR",
+    "transport": "HTTP/XML",
+    "pattern": "Demand response",
+    "implementation_note": "Cloud/API side"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "BACnet/IP",
+    "transport": "UDP/IP",
+    "pattern": "Building automation objects",
+    "implementation_note": "Client/server + discovery"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "BACnet MS/TP",
+    "transport": "RS-485",
+    "pattern": "Building automation serial",
+    "implementation_note": "Timing sensitive"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "KNX/IP",
+    "transport": "UDP/IP",
+    "pattern": "Building automation",
+    "implementation_note": "Tunneling/routing"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "KNX TP",
+    "transport": "Twisted Pair",
+    "pattern": "Building automation fieldbus",
+    "implementation_note": "Needs interface hardware"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "M-Bus",
+    "transport": "M-Bus/Serial",
+    "pattern": "Metering",
+    "implementation_note": "Wired meters"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "Wireless M-Bus",
+    "transport": "Sub-GHz RF",
+    "pattern": "Wireless metering",
+    "implementation_note": "Radio/hardware dependent"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "DALI/DALI-2",
+    "transport": "DALI bus",
+    "pattern": "Lighting control",
+    "implementation_note": "Gateway dependent"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "LonWorks/LonTalk",
+    "transport": "TP/IP",
+    "pattern": "Building/controls",
+    "implementation_note": "Legacy ecosystem"
+  },
+  {
+    "priority": "P2",
+    "domain": "Building",
+    "protocol": "EnOcean",
+    "transport": "Sub-GHz RF",
+    "pattern": "Energy harvesting sensors",
+    "implementation_note": "Gateway dependent"
+  },
+  {
+    "priority": "P2",
+    "domain": "Sensor/Actuator",
+    "protocol": "IO-Link",
+    "transport": "3-wire point-to-point",
+    "pattern": "Sensor actuator data/diagnostics",
+    "implementation_note": "Usually via IO-Link master API"
+  },
+  {
+    "priority": "P2",
+    "domain": "Fieldbus",
+    "protocol": "CANopen",
+    "transport": "CAN",
+    "pattern": "Device profiles and PDO/SDO",
+    "implementation_note": "CiA profiles"
+  },
+  {
+    "priority": "P2",
+    "domain": "Vehicle/Industrial",
+    "protocol": "SAE J1939",
+    "transport": "CAN",
+    "pattern": "Heavy vehicle/engine data",
+    "implementation_note": "PGN/SPN decoding"
+  },
+  {
+    "priority": "P2",
+    "domain": "Fieldbus",
+    "protocol": "DeviceNet",
+    "transport": "CAN/CIP",
+    "pattern": "Industrial fieldbus",
+    "implementation_note": "CIP over CAN"
+  },
+  {
+    "priority": "P2",
+    "domain": "Fieldbus",
+    "protocol": "ControlNet",
+    "transport": "Coax/Fiber/CIP",
+    "pattern": "Deterministic control",
+    "implementation_note": "Legacy CIP family"
+  },
+  {
+    "priority": "P2",
+    "domain": "Fieldbus",
+    "protocol": "PROFIBUS DP",
+    "transport": "RS-485",
+    "pattern": "Fieldbus I/O",
+    "implementation_note": "GSD + master stack"
+  },
+  {
+    "priority": "P2",
+    "domain": "Fieldbus",
+    "protocol": "PROFIBUS PA",
+    "transport": "MBP",
+    "pattern": "Process instrumentation",
+    "implementation_note": "Process industry"
+  },
+  {
+    "priority": "P2",
+    "domain": "Process",
+    "protocol": "HART",
+    "transport": "4-20mA FSK/HART-IP",
+    "pattern": "Smart instruments",
+    "implementation_note": "HART-IP easier first"
+  },
+  {
+    "priority": "P2",
+    "domain": "Process",
+    "protocol": "Foundation Fieldbus H1/HSE",
+    "transport": "MBP/Ethernet",
+    "pattern": "Process control",
+    "implementation_note": "Complex stack"
+  },
+  {
+    "priority": "P2",
+    "domain": "Wireless Process",
+    "protocol": "WirelessHART",
+    "transport": "802.15.4",
+    "pattern": "Wireless instruments",
+    "implementation_note": "Gateway integration first"
+  },
+  {
+    "priority": "P2",
+    "domain": "Wireless Process",
+    "protocol": "ISA100.11a",
+    "transport": "802.15.4",
+    "pattern": "Wireless industrial sensors",
+    "implementation_note": "Gateway integration first"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot/CNC",
+    "protocol": "FANUC FOCAS",
+    "transport": "TCP/Library",
+    "pattern": "CNC data/program",
+    "implementation_note": "License/library dependency"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot/CNC",
+    "protocol": "MTConnect",
+    "transport": "HTTP/XML/JSON",
+    "pattern": "Machine tool telemetry",
+    "implementation_note": "Read-only agent model"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot",
+    "protocol": "Universal Robots RTDE",
+    "transport": "TCP",
+    "pattern": "Robot real-time data exchange",
+    "implementation_note": "Client plugin"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot",
+    "protocol": "ABB RAPID/PC SDK",
+    "transport": "TCP/SDK",
+    "pattern": "Robot control/data",
+    "implementation_note": "Vendor SDK dependency"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot",
+    "protocol": "KUKA EKI/RSI",
+    "transport": "TCP/UDP/XML",
+    "pattern": "Robot integration/realtime",
+    "implementation_note": "Project-specific"
+  },
+  {
+    "priority": "P2",
+    "domain": "Robot",
+    "protocol": "Yaskawa MotoCOM",
+    "transport": "TCP/SDK",
+    "pattern": "Robot control/data",
+    "implementation_note": "Vendor SDK dependency"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "PROFINET",
+    "transport": "Ethernet/TCP/UDP/L2",
+    "pattern": "Real-time automation",
+    "implementation_note": "Certification/RT constraints"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "EtherCAT",
+    "transport": "Ethernet L2",
+    "pattern": "Hard real-time fieldbus",
+    "implementation_note": "Master timing/ESC/ESI"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "EtherNet/IP Adapter/Implicit I/O",
+    "transport": "TCP/UDP",
+    "pattern": "CIP implicit I/O",
+    "implementation_note": "ODVA conformance important"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "POWERLINK",
+    "transport": "Ethernet",
+    "pattern": "Real-time control",
+    "implementation_note": "Complex master/slave stack"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "Sercos III",
+    "transport": "Ethernet",
+    "pattern": "Motion/control",
+    "implementation_note": "Complex real-time stack"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "CC-Link IE Field/Basic",
+    "transport": "Ethernet/UDP",
+    "pattern": "Industrial Ethernet",
+    "implementation_note": "Spec/cert ecosystem"
+  },
+  {
+    "priority": "P3",
+    "domain": "Industrial Ethernet",
+    "protocol": "TSN/OPC UA FX",
+    "transport": "Ethernet TSN",
+    "pattern": "Deterministic converged network",
+    "implementation_note": "Emerging/complex"
+  }
+]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -9,13 +10,20 @@ namespace Nexus.Modbus
     /// <summary>
     /// 虚拟 Modbus TCP 服务器 — 模拟真实 PLC，用于无硬件测试。
     /// 内置线圈、离散输入、保持寄存器、输入寄存器四区内存。
-    /// 支持功能码 01-06, 15, 16。
+    /// 支持功能码 01-06, 15, 16, 23。
+    /// 支持从站地址过滤和请求日志。
     /// </summary>
     public class ModbusTcpServer : IDisposable
     {
         private TcpListener? _listener;
         private Thread? _acceptThread;
         private volatile bool _running;
+
+        /// <summary>允许的从站地址列表。为空时允许所有。</summary>
+        public HashSet<byte> AllowedStationIds { get; } = new HashSet<byte>();
+
+        /// <summary>请求接收事件（用于调试和日志）。</summary>
+        public event EventHandler<ModbusRequestEventArgs>? OnRequestReceived;
 
         // 四区内存模型
         private readonly bool[] _coils = new bool[65536];           // 0xxxx 线圈
@@ -104,7 +112,7 @@ namespace Nexus.Modbus
                         byte[] pdu = new byte[pduLen];
                         if (!ReadExact(stream, pdu)) break;
 
-                        byte[]? responsePdu = ProcessPdu(pdu);
+                        byte[]? responsePdu = ProcessPduWithLog(unitId, pdu);
                         if (responsePdu == null) continue;
 
                         int respLen = responsePdu.Length + 1;
@@ -144,6 +152,24 @@ namespace Nexus.Modbus
                 };
             }
             catch { return BuildException(func, 4); }
+        }
+
+        private byte[]? ProcessPduWithLog(byte unitId, byte[] pdu)
+        {
+            // 从站地址过滤
+            if (AllowedStationIds.Count > 0 && !AllowedStationIds.Contains(unitId))
+                return BuildException(pdu[0], 2); // 非法数据地址
+
+            // 触发请求日志事件
+            OnRequestReceived?.Invoke(this, new ModbusRequestEventArgs
+            {
+                FunctionCode = pdu[0],
+                StationId = unitId,
+                RawData = pdu,
+                Timestamp = DateTime.Now
+            });
+
+            return ProcessPdu(pdu);
         }
 
         // ── FC01/02 — 读位数据 ───────────────────
@@ -280,5 +306,14 @@ namespace Nexus.Modbus
         }
 
         public void Dispose() => Stop();
+    }
+
+    /// <summary>Modbus 请求事件参数。</summary>
+    public class ModbusRequestEventArgs : EventArgs
+    {
+        public byte FunctionCode { get; set; }
+        public byte StationId { get; set; }
+        public byte[] RawData { get; set; } = Array.Empty<byte>();
+        public DateTime Timestamp { get; set; }
     }
 }

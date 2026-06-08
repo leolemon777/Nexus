@@ -6,16 +6,52 @@
     <RootNamespace>Nexus.App</RootNamespace>
     <AssemblyName>Nexus</AssemblyName>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon />
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ForceSelfContained>true</ForceSelfContained>
     <Version>0.1.0</Version>
     <Description>Nexus — Open-source Industrial Communication Library &amp; Debugger</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
     <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
     <ProjectReference Include="..\Nexus.Siemens\Nexus.Siemens.csproj" />
+    <ProjectReference Include="..\Nexus.Mitsubishi\Nexus.Mitsubishi.csproj" />
+    <ProjectReference Include="..\Nexus.Omron\Nexus.Omron.csproj" />
+    <ProjectReference Include="..\Nexus.AllenBradley\Nexus.AllenBradley.csproj" />
+    <ProjectReference Include="..\Nexus.Panasonic\Nexus.Panasonic.csproj" />
+    <ProjectReference Include="..\Nexus.Keyence\Nexus.Keyence.csproj" />
+    <ProjectReference Include="..\Nexus.Beckhoff\Nexus.Beckhoff.csproj" />
+    <ProjectReference Include="..\Nexus.LsElectric\Nexus.LsElectric.csproj" />
+    <ProjectReference Include="..\Nexus.Delta\Nexus.Delta.csproj" />
+    <ProjectReference Include="..\Nexus.Fuji\Nexus.Fuji.csproj" />
+    <ProjectReference Include="..\Nexus.MitsubishiFx\Nexus.MitsubishiFx.csproj" />
+    <ProjectReference Include="..\Nexus.Fatek\Nexus.Fatek.csproj" />
+    <ProjectReference Include="..\Nexus.Fanuc\Nexus.Fanuc.csproj" />
+    <ProjectReference Include="..\Nexus.GeSrtp\Nexus.GeSrtp.csproj" />
+    <ProjectReference Include="..\Nexus.Xinje\Nexus.Xinje.csproj" />
+    <ProjectReference Include="..\Nexus.Kuka\Nexus.Kuka.csproj" />
+    <ProjectReference Include="..\Nexus.OpcUa\Nexus.OpcUa.csproj" />
+    <ProjectReference Include="..\Nexus.Yaskawa\Nexus.Yaskawa.csproj" />
+    <ProjectReference Include="..\Nexus.Yokogawa\Nexus.Yokogawa.csproj" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\Icons\**\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,86 @@
+<UserControl x:Class="Nexus.App.Controls.ProtocolLogViewer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="通讯日志" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+
+            <TextBox Grid.Column="1" x:Name="SearchBox" MinHeight="28" Padding="8,4"
+                     FontSize="12" Margin="12,0,8,0" Foreground="{DynamicResource Brush.Text}"
+                     CaretBrush="{DynamicResource Brush.Accent}"
+                     Text="{Binding SearchText, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.Template>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="b" Background="{DynamicResource Brush.Bg}"
+                                BorderBrush="{DynamicResource Brush.Line2}" BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Sm}" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <TextBlock Text="搜索..." Foreground="{DynamicResource Brush.Text3}"
+                                           FontSize="12" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </TextBox.Template>
+            </TextBox>
+
+            <CheckBox Grid.Column="2" Content="HEX" VerticalAlignment="Center" Margin="0,0,8,0"
+                      IsChecked="{Binding IsHexView, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+
+            <CheckBox Grid.Column="3" Content="自动滚动" VerticalAlignment="Center" Margin="0,0,8,0"
+                      IsChecked="{Binding AutoScroll, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+
+            <Button Grid.Column="4" Content="导出" Style="{DynamicResource Button.Text}" Padding="8,4" FontSize="12"
+                    Command="{Binding ExportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+
+            <Button Grid.Column="5" Content="清空" Style="{DynamicResource Button.Text}" Padding="8,4" FontSize="12"
+                    Command="{Binding ClearCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        </Grid>
+
+        <!-- Log area -->
+        <Border Grid.Row="1" Background="{DynamicResource Brush.Bg}"
+                CornerRadius="{DynamicResource Radius.Md}" Padding="6">
+            <RichTextBox x:Name="LogRichTextBox"
+                         Background="Transparent" BorderThickness="0"
+                         IsReadOnly="True" FontFamily="Consolas, Courier New" FontSize="12"
+                         Foreground="{DynamicResource Brush.Text2}"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"/>
+        </Border>
+    </Grid>
+</UserControl>
