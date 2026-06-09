@@ -136,6 +136,12 @@
                             <Button Grid.Row="5" Grid.ColumnSpan="2" Content="+ Add Address"
                                     Style="{DynamicResource Button.Primary}" Margin="0,4,0,0"
                                     Command="{Binding AddMonitoredAddressCommand}" HorizontalAlignment="Stretch"/>
+
+                            <!-- 批量导入：弹出输入框 -->
+                            <Button Grid.Row="5" Grid.ColumnSpan="2" Grid.Column="0"
+                                    Content="📋 批量导入"
+                                    Style="{DynamicResource Button.Ghost}" Margin="0,4,0,0"
+                                    Click="BatchImport_Click" HorizontalAlignment="Stretch"/>
                         </Grid>
                     </StackPanel>
 

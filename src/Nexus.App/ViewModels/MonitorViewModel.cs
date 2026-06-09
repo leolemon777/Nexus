@@ -218,6 +218,47 @@ namespace Nexus.App.ViewModels
         }
 
         [RelayCommand]
+        private void BatchAddMonitoredAddresses(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            // 支持格式：每行一个地址，或逗号/分号分隔
+            // 可选格式: "Address" 或 "Address,Alias" 或 "Address,Alias,DataType"
+            var lines = text.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            int added = 0;
+
+            foreach (var line in lines)
+            {
+                var parts = line.Trim().Split(new[] { '|' }, StringSplitOptions.None);
+                if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0])) continue;
+
+                var addr = new MonitoredAddress(MaxDataPoints)
+                {
+                    Address = parts[0].Trim(),
+                    Alias = parts.Length > 1 ? parts[1].Trim() : "",
+                    DataType = parts.Length > 2 ? parts[2].Trim() : NewMonDataType,
+                    IntervalMs = NewMonIntervalMs,
+                    SeriesColor = ChartColorPalette[MonitoredAddresses.Count % ChartColorPalette.Length]
+                };
+
+                // 避免重复地址
+                if (MonitoredAddresses.Any(a => a.Address == addr.Address)) continue;
+
+                _service.AddMonitoredAddress(addr);
+                MonitoredAddresses.Add(addr);
+                added++;
+            }
+
+            MonitoredCount = MonitoredAddresses.Count;
+            if (added > 0)
+            {
+                AdvanceColor();
+                SaveMonitoredAddresses();
+                AppendLog($"[+] 批量添加 {added} 个监控地址");
+            }
+        }
+
+        [RelayCommand]
         private void ClearAllMonitoredAddresses()
         {
             foreach (var addr in MonitoredAddresses)

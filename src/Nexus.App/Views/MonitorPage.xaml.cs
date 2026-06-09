@@ -38,6 +38,55 @@ public partial class MonitorPage : Page
         Unloaded -= OnPageUnloaded;
         _vm!.LogLines.CollectionChanged -= OnLogChanged;
     }
+
+    private void BatchImport_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Window
+        {
+            Title = "批量导入监控地址",
+            Width = 480,
+            Height = 320,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Window.GetWindow(this),
+            Background = (Brush)FindResource("Brush.Bg")
+        };
+
+        var panel = new StackPanel { Margin = new Thickness(16) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "每行一个地址，支持格式：\n  D100\n  D100|温度\n  D100|温度|Float\n也支持逗号或分号分隔。",
+            Style = (Style)FindResource("Body"),
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+
+        var tb = new TextBox
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            Height = 160,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Style = (Style)FindResource("Input")
+        };
+        panel.Children.Add(tb);
+
+        var btn = new Button
+        {
+            Content = "导入",
+            Style = (Style)FindResource("Button.Primary"),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 8, 0, 0),
+            IsDefault = true
+        };
+        btn.Click += (_, _) =>
+        {
+            _vm!.BatchAddMonitoredAddressesCommand.Execute(tb.Text);
+            dlg.Close();
+        };
+        panel.Children.Add(btn);
+
+        dlg.Content = panel;
+        dlg.ShowDialog();
+    }
 }
 
 public sealed class ZeroToVisibleConverter : IValueConverter
