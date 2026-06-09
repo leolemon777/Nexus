@@ -254,13 +254,209 @@ var value = s7.ReadInt16("DB1.DBW0");
 var text = s7.ReadS7String("DB1.DBB100");
 ```
 
+## Example: Mitsubishi MC3E Binary (Q/L/FX5U/iQ-R)
+
+```csharp
+using Nexus.Mitsubishi;
+
+// MC3E Binary — 最常用的三菱以太网协议，端口 6000 (FX5U/Q 系列)
+using var client = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, "192.168.1.10", 6000);
+var connect = client.Connect();
+if (!connect.IsSuccess)
+{
+    Console.WriteLine(connect.Message);
+    return;
+}
+
+var value = client.ReadInt16("D100");
+var coil  = client.ReadBool("M100");
+```
+
+## Mitsubishi Migration Details
+
+This section maps HSL Mitsubishi usage patterns to Nexus equivalents. Nexus provides five Mitsubishi clients covering MC Binary, MC ASCII, MC UDP, A1E, and FX serial variants.
+
+### Client Selection
+
+| Existing Mitsubishi Need | Nexus Client | Transport | Default Port | Notes |
+|--------------------------|--------------|-----------|--------------|-------|
+| MC 协议 Binary (Q/L/iQ-R/FX5U) | `Mc3EBinaryClient` | TCP | 6000 | Most common. Binary framing. |
+| MC 协议 ASCII (Q/L/iQ-R/FX5U) | `Mc3EAsciiClient` | TCP | 6000 | ASCII hex framing for serial-to-Ethernet. |
+| MC 协议 UDP | `Mc3EUdpClient` | UDP | 5551 | Binary or ASCII mode via `UseAscii` property. |
+| A1E 兼容帧 (A/QnA) | `MelsecA1EClient` | TCP | 5551 | Legacy A-series frame. |
+| FX 编程口协议 (FX1N/2N/3U) | `FxSerialClient` | Serial (`ISerialPort`) | — | ENQ/ACK/STX/ETX handshake. |
+| FX 计算机链接协议 (RS-485) | `FxLinkClient` | `Stream` | — | Station-numbered RS-485 multidrop. |
+
+```csharp
+using Nexus.Mitsubishi;
+
+// MC3E Binary
+using var binary = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, "192.168.1.10", 6000);
+
+// MC3E ASCII
+using var ascii = new Mc3EAsciiClient(MitsubishiModel.Qna_3E, "192.168.1.10", 6000);
+
+// MC3E UDP (Binary mode default, switch to ASCII with UseAscii)
+using var udp = new Mc3EUdpClient(MitsubishiModel.Qna_3E, "192.168.1.10", 5551);
+udp.UseAscii = true; // optional
+
+// A1E legacy
+using var a1e = new MelsecA1EClient("192.168.1.10", 5551);
+
+// FX Serial (编程口)
+ISerialPort port = CreateSerialPort(); // Application adapter
+using var fxProg = new FxSerialClient(port);
+
+// FX Link (计算机链接, RS-485 multi-drop)
+Stream stream = GetStream(); // Serial-over-TCP/DTU or raw serial
+using var fxLink = new FxLinkClient(stream, station: 1);
+```
+
+### Model Selection
+
+The `MitsubishiModel` enum selects the correct MC frame format:
+
+| Nexus Model | HSL Equivalent | PLC Series |
+|-------------|----------------|------------|
+| `Qna_3E` | QnA 3E frame | Q/L/FX5U/iQ-R/iQ-F (most common) |
+| `Qna_2E` | QnA 2E frame | Q series legacy |
+| `A_3E` | A 3E frame | A series |
+| `A_1E` | A 1E frame | A series (use `MelsecA1EClient` instead) |
+| `FX_3U` | FX 3E frame | FX3U |
+| `FX_5U` | FX 3E frame | FX5U (same framing as Qna_3E) |
+| `IQ_R` | iQ-R 3E frame | iQ-R series |
+| `IQ_F` | iQ-F 3E frame | iQ-F series |
+| `L_Series` | L 3E frame | L series |
+
+### Address Format
+
+Nexus Mitsubishi addresses use the standard MC protocol notation. The `Mc3EAddressParser` handles the sub-label conversion internally.
+
+| Data Area | Address Examples | Sub-Label | Type | Address Base |
+|-----------|-----------------|-----------|------|--------------|
+| Data Register | `D0`, `D100`, `D8000` | 0xA8 | Word | Decimal |
+| Internal Relay | `M0`, `M100` | 0x90 | Bit | Decimal |
+| Input | `X0`, `X10`, `X1F` | 0x9C | Bit | **Hex** |
+| Output | `Y0`, `Y20`, `Y3F` | 0x9D | Bit | **Hex** |
+| Link Relay | `B0`, `B10` | 0xA0 | Bit | **Hex** |
+| Link Register | `W0`, `W100` | 0xB4 | Word | Decimal |
+| Latch Relay | `L0`, `L100` | 0x92 | Bit | Decimal |
+| Step Relay | `S0`, `S100` | 0x98 | Bit | Decimal |
+| File Register | `R0`, `R100` | 0xAF | Word | Decimal |
+| Extended File Register | `ZR0` | 0xB0 | Word | Decimal |
+| Special Relay | `SM0` | 0x91 | Bit | Decimal |
+| Special Register | `SD0` | 0xA9 | Word | Decimal |
+| Timer Contact | `TS0` | 0xC1 | Bit | Decimal |
+| Timer Coil | `TC0` | 0xC0 | Bit | Decimal |
+| Counter Contact | `CS0` | 0xC4 | Bit | Decimal |
+| Counter Coil | `CC0` | 0xC3 | Bit | Decimal |
+| Index Register | `Z0` | 0xCC | Word | Decimal |
+| Edge Relay | `V0` | 0x94 | Bit | Decimal |
+| Direct Input | `DX0` | 0xA2 | Bit | **Hex** |
+| Direct Link Register | `SW0` | 0xB5 | Word | Decimal |
+
+**Important**: X/Y/B/DX addresses are **hexadecimal**, not decimal. `X10` means input 0x10 = 16 in decimal, not input 10.
+
+For FX serial protocols (`FxSerialClient` and `FxLinkClient`), addresses are simpler: `D100`, `M100`, `Y0`, `X0`, `T0`, `C0`, `S0` (decimal only).
+
+### Read/Write API Mapping
+
+The same `IReadWriteDevice` pattern applies to all Mitsubishi clients:
+
+```csharp
+using Nexus.Mitsubishi;
+
+using var client = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, "192.168.1.10", 6000);
+client.Connect();
+
+// Typed reads
+OperateResult<short> d100 = client.ReadInt16("D100");
+OperateResult<int>   d200 = client.ReadInt32("D200");
+OperateResult<float> d300 = client.ReadFloat("D300");
+OperateResult<bool>  m50  = client.ReadBool("M50");
+OperateResult<string> str = client.ReadString("D500", 10); // 10 words
+
+// Typed writes
+client.Write("D100", (short)100);
+client.Write("D200", 12345);
+client.Write("D300", 3.14f);
+client.Write("M50", true);
+client.Write("D500", "Hello");
+```
+
+### HSL-to-Nexus Migration Pattern
+
+| HSL Pattern | Nexus Equivalent | Notes |
+|-------------|------------------|-------|
+| `MelsecMcNet(ip, port)` | `Mc3EBinaryClient(Qna_3E, ip, port)` | MC3E Binary, the most common. |
+| `MelsecMcAsciiNet(ip, port)` | `Mc3EAsciiClient(Qna_3E, ip, port)` | MC3E ASCII. |
+| `MelsecA1ENet(ip, port)` | `MelsecA1EClient(ip, port)` | A1E legacy frame. |
+| `MitsubishiFxSerial()` | `FxSerialClient(ISerialPort)` | FX 编程口协议. |
+| `ReadInt16("D100")` | `ReadInt16("D100")` | Same address syntax. |
+| `ReadBool("M100")` | `ReadBool("M100")` | Same. |
+| `Write("D100", 100)` | `Write("D100", (short)100)` | Nexus requires explicit type cast. |
+| `.ConnectServer()` | `.Connect()` | Different method name. |
+| `.ConnectClose()` | `.Disconnect()` then `.Dispose()` | Nexus uses standard lifecycle. |
+
+### Error Codes
+
+Nexus maps SLMP completion codes to Chinese descriptions via `SlmpErrorCodes.GetDescription()`:
+
+```csharp
+ushort endCode = 0xC003;
+Console.WriteLine(SlmpErrorCodes.GetDescription(endCode));
+// 输出: 地址超出范围
+```
+
+Common error codes:
+
+| Code | Meaning |
+|------|---------|
+| 0x0000 | 正常完成 |
+| 0xC001 | 不支持的功能码 |
+| 0xC003 | 地址超出范围 |
+| 0xC004 | 数据长度超出范围 |
+| 0xC006 | PLC 当前模式不支持此操作 |
+| 0xC020 | 帧长度错误 |
+| 0xC024 | 路由参数错误 |
+| 0xCF70 | 从站无响应 |
+
+### Virtual Server Testing
+
+`Mc3EVirtuServer` and `MelsecA1EVirtualServer` provide offline integration testing without real PLC hardware:
+
+```csharp
+using var server = new Mc3EVirtuServer(6000);
+server.Start();
+
+using var client = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, "127.0.0.1", 6000);
+client.Connect();
+
+// Read/write against virtual PLC memory
+client.Write("D0", (short)42);
+var result = client.ReadInt16("D0");
+Assert.Equal((short)42, result.Content);
+```
+
+### Field Validation Checklist for Mitsubishi
+
+Before declaring an HSL-to-Nexus Mitsubishi migration complete:
+
+- [ ] Model enum matches the actual PLC series (Qna_3E for Q/L/FX5U/iQ-R).
+- [ ] TCP port matches the PLC configuration (default 6000 for MC3E, 5551 for A1E/UDP).
+- [ ] Address syntax matches the data area (X/Y/B are hex, D/M/S are decimal).
+- [ ] Byte order is correct for multi-register types (Int32/Float/Int64/Double).
+- [ ] Batch and random read/write limits are respected (960 words max per batch).
+- [ ] FX serial baud rate, parity, and stop bits match the PLC programming port settings.
+- [ ] FX Link station number matches the RS-485 multidrop address.
+
 ## Protocol Mapping
 
 | HSL Family | Nexus Module | Migration Status | Notes |
 |------------|--------------|------------------|-------|
 | Modbus TCP/RTU/ASCII/UDP | `Nexus.Modbus` | Reference candidate | First migration docs should be completed here. |
 | Siemens S7 | `Nexus.Siemens` | Usable | S7 is strongest; PPI needs audit. |
-| Mitsubishi MC/A1E/FX | `Nexus.Mitsubishi` / `Nexus.MitsubishiFx` | Usable/Needs Audit | MC family parity table needed. |
+| Mitsubishi MC/A1E/FX | `Nexus.Mitsubishi` | Usable | MC Binary/ASCII/UDP + A1E + FX Serial all in one package. |
 | Omron FINS/HostLink | `Nexus.Omron` | Usable | Routing and node setup docs needed. |
 | AllenBradley CIP/PCCC | `Nexus.AllenBradley` | Usable | Tag workflow and PCCC scope docs needed. |
 | Beckhoff ADS | `Nexus.Beckhoff` | Experimental | Test evidence is thin. |
