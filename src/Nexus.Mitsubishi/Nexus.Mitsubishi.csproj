@@ -5,6 +5,16 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Nexus Mitsubishi protocol library — MC3E Binary/ASCII/UDP, A1E, FX Serial (编程口+计算机链接)</Description>
+    <Version>1.0.0</Version>
+    <Authors>Nexus Contributors</Authors>
+    <Company>Nexus</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial-communication PLC Mitsubishi MC3E A1E FX-Serial SLMP</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>

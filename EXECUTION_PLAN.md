@@ -186,10 +186,10 @@ Tasks:
 
 | Priority | Task | Files/Area |
 |----------|------|------------|
-| P0 | Fix `ProtocolLogViewer.ConvertBack` placeholder (done) | `src/Nexus.App/Controls/ProtocolLogViewer.xaml.cs` |
-| P0 | Define packet log JSONL export | Done for Modbus TCP page; shared export service still pending |
-| P0 | Add Modbus packet parsing display | Done for Modbus TCP page; RTU/ASCII/UDP pages still pending |
-| P1 | Add diagnostic bundle export | app log, TX/RX log, settings |
+| P0 | Fix `ProtocolLogViewer.ConvertBack` placeholder | Done |
+| P0 | Define packet log JSONL export | Done: shared `PacketRecorderService` |
+| P0 | Add Modbus packet parsing display | Done: all 7 Modbus pages |
+| P1 | Add diagnostic bundle export | Done: `DiagnosticBundleService` ZIP export with JSONL, settings, session log |
 | P1 | Improve multi-address monitor workflows | `MonitorPage`, `MonitorViewModel` |
 | P2 | Add virtual PLC manager page | simulator services |
 
