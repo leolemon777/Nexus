@@ -77,6 +77,7 @@ public partial class App : Application
                 services.AddSingleton<RecipeViewModel>();
                 services.AddSingleton<DataLoggerViewModel>();
                 services.AddSingleton<PacketRecorderService>();
+                services.AddSingleton<DiagnosticBundleService>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

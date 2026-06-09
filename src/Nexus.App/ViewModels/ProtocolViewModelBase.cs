@@ -246,7 +246,70 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     }
 
     [RelayCommand]
-    private void ClearLog() => LogLines.Clear();
+    private void ClearLog()
+    {
+        LogLines.Clear();
+        _packetRecorder?.Clear();
+    }
+
+    [RelayCommand]
+    private void ExportDiagnosticBundle()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = $"nexus-diag-{ProtocolName}-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+                Filter = "ZIP 文件 (*.zip)|*.zip",
+                Title = "导出诊断包"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            var bundle = ((App)Application.Current).Services.GetService(typeof(DiagnosticBundleService)) as DiagnosticBundleService;
+            if (bundle == null)
+            {
+                AppendLog("[ERR] 诊断服务不可用");
+                return;
+            }
+
+            var sessionLog = string.Join(Environment.NewLine, LogLines);
+            var info = BuildConnectionInfo();
+
+            var result = bundle.ExportBundle(dialog.FileName, info, sessionLog);
+            if (result.IsSuccess)
+                AppendLog($"✅ 诊断包已导出: {dialog.FileName}");
+            else
+                AppendLog($"[ERR] 导出失败: {result.Message}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[ERR] 导出异常: {ex.Message}");
+        }
+    }
+
+    private ConnectionInfo? BuildConnectionInfo()
+    {
+        var info = new ConnectionInfo { Protocol = ProtocolName };
+
+        // Try to extract connection details from the ViewModel's properties
+        // via reflection to avoid tight coupling with specific VM types
+        var type = GetType();
+
+        var ipProp = type.GetProperty("IpAddress");
+        if (ipProp != null) info.Host = ipProp.GetValue(this)?.ToString() ?? "";
+
+        var portProp = type.GetProperty("Port");
+        if (portProp != null && portProp.GetValue(this) is int port) info.Port = port;
+
+        var slaveProp = type.GetProperty("SlaveId");
+        if (slaveProp != null && slaveProp.GetValue(this) is byte station) info.Station = station;
+
+        var timeoutProp = type.GetProperty("Timeout");
+        if (timeoutProp != null && timeoutProp.GetValue(this) is int timeout) info.Timeout = timeout;
+
+        return info;
+    }
 
     protected void AppendLog(string line)
     {

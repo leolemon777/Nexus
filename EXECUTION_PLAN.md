@@ -170,8 +170,8 @@ Tasks:
 | P0 | Add example using `AutoReconnectGuard` | Done: in reconnect-heartbeat.md | Modbus + S7 + combined examples. |
 | P1 | Add connection-pool usage guidance | Done: `docs/core/connection-pool.md` | Lifecycle, thread safety, multi-PLC example. |
 | P1 | Add `AddressContext` examples | Done: `docs/core/address-context.md` | Station override, byte order override. |
-| P1 | Add struct mapping examples | docs | Use Modbus as example. |
-| P2 | Audit direct `IReadWriteDevice` implementations | readiness table | Decide migration vs acceptable exception. |
+| P1 | Add struct mapping examples | Done: `docs/core/struct-mapping.md` | StructConverter with byte order, nested structs, MotorBlock example. |
+| P2 | Audit direct `IReadWriteDevice` implementations | Done: `docs/core/ireadwrite-device-audit.md` | 13 clients audited; 7 should migrate, 6 acceptable as-is. |
 
 Exit criteria:
 
