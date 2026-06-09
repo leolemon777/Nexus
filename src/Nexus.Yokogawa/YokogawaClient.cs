@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nexus.Yokogawa
 {
@@ -10,7 +14,7 @@ namespace Nexus.Yokogawa
     /// 响应 Payload: [cmdEcho, errorCode, reserved, reserved, data...]
     /// 字节序: CDAB（16 位大端，32/64 位高低字交换）
     /// </summary>
-    public class YokogawaClient : TcpDeviceBase
+    public class YokogawaClient : TcpDeviceBase, IBatchReadWrite
     {
         #region 常量
 
@@ -681,6 +685,102 @@ namespace Nexus.Yokogawa
                 (byte)(value >> 24), (byte)(value >> 16)    // W2
             };
         }
+
+        #endregion
+
+        #region IBatchReadWrite — 批量读写接口
+
+        /// <summary>批量读取多个地址的值（利用协议原生随机读命令）。</summary>
+        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToArray();
+            if (addrList.Length == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
+            var readResult = ReadRandomWords(addrList);
+            if (!readResult.IsSuccess)
+                return OperateResult<Dictionary<string, object?>>.Failed(readResult.Message, readResult.ErrorCode);
+
+            var result = new Dictionary<string, object?>();
+            for (int i = 0; i < addrList.Length; i++)
+            {
+                int offset = i * 2;
+                if (offset + 2 <= readResult.Content.Length)
+                    result[addrList[i]] = ToInt16BE(readResult.Content, offset);
+            }
+
+            return OperateResult<Dictionary<string, object?>>.Success(result);
+        }
+
+        /// <summary>批量读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchRead(addresses));
+
+        /// <summary>随机读取多个不连续地址（返回原始字节）。</summary>
+        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToArray();
+            if (addrList.Length == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
+            var readResult = ReadRandomWords(addrList);
+            if (!readResult.IsSuccess)
+                return OperateResult<Dictionary<string, byte[]>>.Failed(readResult.Message, readResult.ErrorCode);
+
+            var result = new Dictionary<string, byte[]>();
+            for (int i = 0; i < addrList.Length; i++)
+            {
+                int offset = i * 2;
+                if (offset + 2 <= readResult.Content.Length)
+                {
+                    byte[] wordBytes = new byte[2];
+                    wordBytes[0] = readResult.Content[offset];
+                    wordBytes[1] = readResult.Content[offset + 1];
+                    result[addrList[i]] = wordBytes;
+                }
+            }
+
+            return OperateResult<Dictionary<string, byte[]>>.Success(result);
+        }
+
+        /// <summary>随机读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(RandomRead(addresses));
+
+        /// <summary>批量写入多个地址的值。</summary>
+        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
+        {
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            var addresses = new string[itemList.Count];
+            var data = new byte[itemList.Count][];
+
+            for (int i = 0; i < itemList.Count; i++)
+            {
+                addresses[i] = itemList[i].Key;
+                short value = itemList[i].Value switch
+                {
+                    short s => s,
+                    ushort us => (short)us,
+                    int n => (short)n,
+                    uint u => (short)u,
+                    bool b => (short)(b ? 1 : 0),
+                    _ => (short)0
+                };
+                data[i] = GetBytesBE(value);
+            }
+
+            return WriteRandomWords(addresses, data);
+        }
+
+        /// <summary>批量写入（异步）。</summary>
+        public Task<OperateResult> BatchWriteAsync(
+            IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchWrite(items));
 
         #endregion
 

@@ -9,7 +9,7 @@ namespace Nexus.Fuji
     /// <para>帧格式: STX(0x02) + StationNo(2hex) + Command(2hex) + Data + ETX(0x03) + BCC(2hex)</para>
     /// <para>对标 HSL: FujiSPH — Read/Write D/C/T/M 寄存器, 批量位, PLC控制</para>
     /// </summary>
-    public class FujiSphClient : IReadWriteDevice
+    public class FujiSphClient : IBatchReadWrite
     {
         private readonly Stream _stream;
         private readonly object _lock = new object();
@@ -349,5 +349,83 @@ namespace Nexus.Fuji
         public Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+
+        // ═══════════════════════════════════════════
+        //  IBatchReadWrite — 批量读写接口
+        // ═══════════════════════════════════════════
+
+        /// <summary>批量读取多个地址的值。</summary>
+        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+            var result = new Dictionary<string, object?>();
+            foreach (var addr in addrList)
+            {
+                var r = ReadInt16(addr);
+                if (!r.IsSuccess)
+                    return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+                result[addr] = r.Content;
+            }
+            return OperateResult<Dictionary<string, object?>>.Success(result);
+        }
+
+        /// <summary>批量读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchRead(addresses));
+
+        /// <summary>随机读取多个不连续地址（返回原始字节）。</summary>
+        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+            var result = new Dictionary<string, byte[]>();
+            foreach (var addr in addrList)
+            {
+                var r = ReadBytes(addr, 1);
+                if (!r.IsSuccess)
+                    return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
+                result[addr] = r.Content;
+            }
+            return OperateResult<Dictionary<string, byte[]>>.Success(result);
+        }
+
+        /// <summary>随机读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(RandomRead(addresses));
+
+        /// <summary>批量写入多个地址的值。</summary>
+        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
+        {
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+            foreach (var kv in itemList)
+            {
+                OperateResult r = kv.Value switch
+                {
+                    bool b => Write(kv.Key, b),
+                    short s => Write(kv.Key, s),
+                    ushort us => Write(kv.Key, us),
+                    int i => Write(kv.Key, i),
+                    uint ui => Write(kv.Key, ui),
+                    float f => Write(kv.Key, f),
+                    string s => Write(kv.Key, s),
+                    byte[] b => Write(kv.Key, b),
+                    _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")
+                };
+                if (!r.IsSuccess) return r;
+            }
+            return OperateResult.Success();
+        }
+
+        /// <summary>批量写入（异步）。</summary>
+        public Task<OperateResult> BatchWriteAsync(
+            IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchWrite(items));
     }
 }

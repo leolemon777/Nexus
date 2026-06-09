@@ -1,0 +1,49 @@
+- name: 首页
+  href: index.md
+- name: 快速开始
+  href: getting-started.md
+- name: 核心基础设施
+  items:
+    - name: OperateResult 模式
+      href: core/operate-result.md
+    - name: IReadWriteDevice 接口
+      href: core/read-write-device.md
+    - name: IBatchReadWrite 批量读写
+      href: core/batch-read-write.md
+    - name: ISubscribeDevice 订阅
+      href: core/subscribe-device.md
+    - name: 数据采集引擎
+      href: core/data-acquisition.md
+    - name: 连接池
+      href: core/connection-pool.md
+    - name: 重连与心跳
+      href: core/reconnect-heartbeat.md
+    - name: 结构体映射
+      href: core/struct-mapping.md
+- name: 协议库
+  items:
+    - name: Modbus TCP/RTU/ASCII/UDP
+      href: protocols/modbus.md
+    - name: Siemens S7/FetchWrite/PPI
+      href: protocols/siemens.md
+    - name: Mitsubishi MC3E/A1E/FX
+      href: protocols/mitsubishi.md
+    - name: Omron FINS/HostLink
+      href: protocols/omron.md
+    - name: Allen-Bradley CIP/PCCC
+      href: protocols/allenbradley.md
+    - name: Schneider Modicon
+      href: protocols/schneider.md
+    - name: Yokogawa 二进制链接
+      href: protocols/yokogawa.md
+    - name: Inovance Easy
+      href: protocols/inovance.md
+    - name: Delta DVP
+      href: protocols/delta.md
+    - name: GE SRTP
+      href: protocols/gesrtp.md
+    - name: 更多协议
+      href: protocols/more-protocols.md
+- name: API 参考
+  href: api/
+  homepage: api/index.md

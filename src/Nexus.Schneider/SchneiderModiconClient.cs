@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nexus.Schneider
 {
@@ -8,7 +12,7 @@ namespace Nexus.Schneider
     /// <para>基于 Modbus TCP，支持标准 FC01-06 及 Modicon 扩展功能码 (OFs/UNA)。</para>
     /// <para>地址格式: %MW100 (内部字), %M50 (内部位), %I0.0 (输入位), %IW10 (输入字), %Q0.1 (输出位), %QW20 (输出字), %S0 (系统位), %SW100 (系统字)。</para>
     /// </summary>
-    public class SchneiderModiconClient : TcpDeviceBase
+    public class SchneiderModiconClient : TcpDeviceBase, IBatchReadWrite
     {
         /// <summary>Modbus 从站地址 (默认 1)。</summary>
         public byte SlaveId { get; set; } = 1;
@@ -236,5 +240,136 @@ namespace Nexus.Schneider
         public override OperateResult Write(string address, float value) { unsafe { int bits = *(int*)&value; return Write(address, bits); } }
         public override OperateResult Write(string address, double value) => Write(address, (float)value);
         public override OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
+
+        // ═══════════════════════════════════════════
+        //  IBatchReadWrite — 批量读写接口
+        // ═══════════════════════════════════════════
+
+        /// <summary>批量读取多个地址的值（按区域分组，连续地址合并读取）。</summary>
+        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
+        {
+            var result = new Dictionary<string, object?>();
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
+            // 按功能码分组
+            var groups = addrList.GroupBy(a =>
+            {
+                var parsed = SchneiderAddress.TryParse(a);
+                return parsed?.FunctionCode ?? 0x03;
+            });
+
+            foreach (var group in groups)
+            {
+                var sorted = group.Select(a => new { Address = a, Parsed = SchneiderAddress.TryParse(a) })
+                                  .Where(a => a.Parsed != null)
+                                  .OrderBy(a => a.Parsed!.AddressValue)
+                                  .ToList();
+
+                if (sorted.Count == 0) continue;
+
+                ushort minAddr = (ushort)sorted[0].Parsed!.AddressValue;
+                ushort maxAddr = (ushort)sorted.Last().Parsed!.AddressValue;
+                ushort range = (ushort)(maxAddr - minAddr + 1);
+
+                byte fc = (byte)group.Key;
+                if (fc == 0x01 || fc == 0x02)
+                {
+                    // 位区域 — 批量读线圈
+                    byte[] pdu = BuildReadPdu(fc, minAddr, range);
+                    var r = SendAndReceive(BuildMbap(pdu));
+                    if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+                    if (r.Content == null || r.Content.Length < 10)
+                        return OperateResult<Dictionary<string, object?>>.Failed("响应长度不足");
+
+                    int byteCount = r.Content[8];
+                    foreach (var item in sorted)
+                    {
+                        int idx = item.Parsed!.AddressValue - minAddr;
+                        if (idx >= 0 && idx < byteCount * 8)
+                            result[item.Address] = (r.Content[9 + idx / 8] & (1 << (idx % 8))) != 0;
+                    }
+                }
+                else
+                {
+                    // 字区域 — 批量读寄存器
+                    byte[] pdu = BuildReadPdu(fc, minAddr, range);
+                    var r = SendAndReceive(BuildMbap(pdu));
+                    if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+                    if (r.Content == null || r.Content.Length < 10)
+                        return OperateResult<Dictionary<string, object?>>.Failed("响应长度不足");
+
+                    int byteCount = r.Content[8];
+                    foreach (var item in sorted)
+                    {
+                        int byteOffset = (item.Parsed!.AddressValue - minAddr) * 2;
+                        if (byteOffset >= 0 && byteOffset + 2 <= byteCount)
+                            result[item.Address] = (short)((r.Content[9 + byteOffset] << 8) | r.Content[10 + byteOffset]);
+                    }
+                }
+            }
+
+            return OperateResult<Dictionary<string, object?>>.Success(result);
+        }
+
+        /// <summary>批量读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchRead(addresses));
+
+        /// <summary>随机读取多个不连续地址（返回原始字节）。</summary>
+        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
+            var result = new Dictionary<string, byte[]>();
+            foreach (var addr in addrList)
+            {
+                var r = ReadBytes(addr, 1);
+                if (!r.IsSuccess)
+                    return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
+                result[addr] = r.Content;
+            }
+            return OperateResult<Dictionary<string, byte[]>>.Success(result);
+        }
+
+        /// <summary>随机读取（异步）。</summary>
+        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(RandomRead(addresses));
+
+        /// <summary>批量写入多个地址的值。</summary>
+        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
+        {
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
+            {
+                OperateResult r = kv.Value switch
+                {
+                    bool b => Write(kv.Key, b),
+                    short s => Write(kv.Key, s),
+                    ushort us => Write(kv.Key, us),
+                    int i => Write(kv.Key, i),
+                    uint ui => Write(kv.Key, ui),
+                    float f => Write(kv.Key, f),
+                    string s => Write(kv.Key, s),
+                    byte[] b => Write(kv.Key, b),
+                    _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")
+                };
+                if (!r.IsSuccess) return r;
+            }
+            return OperateResult.Success();
+        }
+
+        /// <summary>批量写入（异步）。</summary>
+        public Task<OperateResult> BatchWriteAsync(
+            IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchWrite(items));
     }
 }
