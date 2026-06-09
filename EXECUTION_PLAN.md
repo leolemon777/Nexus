@@ -107,10 +107,10 @@ Tasks:
 |----------|------|------------|
 | P0 | Audit Siemens PPI current user changes | Done: `docs/protocols/siemens/ppi-audit.md` |
 | P0 | Run Siemens focused tests | Done: `dotnet test tests\Nexus.Siemens.Tests --filter "FullyQualifiedName~SiemensPpi"` |
-| P0 | Add Siemens setup docs skeleton; deeper setup details pending | `docs/protocols/siemens` |
-| P1 | Document S7 String/WString and PLC settings | docs |
-| P1 | Define S7 reconnect/heartbeat guidance | docs/tests |
-| P2 | Add real-device validation target rows | `REAL_DEVICE_VALIDATION.md` |
+| P0 | Add Siemens setup docs skeleton; deeper setup details pending | Done: `docs/protocols/siemens` |
+| P1 | Document S7 String/WString and PLC settings | Done: in s7.md and HSL migration chapter |
+| P1 | Define S7 reconnect/heartbeat guidance | Done: `docs/protocols/siemens/reconnect-heartbeat.md` |
+| P2 | Add real-device validation target rows | Done: `REAL_DEVICE_VALIDATION.md` Siemens S7 target detail |
 
 ### Mitsubishi
 
@@ -121,8 +121,9 @@ Tasks:
 | P0 | Build MC Binary/ASCII/UDP/A1E/FX support matrix | Done: `docs/protocols/mitsubishi` |
 | P0 | Audit address/device-code coverage | Done: documented in Mitsubishi support matrix |
 | P0 | Define complete Mitsubishi scope | Done: `docs/protocols/mitsubishi/complete-scope.md` |
-| P1 | Add missing parity tests | `tests/Nexus.Mitsubishi.Tests` |
-| P1 | Document virtual-server scenarios | docs |
+| P1 | Add MC3E ASCII/UDP frame tests | Done: 257 tests in `tests/Nexus.Mitsubishi.Tests` |
+| P1 | Consolidate FX serial into single package | Done: `Nexus.MitsubishiFx` merged, FxLinkClient added |
+| P1 | Document virtual-server scenarios | Done: in HSL migration chapter |
 
 ### Omron
 
@@ -130,10 +131,11 @@ Tasks:
 
 | Priority | Task | Files/Area |
 |----------|------|------------|
-| P0 | Document FINS TCP/UDP network/node settings | `docs/protocols/omron` |
-| P0 | Audit HostLink TCP/Serial coverage | `src/Nexus.Omron` |
-| P1 | Add setup and routing examples | docs |
-| P1 | Add diagnostic examples for end codes | docs/tests |
+| P0 | Document FINS TCP/UDP network/node settings | Done: `docs/protocols/omron/fins-setup.md` |
+| P0 | Audit HostLink TCP/Serial coverage | Done: `docs/protocols/omron/hostlink-coverage.md` |
+| P1 | Add setup and routing examples | Done: in fins-setup.md |
+| P1 | Add diagnostic examples for end codes | Done: `docs/protocols/omron/troubleshooting.md` |
+| P2 | Add real-device validation target rows | Done: `REAL_DEVICE_VALIDATION.md` Omron FINS TCP target detail |
 
 ### AllenBradley
 
@@ -141,10 +143,11 @@ Tasks:
 
 | Priority | Task | Files/Area |
 |----------|------|------------|
-| P0 | Document CIP path, slot, and tag syntax | `docs/protocols/allenbradley` |
-| P0 | Audit fragmented tag and string tag workflows | `src/Nexus.AllenBradley` |
-| P1 | Define UDT/array scope honestly | docs/tests |
-| P1 | Document PCCC/MicroLogix coverage | docs |
+| P0 | Document CIP path, slot, and tag syntax | Done: `docs/protocols/allenbradley/cip-tag-syntax.md` |
+| P0 | Audit fragmented tag and string tag workflows | Done: documented in cip-tag-syntax.md |
+| P1 | Define UDT/array scope honestly | Done: `docs/protocols/allenbradley/udt-arrays.md` |
+| P1 | Document PCCC/MicroLogix coverage | Done: `docs/protocols/allenbradley/pccc-coverage.md` |
+| P2 | Add real-device validation target rows | Done: `REAL_DEVICE_VALIDATION.md` AB CIP target detail |
 
 Exit criteria for each protocol:
 
@@ -163,10 +166,10 @@ Tasks:
 
 | Priority | Task | Files/Area | Notes |
 |----------|------|------------|-------|
-| P0 | Define reconnect/heartbeat adoption pattern | `docs/core/reconnect-heartbeat.md` | Avoid changing all clients at once. |
-| P0 | Add example using `AutoReconnectGuard` | docs/tests | Start with Modbus TCP. |
-| P1 | Add connection-pool usage guidance | `docs/core/connection-pool.md` | Include lifetime and disposal. |
-| P1 | Add `AddressContext` examples | docs/tests | Show station/byte-order overrides. |
+| P0 | Define reconnect/heartbeat adoption pattern | Done: `docs/core/reconnect-heartbeat.md` | AutoReconnectGuard + HeartbeatGuard docs with S7-specific guidance. |
+| P0 | Add example using `AutoReconnectGuard` | Done: in reconnect-heartbeat.md | Modbus + S7 + combined examples. |
+| P1 | Add connection-pool usage guidance | Done: `docs/core/connection-pool.md` | Lifecycle, thread safety, multi-PLC example. |
+| P1 | Add `AddressContext` examples | Done: `docs/core/address-context.md` | Station override, byte order override. |
 | P1 | Add struct mapping examples | docs | Use Modbus as example. |
 | P2 | Audit direct `IReadWriteDevice` implementations | readiness table | Decide migration vs acceptable exception. |
 
