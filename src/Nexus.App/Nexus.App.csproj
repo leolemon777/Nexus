@@ -28,7 +28,6 @@
     <ProjectReference Include="..\Nexus.LsElectric\Nexus.LsElectric.csproj" />
     <ProjectReference Include="..\Nexus.Delta\Nexus.Delta.csproj" />
     <ProjectReference Include="..\Nexus.Fuji\Nexus.Fuji.csproj" />
-    <ProjectReference Include="..\Nexus.MitsubishiFx\Nexus.MitsubishiFx.csproj" />
     <ProjectReference Include="..\Nexus.Fatek\Nexus.Fatek.csproj" />
     <ProjectReference Include="..\Nexus.Fanuc\Nexus.Fanuc.csproj" />
     <ProjectReference Include="..\Nexus.GeSrtp\Nexus.GeSrtp.csproj" />

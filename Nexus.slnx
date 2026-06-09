@@ -16,7 +16,6 @@
     <Project Path="src/Nexus.Schneider/Nexus.Schneider.csproj" />
     <Project Path="src/Nexus.Robot.Ur/Nexus.Robot.Ur.csproj" />
     <Project Path="src/Nexus.Dnp3/Nexus.Dnp3.csproj" />
-    <Project Path="src/Nexus.MitsubishiFx/Nexus.MitsubishiFx.csproj" />
     <Project Path="src/Nexus.Fatek/Nexus.Fatek.csproj" />
     <Project Path="src/Nexus.Fanuc/Nexus.Fanuc.csproj" />
     <Project Path="src/Nexus.GeSrtp/Nexus.GeSrtp.csproj" />
@@ -62,7 +61,6 @@
     <Project Path="tests/Nexus.Schneider.Tests/Nexus.Schneider.Tests.csproj" />
     <Project Path="tests/Nexus.Robot.Ur.Tests/Nexus.Robot.Ur.Tests.csproj" />
     <Project Path="tests/Nexus.Dnp3.Tests/Nexus.Dnp3.Tests.csproj" />
-    <Project Path="tests/Nexus.MitsubishiFx.Tests/Nexus.MitsubishiFx.Tests.csproj" />
     <Project Path="tests/Nexus.Mqtt.Tests/Nexus.Mqtt.Tests.csproj" />
     <Project Path="tests/Nexus.Bacnet.Tests/Nexus.Bacnet.Tests.csproj" />
     <Project Path="tests/Nexus.Iec104.Tests/Nexus.Iec104.Tests.csproj" />

@@ -1,16 +1,19 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Nexus.MitsubishiFx
+namespace Nexus.Mitsubishi
 {
     /// <summary>
-    /// 三菱 FX 系列串口通讯客户端 — 支持 FX1N/FX2N/FX3U/FX5U。
-    /// <para>帧格式: STX(0x02) + Cmd(1) + Data + ETX(0x03) + SumCheck(2hex)</para>
+    /// 三菱 FX 计算机链接协议客户端 — 支持 FX1N/FX2N/FX3U/FX5U 通过 RS-485 多站通信。
+    /// <para>帧格式: ENQ(0x05) + Station(2hex) + CmdAndData + SumCheck(2hex)</para>
     /// <para>命令: 0 = 读, 1 = 写, 7 = 强制 ON, 8 = 强制 OFF</para>
-    /// <para>对标 HSL: MitsubishiFxSerial — Read/Write D/M/T/C/Y/X 寄存器</para>
+    /// <para>对标 HSL: MitsubishiFxSerial — 计算机链接模式 (带站号)</para>
+    /// <para>注意: 本客户端接受 Stream 而非 ISerialPort，以支持 FX-over-TCP/DTU 场景。</para>
     /// </summary>
-    public class MitsubishiFxSerialClient : IReadWriteDevice
+    public class FxLinkClient : IReadWriteDevice
     {
         private readonly Stream _stream;
         private readonly object _lock = new object();
@@ -28,7 +31,7 @@ namespace Nexus.MitsubishiFx
 
         public bool IsConnected => _stream?.CanRead == true && _stream?.CanWrite == true;
 
-        public MitsubishiFxSerialClient(Stream stream, byte station = 0, int timeout = 5000)
+        public FxLinkClient(Stream stream, byte station = 0, int timeout = 5000)
         {
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             Station = station;
@@ -39,7 +42,7 @@ namespace Nexus.MitsubishiFx
         public void SetLogger(ILogger logger) => Log = logger ?? NullLogger.Instance;
 
         // ═══════════════════════════════════════════
-        //  FX 协议帧收发
+        //  FX 计算机链接协议帧收发
         // ═══════════════════════════════════════════
 
         private OperateResult<string> SendReceive(string cmdAndData)
@@ -54,7 +57,7 @@ namespace Nexus.MitsubishiFx
                     string frame = "\x05" + body + sum.ToString("X2");
 
                     Log.Debug($"FX TX → {frame.Replace("\x05", "[ENQ]")}");
-                    OnMessageSent?.Invoke(this, "FX Serial");
+                    OnMessageSent?.Invoke(this, "FX Link");
 
                     _stream.Write(Encoding.ASCII.GetBytes(frame), 0, frame.Length);
 
@@ -64,7 +67,6 @@ namespace Nexus.MitsubishiFx
 
                     if (b == 0x06) // ACK
                     {
-                        // Write success — no data
                         OnMessageReceived?.Invoke(this, "FX ACK");
                         return OperateResult<string>.Success("");
                     }
@@ -79,9 +81,8 @@ namespace Nexus.MitsubishiFx
                         return OperateResult<string>.Failed($"FX NAK 错误: {errCode}");
                     }
 
-                    if (b == 0x02) // STX — Read response with data
+                    if (b == 0x02) // STX — 读响应带数据
                     {
-                        // Read data until ETX(0x03)
                         using var ms = new MemoryStream();
                         while (true)
                         {
@@ -89,15 +90,9 @@ namespace Nexus.MitsubishiFx
                             if (c < 0) return OperateResult<string>.Failed("读取数据超时");
                             if (c == 0x03) // ETX
                             {
-                                // Read sum check (2 hex chars)
                                 byte[] sumBuf = new byte[2];
                                 if (!ReadExact2(sumBuf, Environment.TickCount + Timeout))
                                     return OperateResult<string>.Failed("Sum check 读取超时");
-                                // Verify sum check
-                                byte[] dataBytes = ms.ToArray();
-                                string dataStr = Encoding.ASCII.GetString(dataBytes);
-                                byte expSum = ComputeSum(dataBytes);
-                                // We skip strict sum check validation for simplicity
                                 break;
                             }
                             ms.WriteByte((byte)c);
@@ -112,7 +107,7 @@ namespace Nexus.MitsubishiFx
             }
             catch (Exception ex)
             {
-                Log.Error($"FX 通讯异常 — {ex.Message}");
+                Log.Error($"FX 计算机链接通讯异常 — {ex.Message}");
                 OnError?.Invoke(this, ex.Message);
                 return OperateResult<string>.Failed($"通讯异常: {ex.Message}");
             }
@@ -150,7 +145,7 @@ namespace Nexus.MitsubishiFx
         }
 
         // ═══════════════════════════════════════════
-        //  FX 地址编码
+        //  FX 地址编码 (计算机链接模式)
         // ═══════════════════════════════════════════
 
         /// <summary>
@@ -191,22 +186,14 @@ namespace Nexus.MitsubishiFx
         //  读写命令构建
         // ═══════════════════════════════════════════
 
-        // FX 命令:
-        // BR/BWR: 批量读位/字
-        // BW/WW: 批量写位/字
-        // 读命令: "0" + device + address(4hex) + count(2hex)
-        // 写命令: "1" + device + address(4hex) + count(2hex) + data
-
         private OperateResult<string> ReadWords(char device, string addrHex, int count)
         {
-            // Cmd: 0 (read) + device + addr(4hex) + count(2hex)
             string cmd = "0" + device + addrHex + count.ToString("X2");
             return SendReceive(cmd);
         }
 
         private OperateResult<string> ReadBits(char device, string addrHex, int count)
         {
-            // Cmd: 0 (read) + device + addr(4hex) + count(2hex)
             string cmd = "0" + device + addrHex + count.ToString("X2");
             return SendReceive(cmd);
         }
@@ -246,51 +233,141 @@ namespace Nexus.MitsubishiFx
             var (device, addrHex, _) = ParseAddress(address);
             var r = ReadWords(device, addrHex, 1);
             if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message, r.ErrorCode);
-            // FX 返回 4 hex chars (big-endian)
-            return OperateResult<short>.Success((short)Convert.ToUInt16(r.Content.Trim(), 16));
+            return OperateResult<short>.Success(unchecked((short)Convert.ToUInt16(r.Content.Trim(), 16)));
         }
 
-        public OperateResult<ushort> ReadUInt16(string address) { var r = ReadInt16(address); return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message); }
+        public OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadInt16(address);
+            return r.IsSuccess ? OperateResult<ushort>.Success(unchecked((ushort)r.Content)) : OperateResult<ushort>.Failed(r.Message);
+        }
 
         public OperateResult<int> ReadInt32(string address)
         {
             var (device, addrHex, _) = ParseAddress(address);
             var r = ReadWords(device, addrHex, 2);
             if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<int>.Success((int)Convert.ToUInt32(r.Content.Trim(), 16));
+            return OperateResult<int>.Success(unchecked((int)Convert.ToUInt32(r.Content.Trim(), 16)));
         }
 
-        public OperateResult<uint> ReadUInt32(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message); }
-        public OperateResult<long> ReadInt64(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<long>.Success((long)r.Content) : OperateResult<long>.Failed(r.Message); }
-        public OperateResult<ulong> ReadUInt64(string address) { var r = ReadInt64(address); return r.IsSuccess ? OperateResult<ulong>.Success((ulong)r.Content) : OperateResult<ulong>.Failed(r.Message); }
-        public unsafe OperateResult<float> ReadFloat(string address) { var r = ReadInt32(address); if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message); int v = r.Content; return OperateResult<float>.Success(*(float*)&v); }
-        public OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("FX 不支持 Double");
-        public OperateResult<string> ReadString(string address, ushort length) { var r = ReadBytes(address, length); if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message); return OperateResult<string>.Success(Encoding.ASCII.GetString(r.Content).TrimEnd('\0')); }
-        public OperateResult<byte[]> ReadBytes(string address, ushort length) { var (d, a, _) = ParseAddress(address); int cnt = (length + 1) / 2; var r = ReadWords(d, a, cnt); if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message); byte[] raw = HexToBytes(r.Content); byte[] result = new byte[length]; Array.Copy(raw, result, Math.Min(length, raw.Length)); return OperateResult<byte[]>.Success(result); }
+        public OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<uint>.Success(unchecked((uint)r.Content)) : OperateResult<uint>.Failed(r.Message);
+        }
 
-        // 写入
-        public OperateResult Write(string address, bool value) { var (d, a, _) = ParseAddress(address); return WriteBits(d, a, value ? "1" : "0"); }
-        public OperateResult Write(string address, short value) { var (d, a, _) = ParseAddress(address); return WriteWords(d, a, ((ushort)value).ToString("X4")); }
-        public OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public OperateResult Write(string address, int value) { var (d, a, _) = ParseAddress(address); return WriteWords(d, a, ((uint)value).ToString("X8")); }
-        public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult<long> ReadInt64(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<long>.Success((long)r.Content) : OperateResult<long>.Failed(r.Message);
+        }
+
+        public OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadInt64(address);
+            return r.IsSuccess ? OperateResult<ulong>.Success(unchecked((ulong)r.Content)) : OperateResult<ulong>.Failed(r.Message);
+        }
+
+        public unsafe OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadInt32(address);
+            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message);
+            int v = r.Content;
+            return OperateResult<float>.Success(*(float*)&v);
+        }
+
+        public OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("FX 不支持 Double");
+
+        public OperateResult<string> ReadString(string address, ushort length)
+        {
+            var r = ReadBytes(address, length);
+            if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
+            return OperateResult<string>.Success(Encoding.ASCII.GetString(r.Content).TrimEnd('\0'));
+        }
+
+        public OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            var (d, a, _) = ParseAddress(address);
+            int cnt = (length + 1) / 2;
+            var r = ReadWords(d, a, cnt);
+            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
+            byte[] raw = HexToBytes(r.Content);
+            byte[] result = new byte[length];
+            Array.Copy(raw, result, Math.Min(length, raw.Length));
+            return OperateResult<byte[]>.Success(result);
+        }
+
+        // ── 写入 ──────────────────────────────────
+
+        public OperateResult Write(string address, bool value)
+        {
+            var (d, a, _) = ParseAddress(address);
+            return WriteBits(d, a, value ? "1" : "0");
+        }
+
+        public OperateResult Write(string address, short value)
+        {
+            var (d, a, _) = ParseAddress(address);
+            return WriteWords(d, a, unchecked((ushort)value).ToString("X4"));
+        }
+
+        public OperateResult Write(string address, ushort value) => Write(address, unchecked((short)value));
+
+        public OperateResult Write(string address, int value)
+        {
+            var (d, a, _) = ParseAddress(address);
+            return WriteWords(d, a, unchecked((uint)value).ToString("X8"));
+        }
+
+        public OperateResult Write(string address, uint value) => Write(address, unchecked((int)value));
+        public OperateResult Write(string address, long value) => Write(address, unchecked((int)value));
+        public OperateResult Write(string address, ulong value) => Write(address, unchecked((int)value));
         public unsafe OperateResult Write(string address, float value) => Write(address, *(int*)&value);
         public OperateResult Write(string address, double value) => Write(address, (float)value);
-        public OperateResult Write(string address, string value) { var (d, a, _) = ParseAddress(address); byte[] bytes = Encoding.ASCII.GetBytes(value ?? ""); if (bytes.Length % 2 != 0) Array.Resize(ref bytes, bytes.Length + 1); return WriteWords(d, a, BytesToHex(bytes)); }
-        public OperateResult Write(string address, byte[] data) { var (d, a, _) = ParseAddress(address); if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1); return WriteWords(d, a, BytesToHex(data)); }
 
-        private static byte[] HexToBytes(string hex) { byte[] r = new byte[hex.Length / 2]; for (int i = 0; i < r.Length; i++) r[i] = (byte)(HexV(hex[i * 2]) << 4 | HexV(hex[i * 2 + 1])); return r; }
-        private static string BytesToHex(byte[] d) { var sb = new StringBuilder(d.Length * 2); foreach (byte b in d) sb.Append(b.ToString("X2")); return sb.ToString(); }
-        private static int HexV(char c) => c >= '0' && c <= '9' ? c - '0' : c >= 'A' && c <= 'F' ? c - 'A' + 10 : c >= 'a' && c <= 'f' ? c - 'a' + 10 : 0;
+        public OperateResult Write(string address, string value)
+        {
+            var (d, a, _) = ParseAddress(address);
+            byte[] bytes = Encoding.ASCII.GetBytes(value ?? "");
+            if (bytes.Length % 2 != 0) Array.Resize(ref bytes, bytes.Length + 1);
+            return WriteWords(d, a, BytesToHex(bytes));
+        }
 
-        // 连接
-        public OperateResult Connect() { if (_stream.CanRead && _stream.CanWrite) { OnConnected?.Invoke(this, EventArgs.Empty); return OperateResult.Success(); } return OperateResult.Failed("Stream 不可读写"); }
+        public OperateResult Write(string address, byte[] data)
+        {
+            var (d, a, _) = ParseAddress(address);
+            if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            return WriteWords(d, a, BytesToHex(data));
+        }
+
+        // ═══════════════════════════════════════════
+        //  连接生命周期
+        // ═══════════════════════════════════════════
+
+        public OperateResult Connect()
+        {
+            if (_stream.CanRead && _stream.CanWrite)
+            {
+                OnConnected?.Invoke(this, EventArgs.Empty);
+                return OperateResult.Success();
+            }
+            return OperateResult.Failed("Stream 不可读写");
+        }
+
         public Task<OperateResult> ConnectAsync() => Task.FromResult(Connect());
-        public void Disconnect() { try { _stream.Close(); } catch { } OnDisconnected?.Invoke(this, EventArgs.Empty); }
+
+        public void Disconnect()
+        {
+            try { _stream.Close(); } catch { }
+            OnDisconnected?.Invoke(this, EventArgs.Empty);
+        }
+
         public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
         protected virtual void Dispose(bool disposing) { if (disposing) try { _stream?.Close(); } catch { } }
+
+        // ═══════════════════════════════════════════
+        //  异步覆写
+        // ═══════════════════════════════════════════
 
         public Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
         public Task<OperateResult<short>> ReadInt16Async(string address) => Task.Run(() => ReadInt16(address));
@@ -309,5 +386,29 @@ namespace Nexus.MitsubishiFx
         public Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+
+        // ═══════════════════════════════════════════
+        //  工具方法
+        // ═══════════════════════════════════════════
+
+        private static byte[] HexToBytes(string hex)
+        {
+            byte[] r = new byte[hex.Length / 2];
+            for (int i = 0; i < r.Length; i++)
+                r[i] = (byte)(HexVal(hex[i * 2]) << 4 | HexVal(hex[i * 2 + 1]));
+            return r;
+        }
+
+        private static string BytesToHex(byte[] d)
+        {
+            var sb = new StringBuilder(d.Length * 2);
+            foreach (byte b in d) sb.Append(b.ToString("X2"));
+            return sb.ToString();
+        }
+
+        private static int HexVal(char c) =>
+            c >= '0' && c <= '9' ? c - '0' :
+            c >= 'A' && c <= 'F' ? c - 'A' + 10 :
+            c >= 'a' && c <= 'f' ? c - 'a' + 10 : 0;
     }
 }
