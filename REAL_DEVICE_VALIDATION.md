@@ -196,7 +196,131 @@ Add real records below. Keep newest first.
 - [ ] Verify ENQ/ACK/NAK handshake in raw packet log
 - [ ] Test timeout behavior (disconnect serial mid-read)
 
-## Standard Test Script
+### Siemens S7 — Target Detail
+
+**Target devices** (pick first available):
+
+| Priority | Device | Why |
+|----------|--------|-----|
+| 1 | Siemens S7-1200 (CPU 1212C/1214C/1215C) | Most common entry-level S7 PLC |
+| 2 | Siemens S7-1500 (CPU 1511/1515) | Higher-end, same protocol |
+| 3 | Siemens S7-300 (CPU 313C/315) | Legacy but still widely deployed |
+
+**Settings:**
+- Port: 102 (always)
+- Model: `SiemensPLCS.S7_1200` or `SiemensPLCS.S7_1500`
+- Rack: 0, Slot: 1 (S7-1200/1500)
+
+**TIA Portal prerequisites:**
+- [ ] Enable "Permit access with PUT/GET communication" in PLC Properties → Protection
+- [ ] Disable "Optimized block access" for target DBs
+- [ ] Verify enough connection resources are available
+
+**Safe scratch address plan:**
+
+| Address | Type | Purpose |
+|---------|------|---------|
+| `DB1.DBW0` | Word (Int16) | Numeric read/write |
+| `DB1.DBD2` | DWord (Int32) | 32-bit read/write |
+| `DB1.DBD6` | Real (Float) | Float read/write |
+| `DB1.DBX10.0` | Bit | Boolean read/write |
+| `DB1.DBB20` | String | S7 String read/write |
+| `MW0` | Word | Memory area |
+| `I0.0` | Bit | Input (read-only) |
+| `Q0.0` | Bit | Output (confirm safe) |
+
+**Required operations for L2:**
+
+- [ ] Connect/disconnect 10 times
+- [ ] Read `ReadInt16("DB1.DBW0")` and verify expected value
+- [ ] Write then read-back `Write("DB1.DBW0", (short)1234)`
+- [ ] Read/write Int32: `ReadInt32("DB1.DBD2")` / `Write("DB1.DBD2", 0x12345678)`
+- [ ] Read/write Float: `ReadFloat("DB1.DBD6")` / `Write("DB1.DBD6", 3.14f)`
+- [ ] Read/write Bool: `ReadBool("DB1.DBX10.0")` / `Write("DB1.DBX10.0", true)`
+- [ ] Read/write S7 String: `WriteS7String("DB1.DBB20", "HELLO")` → `ReadS7String("DB1.DBB20")` matches
+- [ ] Batch read: `BatchRead(new[] { "DB1.DBW0", "DB1.DBD2" })` vs individual reads match
+- [ ] Trigger bad address and confirm clear S7 error code
+- [ ] Disconnect Ethernet mid-session, confirm reconnect with guard
+- [ ] Record TX/RX packet log
+
+### Omron FINS TCP — Target Detail
+
+**Target devices:**
+
+| Priority | Device | Why |
+|----------|--------|-----|
+| 1 | Omron CJ2M (built-in Ethernet) | Common mid-range PLC |
+| 2 | Omron NX102 (built-in Ethernet) | Modern NJ/NX series |
+| 3 | Omron CP1H + Ethernet option board | Compact PLC |
+
+**Settings:**
+- Port: 9600 (FINS default)
+- FINS/TCP enabled in PLC settings
+- Auto node allocation or manual IP Address Table
+
+**Safe scratch address plan:**
+
+| Address | Area | Purpose |
+|---------|------|---------|
+| `D0`–`D19` | DM | Word read/write (Int16/Int32/Float) |
+| `CIO100.00`–`CIO100.15` | CIO | Bit read/write |
+| `W0`–`W9` | Work Relay | Bit read/write |
+| `H0`–`H9` | Holding Relay | Retained bit |
+
+**Required operations for L2:**
+
+- [ ] Connect/disconnect 10 times
+- [ ] Read `ReadInt16("D0")` and verify
+- [ ] Write then read-back Int16/Int32/Float
+- [ ] Read/write bit: `ReadBool("CIO100.03")` / `Write("CIO100.03", true)`
+- [ ] Read holding relay: `ReadBool("H0.00")`
+- [ ] Trigger bad address, confirm FINS error code (e.g., 0x0302)
+- [ ] Disconnect Ethernet, confirm reconnect
+- [ ] Record TX/RX packet log
+
+### AllenBradley CIP — Target Detail
+
+**Target devices:**
+
+| Priority | Device | Why |
+|----------|--------|-----|
+| 1 | CompactLogix 5380 (5069-L306ER) | Common mid-range controller |
+| 2 | ControlLogix 5580 (1756-L83E) | Higher-end |
+| 3 | Micro850 (2080-LC50-24QWB) | Entry-level with CIP |
+
+**Settings:**
+- Port: 44818 (EtherNet/IP default)
+- Slot: 0 (CompactLogix/Micro800 always)
+
+**Studio 5000 prerequisites:**
+- [ ] Create test tags (DINT, REAL, BOOL, STRING) in controller scope
+- [ ] Verify Ethernet module firmware supports CIP
+
+**Safe scratch address plan:**
+
+| Address | Type | Purpose |
+|---------|------|---------|
+| `Test_DINT` | DINT | 32-bit read/write |
+| `Test_REAL` | REAL | Float read/write |
+| `Test_BOOL` | BOOL | Boolean read/write |
+| `Test_STRING` | STRING | String read/write |
+| `Test_Array[0]`–`[9]` | DINT[] | Array access |
+| `Test_UDT.Speed` | DINT (UDT member) | UDT member access |
+
+**Required operations for L2:**
+
+- [ ] Connect/disconnect 10 times
+- [ ] Read `ReadInt32("Test_DINT")` and verify
+- [ ] Write then read-back: `Write("Test_DINT", 42)` → matches
+- [ ] Read/write REAL: `ReadFloat("Test_REAL")` / `Write("Test_REAL", 3.14f)`
+- [ ] Read/write BOOL: `ReadBool("Test_BOOL")` / `Write("Test_BOOL", true)`
+- [ ] Read/write STRING: `ReadString("Test_STRING")` / `Write("Test_STRING", "Hello")`
+- [ ] Array element: `ReadInt32("Test_Array[5]")`
+- [ ] UDT member: `ReadInt32("Test_UDT.Speed")`
+- [ ] Batch read: `BatchRead(new[] { "Test_DINT", "Test_REAL" })`
+- [ ] Trigger bad tag name and confirm CIP error code 0x04
+- [ ] Disconnect Ethernet, confirm reconnect
+- [ ] Record TX/RX packet log
 
 For each device, run the narrowest safe subset first:
 

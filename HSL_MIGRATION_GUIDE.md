@@ -254,7 +254,174 @@ var value = s7.ReadInt16("DB1.DBW0");
 var text = s7.ReadS7String("DB1.DBB100");
 ```
 
-## Example: Mitsubishi MC3E Binary (Q/L/FX5U/iQ-R)
+## Siemens Migration Details
+
+This section maps HSL Siemens usage patterns to Nexus equivalents. Nexus supports S7, FetchWrite, and PPI protocols.
+
+### Client Selection
+
+| Existing Siemens Need | Nexus Client | Transport | Default Port | Notes |
+|-----------------------|--------------|-----------|--------------|-------|
+| S7-1200 / S7-1500 | `SiemensS7Client(S7_1200/S7_1500)` | TCP | 102 | Most common. Full S7 protocol. |
+| S7-300 / S7-400 | `SiemensS7Client(S7_300/S7_400)` | TCP | 102 | Rack/Slot required. |
+| S7-200 / S7-200 Smart | `SiemensS7Client(S7_200/S7_200Smart)` | TCP | 102 | Limited feature set. |
+| FetchWrite (legacy) | `SiemensFetchWriteClient` | TCP | 102 | Older S7-300/400 without S7 routing. |
+| PPI (S7-200 serial) | `SiemensPpiClient` | Serial | — | S7-200 point-to-point. |
+
+```csharp
+using Nexus.Siemens;
+
+// S7-1200 / S7-1500
+using var s71200 = new SiemensS7Client(SiemensPLCS.S7_1200, "192.168.0.10");
+using var s71500 = new SiemensS7Client(SiemensPLCS.S7_1500, "192.168.0.11");
+
+// S7-300 (Rack=0, Slot=2 is default for S7-300)
+using var s7300 = new SiemensS7Client(SiemensPLCS.S7_300, "192.168.0.20")
+{
+    Rack = 0,
+    Slot = 2
+};
+
+// FetchWrite (legacy)
+using var fw = new SiemensFetchWriteClient("192.168.0.30");
+```
+
+### Rack and Slot Configuration
+
+S7 protocol uses Rack and Slot to address the PLC CPU within the backplane:
+
+| PLC Series | Default Rack | Default Slot | Notes |
+|------------|-------------|--------------|-------|
+| S7-1200 | 0 | 1 | Fixed. |
+| S7-1500 | 0 | 1 | Fixed. |
+| S7-300 | 0 | 2 | Slot 2 is the CPU in standard rack. |
+| S7-400 | 0 | 2 | May vary with H-system. |
+| S7-200 Smart | — | — | Uses fixed TSAP, not Rack/Slot. |
+
+```csharp
+// Override Rack/Slot if needed
+var client = new SiemensS7Client(SiemensPLCS.S7_300, "192.168.0.20")
+{
+    Rack = 0,
+    Slot = 3  // Non-standard CPU position
+};
+```
+
+### Address Format
+
+Nexus S7 addresses follow standard S7 notation:
+
+| Address | Area | Type | Description |
+|---------|------|------|-------------|
+| `DB1.DBW0` | DB | Word | Data Block 1, Word 0 |
+| `DB1.DBD4` | DB | DWord | Data Block 1, DWord at byte 4 |
+| `DB1.DBB8` | DB | Byte | Data Block 1, Byte 8 |
+| `DB1.DBX12.0` | DB | Bit | Data Block 1, Byte 12, Bit 0 |
+| `I0.0` | I (Input) | Bit | Input byte 0, bit 0 |
+| `Q0.0` | Q (Output) | Bit | Output byte 0, bit 0 |
+| `MW0` | M (Memory) | Word | Memory word 0 |
+| `MD4` | M (Memory) | DWord | Memory double word 4 |
+| `M8.0` | M (Memory) | Bit | Memory byte 8, bit 0 |
+
+```csharp
+using Nexus.Siemens;
+
+using var client = new SiemensS7Client(SiemensPLCS.S7_1200, "192.168.0.10");
+client.Connect();
+
+// DB reads
+short dbw0 = client.ReadInt16("DB1.DBW0").Content;
+int dbd4 = client.ReadInt32("DB1.DBD4").Content;
+float dbd8 = client.ReadFloat("DB1.DBD8").Content;
+bool bit = client.ReadBool("DB1.DBX12.0").Content;
+
+// Memory area reads
+short mw0 = client.ReadInt16("MW0").Content;
+bool m8 = client.ReadBool("M8.0").Content;
+
+// I/O
+bool input = client.ReadBool("I0.0").Content;
+bool output = client.ReadBool("Q0.0").Content;
+
+// Writes
+client.Write("DB1.DBW0", (short)100);
+client.Write("DB1.DBD4", 123456);
+client.Write("DB1.DBD8", 3.14f);
+client.Write("DB1.DBX12.0", true);
+```
+
+### S7 String Support
+
+Nexus provides dedicated S7 string read/write methods that handle the S7 string header (max-length byte + actual-length byte):
+
+```csharp
+// Read S7 String (default max length 254)
+var text = client.ReadS7String("DB1.DBB100");
+
+// Write S7 String
+client.WriteS7String("DB1.DBB100", "Hello World");
+
+// Read S7 WString (wide/Unicode string)
+var wideText = client.ReadS7WString("DB1.DBB200");
+
+// Write S7 WString
+client.WriteS7WString("DB1.DBB200", "你好世界");
+```
+
+**Important**: S7 String and WString have different header formats:
+- **S7 String**: 1 byte max-length + 1 byte actual-length + ASCII data
+- **S7 WString**: 2 bytes max-length + 2 bytes actual-length + UTF-16 data
+
+### HSL-to-Nexus Migration Pattern
+
+| HSL Pattern | Nexus Equivalent | Notes |
+|-------------|------------------|-------|
+| `SiemensS7Net(S71200, ip)` | `SiemensS7Client(S7_1200, ip)` | Different class name and enum naming. |
+| `SiemensS7Net(S71500, ip)` | `SiemensS7Client(S7_1500, ip)` | Same. |
+| `.ConnectServer()` | `.Connect()` | Different method name. |
+| `.ConnectClose()` | `.Disconnect()` then `.Dispose()` | Nexus uses standard lifecycle. |
+| `ReadInt16("DB1.DBW0")` | `ReadInt16("DB1.DBW0")` | Same address syntax. |
+| `Write("DB1.DBW0", 100)` | `Write("DB1.DBW0", (short)100)` | Nexus requires explicit cast. |
+| `ReadString("DB1.DBB100")` | `ReadS7String("DB1.DBB100")` | Different method name for S7 strings. |
+| `Write("DB1.DBB100", "Hello")` | `WriteS7String("DB1.DBB100", "Hello")` | Use dedicated S7 string methods. |
+
+### TIA Portal Configuration Checklist
+
+Before connecting Nexus to a Siemens PLC, verify these TIA Portal settings:
+
+1. **Enable PUT/GET**: Properties → Protection → "Permit access with PUT/GET communication" must be checked.
+2. **Disable optimized block access** (for standard DB reads): In DB properties, uncheck "Optimized block access". Only non-optimized DBs are accessible via S7 protocol.
+3. **Connection resources**: Ensure enough connection resources are available (S7-1200: typically 3-8).
+4. **IP address**: Verify the PLC's IP is in the same subnet.
+5. **Port**: Default is 102; almost never changed.
+
+### Virtual Server Testing
+
+`SiemensS7VirtualPlc` provides offline integration testing:
+
+```csharp
+using var server = new SiemensS7VirtualPlc(11102);
+server.Start();
+
+using var client = new SiemensS7Client(SiemensPLCS.S7_1200, "127.0.0.1", 11112);
+client.Connect();
+
+client.Write("DB1.DBW0", (short)42);
+var result = client.ReadInt16("DB1.DBW0");
+```
+
+### Field Validation Checklist for Siemens
+
+Before declaring an HSL-to-Nexus Siemens migration complete:
+
+- [ ] PLC model enum matches (S7_1200, S7_1500, S7_300, etc.)
+- [ ] Rack and Slot are correct for the PLC type
+- [ ] DB address uses non-optimized block access
+- [ ] PUT/GET is enabled in TIA Portal protection settings
+- [ ] S7 String/WString methods are used for text data (not generic ReadString)
+- [ ] Persistent connection mode is used (`SetPersistentConnection()`)
+- [ ] Reconnect guard is configured with longer delays than Modbus (S7 handshake is heavier)
+- [ ] Timeout accounts for PLC scan cycle impact on response time
 
 ```csharp
 using Nexus.Mitsubishi;

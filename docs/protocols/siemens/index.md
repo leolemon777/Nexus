@@ -54,7 +54,9 @@ Not confirmed yet:
 
 - [S7 Communication](s7.md)
 - [PPI](ppi.md)
+- [PPI Audit](ppi-audit.md)
 - [Fetch/Write](fetch-write.md)
+- [Reconnect and Heartbeat](reconnect-heartbeat.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Real Device Validation Gate
