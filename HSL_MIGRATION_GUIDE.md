@@ -617,7 +617,123 @@ Before declaring an HSL-to-Nexus Mitsubishi migration complete:
 - [ ] FX serial baud rate, parity, and stop bits match the PLC programming port settings.
 - [ ] FX Link station number matches the RS-485 multidrop address.
 
-## Protocol Mapping
+## Omron Migration Details
+
+### Client Selection
+
+| Existing Omron Need | Nexus Client | Transport | Default Port |
+|---------------------|--------------|-----------|--------------|
+| FINS TCP (CJ/NJ/NX) | `FinsTcpClient` | TCP | 9600 |
+| FINS UDP | `FinsUdpClient` | UDP | 9600 |
+| FINS Serial (RS-232) | `FinsSerialClient` | Serial (`Stream`) | — |
+| HostLink TCP | `OmronHostLinkClient` | TCP | 9600 |
+| HostLink Serial | `OmronHostLinkSerialClient` | Serial (`ISerialPort`) | — |
+
+```csharp
+using Nexus.Omron;
+
+// FINS TCP
+using var fins = new FinsTcpClient("192.168.1.10", 9600);
+fins.Connect();
+
+// FINS UDP
+using var udp = new FinsUdpClient("192.168.1.10", 9600);
+
+// HostLink TCP
+using var hl = new OmronHostLinkClient("192.168.1.10", 9600);
+```
+
+### Address Format
+
+| Address | Area | Description |
+|---------|------|-------------|
+| `D100` / `DM100` | DM | Data Memory (word), most commonly used |
+| `CIO100` | CIO | Core I/O (bit or word) |
+| `W100` / `WR100` | WR | Work Relay |
+| `H100` / `HR100` | HR | Holding Relay (retained) |
+| `A100` / `AR100` | AR | Auxiliary Relay (system flags) |
+| `E0_100` | EM | Extended DM bank 0 |
+| `D100.03` | DM bit | Word 100, bit 3 |
+| `T100` | Timer PV | Timer current value |
+| `C100` | Counter PV | Counter current value |
+
+### HSL-to-Nexus Mapping
+
+| HSL Pattern | Nexus Equivalent | Notes |
+|-------------|------------------|-------|
+| `OmronFinsNet(ip, port)` | `FinsTcpClient(ip, port)` | Different class name. |
+| `OmronFinsUdp(ip, port)` | `FinsUdpClient(ip, port)` | Same concept. |
+| `OmronHostLink(ip, port)` | `OmronHostLinkClient(ip, port)` | Same. |
+| `.ConnectServer()` | `.Connect()` | Different method name. |
+| `ReadInt16("D100")` | `ReadInt16("D100")` | Same address syntax. |
+| `ReadBool("CIO100.03")` | `ReadBool("CIO100.03")` | Same. |
+
+### PLC Configuration
+
+Before connecting, ensure:
+1. FINS/TCP is enabled in PLC Ethernet settings.
+2. IP Address Table allows the PC's IP (or use auto-allocation).
+3. Port 9600 is not blocked by firewall.
+
+## AllenBradley Migration Details
+
+### Client Selection
+
+| Existing AB Need | Nexus Client | Transport | Default Port |
+|------------------|--------------|-----------|--------------|
+| ControlLogix / CompactLogix | `AllenBradleyCipClient` | TCP | 44818 |
+| MicroLogix 1100/1400 | `PcccClient` | TCP | 44818 |
+| PLC-5 / SLC 500 | `PcccClient` | TCP | 44818 |
+| Micro850 / Micro870 | `AllenBradleyCipClient` | TCP | 44818 |
+
+```csharp
+using Nexus.AllenBradley;
+
+// CIP (ControlLogix/CompactLogix)
+using var cip = new AllenBradleyCipClient("192.168.1.10", 44818, slot: 0);
+cip.Connect();
+
+// PCCC (MicroLogix)
+using var pccc = new PcccClient("192.168.1.20", 44818);
+pccc.Connect();
+```
+
+### Address Format
+
+**CIP (Logix family)** — tag-based:
+
+| Example | Description |
+|---------|-------------|
+| `MyTag` | Controller-scoped DINT/REAL/BOOL tag |
+| `Motor.Speed` | UDT member |
+| `MyArray[0]` | Array element |
+| `Program:Main.Tag` | Program-scoped tag |
+
+**PCCC (MicroLogix/PLC-5)** — file-based:
+
+| Example | File Type | Description |
+|---------|-----------|-------------|
+| `N7:0` | Integer | Integer file 7, element 0 |
+| `F8:0` | Float | Float file 8, element 0 |
+| `B3:0` | Binary | Bit file 3 |
+| `T4:0` | Timer | Timer file 4 |
+
+### HSL-to-Nexus Mapping
+
+| HSL Pattern | Nexus Equivalent | Notes |
+|-------------|------------------|-------|
+| `AllenBradleyNet(ip)` | `AllenBradleyCipClient(ip, 44818, slot)` | Must specify slot. |
+| `MelsecMcNet(ip)` → AB | `AllenBradleyCipClient` | Completely different protocol family. |
+| `ReadDInt("Tag")` | `ReadInt32("Tag")` | Nexus uses `ReadInt32`; DINT = Int32. |
+| `ReadReal("Tag")` | `ReadFloat("Tag")` | REAL = float. |
+| `ReadInt16("N7:0")` | PCCC: `ReadInt16("N7:0")` | Same for PCCC addresses. |
+
+### Important Notes
+
+1. **DINT is native** — Use `ReadInt32`/`Write(tag, int)` as default for Logix controllers.
+2. **Slot must be correct** — ControlLogix Rack/Slot varies by backplane layout.
+3. **PUT/GET** must be enabled for PCCC clients on MicroLogix.
+4. **UDT auto-deserialization is not available** — read individual members with typed methods.
 
 | HSL Family | Nexus Module | Migration Status | Notes |
 |------------|--------------|------------------|-------|
