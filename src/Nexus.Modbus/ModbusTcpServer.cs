@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace Nexus.Modbus
@@ -10,7 +11,7 @@ namespace Nexus.Modbus
     /// <summary>
     /// 虚拟 Modbus TCP 服务器 — 模拟真实 PLC，用于无硬件测试。
     /// 内置线圈、离散输入、保持寄存器、输入寄存器四区内存。
-    /// 支持功能码 01-06, 15, 16, 23。
+    /// 支持功能码 01-06, 08, 15, 16, 22, 23, 43/14。
     /// 支持从站地址过滤和请求日志。
     /// </summary>
     public class ModbusTcpServer : IDisposable
@@ -32,10 +33,40 @@ namespace Nexus.Modbus
         private readonly ushort[] _inputRegisters = new ushort[65536];    // 3xxxx 输入寄存器
         private readonly ConcurrentDictionary<TcpClient, Thread> _clients = new ConcurrentDictionary<TcpClient, Thread>();
 
+        // FC08 诊断计数器
+        private int _busMessageCount;
+        private int _slaveMessageCount;
+
         public int Port { get; }
         public bool IsRunning => _running;
 
         public ModbusTcpServer(int port = 502) { Port = port; }
+
+        // ── 设备标识（FC43/14）───────────────────
+
+        /// <summary>厂商名称 (ObjectId=0x00)。</summary>
+        public string VendorName { get; set; } = "Nexus Virtual";
+
+        /// <summary>产品代码 (ObjectId=0x01)。</summary>
+        public string ProductCode { get; set; } = "NX-SIM";
+
+        /// <summary>主/次版本 (ObjectId=0x02)。</summary>
+        public string MajorMinorRevision { get; set; } = "1.0.0";
+
+        /// <summary>设备 URL (ObjectId=0x03)。</summary>
+        public string DeviceUrl { get; set; } = "https://github.com/nexus";
+
+        /// <summary>产品名称 (ObjectId=0x04)。</summary>
+        public string ProductName { get; set; } = "Nexus Modbus Simulator";
+
+        /// <summary>设备型号 (ObjectId=0x05)。</summary>
+        public string ModelName { get; set; } = "NX-VIRTUAL";
+
+        /// <summary>用户应用名称 (ObjectId=0x06)。</summary>
+        public string UserApplicationName { get; set; } = "Modbus Test Server";
+
+        /// <summary>符合性等级 (0x01=Basic, 0x02=Regular, 0x03=Extended, 0x81..=Extended+)</summary>
+        public byte ConformityLevel { get; set; } = 0x02; // Regular
 
         // ── 预设/读取数据（测试用）─────────────────
 
@@ -145,9 +176,12 @@ namespace Nexus.Modbus
                     0x04 => ReadRegisters(pdu, _inputRegisters),
                     0x05 => WriteSingleCoil(pdu),
                     0x06 => WriteSingleRegister(pdu),
+                    0x08 => Diagnostics(pdu),
                     0x0F => WriteMultipleCoils(pdu),
                     0x10 => WriteMultipleRegisters(pdu),
+                    0x16 => MaskWriteRegister(pdu),
                     0x17 => ReadWriteMultipleRegisters(pdu),
+                    0x2B => EncapsulatedInterface(pdu),
                     _ => BuildException(func, 1)
                 };
             }
@@ -159,6 +193,10 @@ namespace Nexus.Modbus
             // 从站地址过滤
             if (AllowedStationIds.Count > 0 && !AllowedStationIds.Contains(unitId))
                 return BuildException(pdu[0], 2); // 非法数据地址
+
+            // 更新诊断计数器
+            Interlocked.Increment(ref _busMessageCount);
+            Interlocked.Increment(ref _slaveMessageCount);
 
             // 触发请求日志事件
             OnRequestReceived?.Invoke(this, new ModbusRequestEventArgs
@@ -235,6 +273,66 @@ namespace Nexus.Modbus
             return pdu;
         }
 
+        // ── FC08 — 诊断 (Diagnostics) ────────────
+
+        private byte[] Diagnostics(byte[] pdu)
+        {
+            // PDU: FC(1) + SubFunction(2) + Data(2)
+            if (pdu.Length < 4)
+                return BuildException(0x08, 3);
+
+            ushort subFunc = (ushort)((pdu[1] << 8) | pdu[2]);
+
+            switch (subFunc)
+            {
+                case 0x0000: // Return Query Data (回环)
+                    // Echo: FC + SubFunction + Data (exactly what was sent)
+                    byte[] echo = new byte[pdu.Length];
+                    Buffer.BlockCopy(pdu, 0, echo, 0, pdu.Length);
+                    return echo;
+
+                case 0x0001: // Restart Communications
+                    return BuildDiagnosticsResponse(subFunc, 0x0000);
+
+                case 0x0002: // Return Diagnostic Register
+                    return BuildDiagnosticsResponse(subFunc, 0x0000);
+
+                case 0x000A: // Clear Counters + Diagnostic Register
+                    Interlocked.Exchange(ref _busMessageCount, 0);
+                    Interlocked.Exchange(ref _slaveMessageCount, 0);
+                    return BuildDiagnosticsResponse(subFunc, 0x0000);
+
+                case 0x000B: // Return Bus Message Count
+                    return BuildDiagnosticsResponse(subFunc, (ushort)_busMessageCount);
+
+                case 0x000E: // Return Slave Message Count
+                    return BuildDiagnosticsResponse(subFunc, (ushort)_slaveMessageCount);
+
+                case 0x000C: // Return Bus Comm Error Count
+                case 0x000D: // Return Bus Exception Error Count
+                case 0x000F: // Return Slave No Response Count
+                case 0x0010: // Return Slave NAK Count
+                case 0x0011: // Return Slave Busy Count
+                case 0x0012: // Return Bus Char Overrun Count
+                case 0x0014: // Clear Overrun Counters
+                case 0x0015: // Return IOP Overrun Count
+                    return BuildDiagnosticsResponse(subFunc, 0x0000);
+
+                default:
+                    return BuildException(0x08, 1);
+            }
+        }
+
+        private static byte[] BuildDiagnosticsResponse(ushort subFunction, ushort data)
+        {
+            return new byte[]
+            {
+                0x08,
+                (byte)(subFunction >> 8), (byte)subFunction,
+                (byte)(data >> 8), (byte)data
+            };
+        }
+
         // ── FC15 — 写多个线圈 ────────────────────
 
         private byte[] WriteMultipleCoils(byte[] pdu)
@@ -255,6 +353,21 @@ namespace Nexus.Modbus
             for (int i = 0; i < count; i++)
                 _holdingRegisters[addr + i] = (ushort)((pdu[6 + i * 2] << 8) | pdu[7 + i * 2]);
             return new byte[] { 0x10, pdu[1], pdu[2], pdu[3], pdu[4] };
+        }
+
+        // ── FC22 — 掩码写保持寄存器 ───────────────
+
+        private byte[] MaskWriteRegister(byte[] pdu)
+        {
+            if (pdu.Length < 7) return BuildException(0x16, 3);
+
+            ushort addr = (ushort)((pdu[1] << 8) | pdu[2]);
+            ushort andMask = (ushort)((pdu[3] << 8) | pdu[4]);
+            ushort orMask = (ushort)((pdu[5] << 8) | pdu[6]);
+            ushort current = _holdingRegisters[addr];
+            _holdingRegisters[addr] = (ushort)((current & andMask) | (orMask & ~andMask));
+
+            return new byte[] { 0x16, pdu[1], pdu[2], pdu[3], pdu[4], pdu[5], pdu[6] };
         }
 
         // ── FC23 — 读写多个寄存器（原子操作）──
@@ -289,6 +402,102 @@ namespace Nexus.Modbus
                 result[3 + i * 2] = (byte)val;
             }
             return result;
+        }
+
+        // ── FC43 — 封装接口传输 (Encapsulated Interface Transport) ──
+
+        private byte[] EncapsulatedInterface(byte[] pdu)
+        {
+            if (pdu.Length < 3) return BuildException(0x2B, 3);
+
+            byte meiType = pdu[1];
+            switch (meiType)
+            {
+                case 0x0E: // Read Device Identification
+                    return ReadDeviceIdentification(pdu);
+                default:
+                    return BuildException(0x2B, 1);
+            }
+        }
+
+        private byte[] ReadDeviceIdentification(byte[] pdu)
+        {
+            // Request PDU: FC(1) + MEI(1) + ReadLevel(1) + ObjectId(1) = 4 bytes
+            if (pdu.Length < 4) return BuildException(0x2B, 3);
+
+            byte readLevel = pdu[2];
+            byte startObjectId = pdu[3];
+
+            // 构建标识对象列表
+            var objects = BuildDeviceIdObjects(readLevel, startObjectId);
+
+            // 计算响应大小
+            int objectsSize = 0;
+            for (int i = 0; i < objects.Count; i++)
+                objectsSize += 2 + objects[i].Value.Length; // ObjectId(1) + Length(1) + Value
+
+            // Response PDU: FC(1) + MEI(1) + ReadLevel(1) + Conformity(1) + MoreFollows(1) + NextObjId(1) + ObjCount(1) + Objects
+            byte[] result = new byte[7 + objectsSize];
+            result[0] = 0x2B;    // FC
+            result[1] = 0x0E;    // MEI type
+            result[2] = readLevel;
+            result[3] = ConformityLevel;
+            result[4] = 0x00;    // More follows (we return all in one response)
+            result[5] = 0x00;    // Next object ID
+            result[6] = (byte)objects.Count;
+
+            int offset = 7;
+            for (int i = 0; i < objects.Count; i++)
+            {
+                result[offset++] = objects[i].Id;
+                result[offset++] = (byte)objects[i].Value.Length;
+                Buffer.BlockCopy(objects[i].Value, 0, result, offset, objects[i].Value.Length);
+                offset += objects[i].Value.Length;
+            }
+
+            return result;
+        }
+
+        private List<DeviceIdObject> BuildDeviceIdObjects(byte readLevel, byte startObjectId)
+        {
+            var allObjects = new List<DeviceIdObject>();
+
+            // 基本标识 (ObjectId 0x00-0x02)
+            allObjects.Add(new DeviceIdObject(0x00, VendorName));
+            allObjects.Add(new DeviceIdObject(0x01, ProductCode));
+            allObjects.Add(new DeviceIdObject(0x02, MajorMinorRevision));
+
+            if (readLevel >= 0x02)
+            {
+                // 常规标识 (ObjectId 0x03-0x06)
+                allObjects.Add(new DeviceIdObject(0x03, DeviceUrl));
+                allObjects.Add(new DeviceIdObject(0x04, ProductName));
+                allObjects.Add(new DeviceIdObject(0x05, ModelName));
+                allObjects.Add(new DeviceIdObject(0x06, UserApplicationName));
+            }
+
+            // 按 startObjectId 过滤
+            if (startObjectId > 0x00)
+            {
+                int index = allObjects.FindIndex(o => o.Id >= startObjectId);
+                if (index >= 0)
+                    return allObjects.GetRange(index, allObjects.Count - index);
+                return new List<DeviceIdObject>();
+            }
+
+            return allObjects;
+        }
+
+        private struct DeviceIdObject
+        {
+            public byte Id;
+            public byte[] Value;
+
+            public DeviceIdObject(byte id, string text)
+            {
+                Id = id;
+                Value = Encoding.ASCII.GetBytes(text);
+            }
         }
 
         private byte[] BuildException(byte func, byte code) => new byte[] { (byte)(func | 0x80), code };

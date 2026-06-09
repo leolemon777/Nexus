@@ -38,6 +38,37 @@ namespace Nexus.Omron
         CounterFlags = 0xA2,
     }
 
+    /// <summary>欧姆龙 PLC 型号。</summary>
+    public enum OmronModel
+    {
+        /// <summary>CJ2M。</summary>
+        CJ2M,
+        /// <summary>CJ2H。</summary>
+        CJ2H,
+        /// <summary>CP1H。</summary>
+        CP1H,
+        /// <summary>CP1L。</summary>
+        CP1L,
+        /// <summary>CP1E。</summary>
+        CP1E,
+        /// <summary>NJ501 (NJ 系列)。</summary>
+        NJ501,
+        /// <summary>NJ101 (NJ 系列)。</summary>
+        NJ101,
+        /// <summary>NX1P2 (NX 系列)。</summary>
+        NX1P2,
+        /// <summary>NX102 (NX 系列)。</summary>
+        NX102,
+        /// <summary>NX202 (NX 系列)。</summary>
+        NX202,
+        /// <summary>CS1G。</summary>
+        CS1G,
+        /// <summary>CS1H。</summary>
+        CS1H,
+        /// <summary>CQ2MH。</summary>
+        CQ2MH,
+    }
+
     /// <summary>
     /// FINS 命令码。
     /// </summary>
@@ -72,6 +103,37 @@ namespace Nexus.Omron
 
         /// <summary>连接数据发送（循环）。</summary>
         public const ushort CycleSend = 0x0201;
+
+        /// <summary>多地址读取 (NX/NJ)。</summary>
+        public const ushort MultiRead = 0x0401;
+
+        /// <summary>多地址写入 (NX/NJ)。</summary>
+        public const ushort MultiWrite = 0x1401;
+    }
+
+    /// <summary>FINS 常量。</summary>
+    public static class FinsConstants
+    {
+        /// <summary>默认 FINS TCP 端口。</summary>
+        public const int DefaultTcpPort = 9600;
+
+        /// <summary>默认 FINS UDP 端口。</summary>
+        public const int DefaultUdpPort = 9600;
+
+        /// <summary>FINS 帧头长度（10 字节）。</summary>
+        public const int FinsHeaderLength = 10;
+
+        /// <summary>FINS TCP 握手头长度。</summary>
+        public const int TcpHandshakeHeaderLength = 12;
+
+        /// <summary>最大单次读取字数。</summary>
+        public const int MaxReadWords = 500;
+
+        /// <summary>最大单次写入字数。</summary>
+        public const int MaxWriteWords = 500;
+
+        /// <summary>NX/NJ 标签访问最大名称长度。</summary>
+        public const int MaxTagNameLength = 256;
     }
 
     /// <summary>
@@ -110,5 +172,18 @@ namespace Nexus.Omron
                 _ => $"未知错误 (0x{endCode:X4})"
             };
         }
+    }
+
+    /// <summary>FINS 设备发现结果。</summary>
+    public sealed class FinsDiscoveredDevice
+    {
+        /// <summary>设备网络地址。</summary>
+        public byte NetworkAddress { get; set; }
+        /// <summary>设备节点号。</summary>
+        public byte NodeNumber { get; set; }
+        /// <summary>设备单元号。</summary>
+        public byte UnitNumber { get; set; }
+        /// <summary>控制器型号。</summary>
+        public string ControllerModel { get; set; } = string.Empty;
     }
 }

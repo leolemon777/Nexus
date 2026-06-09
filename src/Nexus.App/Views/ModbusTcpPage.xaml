@@ -175,6 +175,10 @@
                     <Grid Margin="0,0,0,6">
                         <TextBlock Text="通讯日志" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="导出TXT" Style="{DynamicResource Button.Text}" Margin="0,0,4,0"
+                                    Command="{Binding ExportLogCommand}"/>
+                            <Button Content="导出JSONL" Style="{DynamicResource Button.Text}" Margin="0,0,4,0"
+                                    Command="{Binding ExportPacketJsonlCommand}"/>
                             <Button Content="清空" Style="{DynamicResource Button.Text}" Margin="0,0,4,0"
                                     Command="{Binding ClearLogCommand}"/>
                         </StackPanel>

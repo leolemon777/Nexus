@@ -8,9 +8,7 @@
             <!-- 模拟器控制 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
-                    <TextBlock Text="Modbus TCP 模拟器" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
-                    <TextBlock Text="本地模拟 PLC 设备，无需真实硬件即可测试 Modbus 通讯"
-                               Foreground="{DynamicResource Brush.Text3}" FontSize="13" Margin="0,0,0,6"/>
+                    <TextBlock Text="Modbus TCP Server" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
 
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -80,21 +78,59 @@
                 </StackPanel>
             </Border>
 
-            <!-- 预置数据说明 -->
+            <!-- 内存编辑 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
-                    <TextBlock Text="预置数据" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
-                    <TextBlock Text="{Binding PresetInfo}" Style="{DynamicResource Body}"
-                               TextWrapping="Wrap" Foreground="{DynamicResource Brush.Text2}"/>
+                    <TextBlock Text="内存区" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
 
-                    <TextBlock Text="使用方法" FontWeight="Bold" Foreground="{DynamicResource Brush.Accent}"
-                               Margin="0,12,0,6"/>
-                    <TextBlock Style="{DynamicResource Body}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.Text2}">
-                        <Run Text="1. 点击「启动」按钮"/><LineBreak/>
-                        <Run Text="2. 切换到 Modbus TCP 页面"/><LineBreak/>
-                        <Run Text="3. IP 填 127.0.0.1，端口填 "/><Run Text="{Binding Port, Mode=OneWay}"/><LineBreak/>
-                        <Run Text="4. 点击「连接」后即可读取预置数据"/>
-                    </TextBlock>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="区域" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding MemoryAreas}" SelectedItem="{Binding SelectedMemoryArea, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="2" Text="起始" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                        <TextBox Grid.Column="3" Style="{DynamicResource Input}" Text="{Binding MemoryStartAddress, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Grid.Column="4" Text="数量" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                        <TextBox Grid.Column="5" Style="{DynamicResource Input}" Text="{Binding MemoryCount, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Grid.Column="6" Text="{Binding PresetInfo}" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                        <Button Grid.Column="7" Content="刷新" Style="{DynamicResource Button.Ghost}" Margin="12,0,0,0" Command="{Binding RefreshMemoryCommand}"/>
+                        <Button Grid.Column="8" Content="重置" Style="{DynamicResource Button.Ghost}" Margin="8,0,0,0" Command="{Binding ResetDataCommand}"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Grid.Column="1" Style="{DynamicResource Input}" Text="{Binding EditAddress, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Grid.Column="2" Text="值" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                        <TextBox Grid.Column="3" Style="{DynamicResource Input}" Text="{Binding EditValue, UpdateSourceTrigger=LostFocus}"/>
+                        <Button Grid.Column="4" Content="写入内存" Style="{DynamicResource Button.Primary}" MinWidth="100" Margin="16,0,0,0" Command="{Binding ApplyMemoryValueCommand}"/>
+                    </Grid>
+
+                    <DataGrid ItemsSource="{Binding MemoryRows}" AutoGenerateColumns="False" IsReadOnly="True"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0"
+                              CanUserAddRows="False" CanUserDeleteRows="False" Height="220">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Area" Binding="{Binding Area}" Width="*"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="120"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="160"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </StackPanel>
             </Border>
 

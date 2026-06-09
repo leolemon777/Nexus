@@ -111,8 +111,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         new NavGroup("📡", "Modbus 系列", BrandLogos.TryLoad("modbus.png"))
             .Add("📡", "Modbus TCP",    "modbus-tcp",    typeof(Views.ModbusTcpPage))
+            .Add("📶", "Modbus UDP",    "modbus-udp",    typeof(Views.ModbusUdpPage))
             .Add("🔌", "Modbus RTU",    "modbus-rtu",    typeof(Views.ModbusRtuPage))
-            .Add("📄", "Modbus ASCII",  "modbus-ascii",  typeof(Views.ModbusAsciiPage)),
+            .Add("🌉", "Modbus RTU Over TCP", "modbus-rtu-over-tcp", typeof(Views.ModbusRtuOverTcpPage))
+            .Add("📄", "Modbus ASCII",  "modbus-ascii",  typeof(Views.ModbusAsciiPage))
+            .Add("🌐", "Modbus ASCII Over TCP", "modbus-ascii-over-tcp", typeof(Views.ModbusAsciiOverTcpPage)),
 
         new NavGroup("🏭", "西门子 Siemens", BrandLogos.TryLoad("siemens.png"))
             .Add("🏭", "S7-1200/1500",  "siemens",       typeof(Views.SiemensPage)),

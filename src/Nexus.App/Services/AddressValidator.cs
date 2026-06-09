@@ -36,15 +36,18 @@ namespace Nexus.App.Services
             {
                 // Modbus 系列
                 "Modbus TCP" => ValidateModbus(addr),
+                "Modbus UDP" => ValidateModbus(addr),
                 "Modbus RTU" => ValidateModbus(addr),
+                "Modbus RTU Over TCP" => ValidateModbus(addr),
                 "Modbus ASCII" => ValidateModbus(addr),
+                "Modbus ASCII Over TCP" => ValidateModbus(addr),
                 "信捷 Xinje" => ValidateXinje(addr),
 
                 // 西门子
                 "S7-1200/1500" or "Siemens S7" => ValidateSiemens(addr),
 
                 // 三菱
-                "MC 协议 (Q/L/FX5U)" or "Mitsubishi MC" => ValidateMitsubishi(addr),
+                "MC 协议 (Q/L/FX5U)" or "Mitsubishi MC" or "Mitsubishi MC / A1E" => ValidateMitsubishi(addr),
                 "FX 串口协议" or "Mitsubishi FX" => ValidateMitsubishiFx(addr),
 
                 // 欧姆龙
@@ -127,9 +130,17 @@ namespace Nexus.App.Services
         // ── 三菱 MC: D100 / M100 / X0 / Y0 / R100 ──────
         private static ValidationResult ValidateMitsubishi(string addr)
         {
-            var m = Regex.Match(addr, @"^[DMXYZRSTCBFW](\d+)$");
-            if (!m.Success) return ValidationResult.Fail("格式: D100 / M100 / X0 / Y0 / R100 / T0 / C0");
-            return ValidationResult.Ok(addr, addr[0] + "区");
+            var m = Regex.Match(addr, @"^(TS|TC|TN|CS|CC|CN|SM|SD|SW|ZR|DX|[DMXYZRBLFSVW])([0-9A-F]+)$");
+            if (!m.Success) return ValidationResult.Fail("格式: D100 / M100 / X0 / Y0 / W100 / ZR100 / TS0 / CN0");
+
+            string prefix = m.Groups[1].Value;
+            string number = m.Groups[2].Value;
+            bool hexArea = prefix is "X" or "Y" or "B" or "W" or "DX";
+            string pattern = hexArea ? "^[0-9A-F]+$" : "^\\d+$";
+            if (!Regex.IsMatch(number, pattern))
+                return ValidationResult.Fail(hexArea ? $"{prefix} 区地址使用十六进制数字" : $"{prefix} 区地址使用十进制数字");
+
+            return ValidationResult.Ok(addr, prefix + "区");
         }
 
         // ── 三菱 FX: D100 / M100 / X0 / Y0 / C0 / T0 ──────

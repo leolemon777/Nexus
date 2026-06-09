@@ -12,7 +12,7 @@ namespace Nexus.Modbus
     /// <summary>
     /// Modbus UDP 客户端 — 通过 UDP 传输 MBAP 格式报文。
     /// 继承 UdpDeviceBase，与 ModbusTcpClient 结构一致。
-    /// 支持功能码 01-06, 15, 16, 23。
+    /// 支持功能码 01-06, 15, 16, 22, 23。
     /// 支持地址前缀（0x/1x/3x/4x）、字节序选项、批量读写、报文日志、数据订阅。
     /// </summary>
     public class ModbusUdpClient : UdpDeviceBase, IBatchReadWrite, ISubscribeDevice
@@ -323,6 +323,30 @@ namespace Nexus.Modbus
         }
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
+
+        // ═══════════════════════════════════════════
+        //  FC22 — 掩码写寄存器 (Mask Write Register)
+        // ═══════════════════════════════════════════
+
+        /// <summary>
+        /// 原子掩码写保持寄存器 (FC22)。
+        /// 新值按 Modbus 规范计算为: (当前值 AND andMask) OR (orMask AND NOT andMask)。
+        /// </summary>
+        public OperateResult MaskWriteRegister(string address, ushort andMask, ushort orMask)
+        {
+            ushort addr = ParseAddress(address);
+            byte[] pdu =
+            {
+                0x16,
+                (byte)(addr >> 8), (byte)addr,
+                (byte)(andMask >> 8), (byte)andMask,
+                (byte)(orMask >> 8), (byte)orMask
+            };
+
+            var result = SendAndReceive(BuildMbap(pdu));
+            if (!result.IsSuccess) return result;
+            return CheckResponse(result.Content);
+        }
 
         // ═══════════════════════════════════════════
         //  FC15 — 写多个线圈 (Write Multiple Coils)

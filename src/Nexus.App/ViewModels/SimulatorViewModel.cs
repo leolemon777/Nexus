@@ -26,14 +26,23 @@ public partial class SimulatorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _connectionCount;
     [ObservableProperty] private int _simulatedLatencyMs;
     [ObservableProperty] private string _presetInfo = string.Empty;
+    [ObservableProperty] private string _selectedMemoryArea = "Holding Register";
+    [ObservableProperty] private int _memoryStartAddress;
+    [ObservableProperty] private int _memoryCount = 16;
+    [ObservableProperty] private int _editAddress;
+    [ObservableProperty] private string _editValue = "0";
 
     public ObservableCollection<string> LogLines { get; } = new();
+    public ObservableCollection<SimulatorMemoryRow> MemoryRows { get; } = new();
+    public string[] MemoryAreas { get; } = { "Holding Register", "Input Register", "Coil", "Discrete Input" };
     private const int LogCap = 200;
 
     public SimulatorViewModel()
     {
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        _simulator.RequestReceived += OnRequestReceived;
         UpdatePresetInfo();
+        RefreshMemorySnapshot();
     }
 
     private void UpdatePresetInfo()
@@ -96,6 +105,7 @@ public partial class SimulatorViewModel : ObservableObject, IDisposable
         if (!IsRunning) return;
         _simulator.UpdateDynamicData();
         ConnectionCount = _simulator.ConnectionCount;
+        RefreshMemorySnapshot();
     }
 
     partial void OnSimulatedLatencyMsChanged(int value)
@@ -107,6 +117,72 @@ public partial class SimulatorViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void ClearLog() => LogLines.Clear();
+
+    [RelayCommand]
+    private void RefreshMemory()
+    {
+        RefreshMemorySnapshot();
+        AppendLog($"[MEM] 已刷新 {SelectedMemoryArea} [{MemoryStartAddress}..{MemoryStartAddress + MemoryRows.Count - 1}]");
+    }
+
+    [RelayCommand]
+    private void ApplyMemoryValue()
+    {
+        try
+        {
+            _simulator.SetValue(SelectedMemoryArea, EditAddress, EditValue);
+            RefreshMemorySnapshot();
+            AppendLog($"[MEM] {SelectedMemoryArea}[{EditAddress}] = {EditValue}");
+        }
+        catch (Exception ex)
+        {
+            AppendLog("[ERR] 写入内存失败: " + ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void ResetData()
+    {
+        _simulator.ResetData();
+        RefreshMemorySnapshot();
+        AppendLog("[MEM] 预置数据已重置。");
+    }
+
+    partial void OnSelectedMemoryAreaChanged(string value) => RefreshMemorySnapshot();
+    partial void OnMemoryStartAddressChanged(int value) => RefreshMemorySnapshot();
+    partial void OnMemoryCountChanged(int value) => RefreshMemorySnapshot();
+
+    private void RefreshMemorySnapshot()
+    {
+        try
+        {
+            int count = MemoryCount;
+            if (count < 1) count = 1;
+            if (count > 100) count = 100;
+
+            var rows = _simulator.GetSnapshot(SelectedMemoryArea, MemoryStartAddress, count);
+            if (_dispatcher.CheckAccess())
+                ReplaceRows(rows);
+            else
+                _dispatcher.BeginInvoke(new Action(() => ReplaceRows(rows)));
+        }
+        catch
+        {
+            // Snapshot refresh must never interrupt server operation.
+        }
+    }
+
+    private void ReplaceRows(SimulatorMemoryRow[] rows)
+    {
+        MemoryRows.Clear();
+        foreach (var row in rows)
+            MemoryRows.Add(row);
+    }
+
+    private void OnRequestReceived(object? sender, string message)
+    {
+        AppendLog("[REQ] " + message);
+    }
 
     private void AppendLog(string line)
     {
@@ -130,7 +206,8 @@ public partial class SimulatorViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         _updateTimer?.Stop();
-        _simulator.DisposeAsync().AsTask().Wait();
+        _simulator.RequestReceived -= OnRequestReceived;
+        _simulator.Stop();
         GC.SuppressFinalize(this);
     }
 }

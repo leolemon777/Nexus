@@ -1257,6 +1257,109 @@ namespace Nexus.Siemens
             return await Task.Run(() => BatchWrite(items), cancellationToken).ConfigureAwait(false);
         }
 
+        // ── DB 块发现 ──────────────────────────────
+
+        /// <summary>
+        /// 读取 PLC 中所有 DB 块编号列表。
+        /// 使用 S7 ListBlocks 功能码 (0x1A/0x1B) 枚举 PLC 中的数据块。
+        /// 仅适用于 S7-300/400/1200/1500。
+        /// </summary>
+        public OperateResult<int[]> ListDBBlocks()
+        {
+            // S7 ListBlocks 请求: 读取 DB 类型 (0x0A) 的块列表
+            byte[] listBlocksReq =
+            {
+                0x03, 0x00, 0x00, 0x21, 0x02, 0xF0, 0x80, 0x32,
+                0x07, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x08, 0x00,
+                0x00, 0x0C, 0x00, 0x00, 0x01, 0x12, 0x08, 0x12,
+                0x06, 0x0A, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0A
+            };
+
+            var resp = SendAndReceive(listBlocksReq);
+            if (!resp.IsSuccess) return OperateResult<int[]>.Failed(resp.Message, resp.ErrorCode);
+
+            byte[] raw = resp.Content;
+            if (raw == null || raw.Length < 30)
+                return OperateResult<int[]>.Failed($"ListBlocks 响应长度不足: {raw?.Length ?? 0}");
+
+            // 解析响应中的块编号列表
+            try
+            {
+                // 检查 S7 错误码 (byte 21-23)
+                if (raw.Length > 21 && raw[21] != 0x0A && raw[21] != 0x00)
+                {
+                    // 某些型号可能不支持此功能
+                    byte errClass = raw.Length > 25 ? raw[25] : (byte)0;
+                    byte errCode = raw.Length > 26 ? raw[26] : (byte)0;
+                    if (errClass != 0 || errCode != 0)
+                        return OperateResult<int[]>.Failed($"PLC 不支持 ListBlocks: class=0x{errClass:X2} code=0x{errCode:X2}");
+                }
+
+                // 尝试从响应中提取块信息
+                var blocks = new List<int>();
+                int payloadStart = 27;
+                while (payloadStart + 4 <= raw.Length)
+                {
+                    byte blockType = raw[payloadStart];
+                    if (blockType == 0x00) break; // 结束标记
+
+                    int blockNum = (raw[payloadStart + 1] << 8) | raw[payloadStart + 2];
+                    if (blockType == 0x0A || blockType == 0x0B) // DB 类型
+                        blocks.Add(blockNum);
+
+                    payloadStart += 4;
+                }
+
+                return OperateResult<int[]>.Success(blocks.ToArray());
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<int[]>.Failed($"解析块列表失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>异步读取 DB 块编号列表。</summary>
+        public Task<OperateResult<int[]>> ListDBBlocksAsync(CancellationToken ct = default)
+            => Task.Run(() => ListDBBlocks(), ct);
+
+        /// <summary>
+        /// 读取指定 DB 块的大小（字节数）。
+        /// 使用 GetBlockInfo 功能码 (0x1A/0x1D)。
+        /// </summary>
+        public OperateResult<int> GetDBBlockSize(int dbNumber)
+        {
+            byte[] getBlockInfoReq =
+            {
+                0x03, 0x00, 0x00, 0x25, 0x02, 0xF0, 0x80, 0x32,
+                0x07, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x08, 0x00,
+                0x00, 0x10, 0x00, 0x00, 0x01, 0x12, 0x08, 0x12,
+                0x08, 0x0A, 0x01, 0x12, 0x05, 0x00,
+                (byte)(dbNumber >> 8), (byte)(dbNumber & 0xFF),
+                0x0A, 0x00, 0x00, 0x00
+            };
+
+            var resp = SendAndReceive(getBlockInfoReq);
+            if (!resp.IsSuccess) return OperateResult<int>.Failed(resp.Message, resp.ErrorCode);
+
+            byte[] raw = resp.Content;
+            if (raw == null || raw.Length < 50)
+                return OperateResult<int>.Failed($"GetBlockInfo 响应长度不足: {raw?.Length ?? 0}");
+
+            try
+            {
+                // 块大小在响应尾部的特定偏移
+                int sizeOffset = raw.Length - 8;
+                if (sizeOffset < 30) sizeOffset = 42;
+                int blockSize = (raw[sizeOffset] << 24) | (raw[sizeOffset + 1] << 16) |
+                                (raw[sizeOffset + 2] << 8) | raw[sizeOffset + 3];
+                return OperateResult<int>.Success(blockSize);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<int>.Failed($"解析块大小失败: {ex.Message}");
+            }
+        }
+
         // ── 辅助方法 ──────────────────────────────
 
         /// <summary>

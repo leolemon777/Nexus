@@ -25,7 +25,7 @@ namespace Nexus.Siemens
         {
             int dataLen = data?.Length ?? 0;
             int lenField = 4 + dataLen;
-            byte[] frame = new byte[4 + lenField + 1];
+            byte[] frame = new byte[4 + lenField + 2];
             frame[0] = 0x68; frame[1] = (byte)lenField; frame[2] = (byte)lenField; frame[3] = 0x68;
             frame[4] = control; frame[5] = SlaveAddress; frame[6] = MasterAddress; frame[7] = functionCode;
             if (dataLen > 0) Buffer.BlockCopy(data, 0, frame, 8, dataLen);
@@ -41,7 +41,7 @@ namespace Nexus.Siemens
             functionCode = 0; data = Array.Empty<byte>();
             if (response.Length < 9 || response[0] != 0x68 || response[3] != 0x68 || response[response.Length - 1] != 0x16) return false;
             int lenField = response[1];
-            if (response.Length != 4 + lenField + 1) return false;
+            if (response.Length != 4 + lenField + 2) return false;
             byte bcc = 0;
             for (int i = 4; i < response.Length - 2; i++) bcc ^= response[i];
             if (bcc != response[response.Length - 2]) return false;

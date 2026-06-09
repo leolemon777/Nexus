@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Nexus.App.Services;
+using Nexus.Modbus;
 
 namespace Nexus.App.ViewModels;
 
@@ -34,8 +35,28 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     private bool _disposed;
     private const int LogCap = 500;
 
+    // ── 可选包记录服务 ──────────────────────
+    private readonly PacketRecorderService? _packetRecorder;
+    private readonly string _packetProtocol;
+    private readonly ModbusPacketTransport _packetTransport;
+
     protected ProtocolViewModelBase()
     {
+        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        AppendLog(ProtocolName + " ready.");
+    }
+
+    /// <summary>
+    /// 构造并启用 Modbus 包记录。
+    /// </summary>
+    /// <param name="packetRecorder">共享包记录服务。</param>
+    /// <param name="protocol">协议标签（如 "modbus-udp"）。</param>
+    /// <param name="transport">Modbus 传输类型。</param>
+    protected ProtocolViewModelBase(PacketRecorderService packetRecorder, string protocol, ModbusPacketTransport transport)
+    {
+        _packetRecorder = packetRecorder;
+        _packetProtocol = protocol;
+        _packetTransport = transport;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         AppendLog(ProtocolName + " ready.");
     }
@@ -44,7 +65,7 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     protected abstract void DoDisconnect();
     protected abstract IReadWriteDevice? GetClient();
 
-    // ── 地址变更时自动校验 ────────────────
+    // ── 地址变更时自动校验 ───────────────
 
     partial void OnAddressChanged(string value)
     {
@@ -142,7 +163,8 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     {
         var r = await action().ConfigureAwait(true);
         if (!r.IsSuccess) { AppendLog("[ERR] Read " + addr + " failed: " + r.Message); return null; }
-        string text = r.Content?.ToString() ?? "--";
+        object? content = r.Content;
+        string text = content?.ToString() ?? "--";
         AppendLog("[RD] " + addr + " (" + DataType + ") = " + text);
         return text;
     }
@@ -240,6 +262,49 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
         {
             int remove = LogLines.Count - LogCap;
             for (int i = 0; i < remove; i++) LogLines.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
+    /// 记录 Modbus 报文并追加解析后的 [PKT] 行到日志。
+    /// 仅在构造时传入了 <see cref="PacketRecorderService"/> 时生效。
+    /// </summary>
+    protected void RecordPacket(string direction, string hex, ModbusPacketDirection packetDirection)
+    {
+        if (_packetRecorder == null)
+        {
+            // 没有包记录服务，回退到简单的 raw 日志
+            AppendLog("[" + direction + "] " + hex);
+            return;
+        }
+
+        if (_dispatcher.CheckAccess())
+        {
+            RecordPacketCore(direction, hex, packetDirection);
+        }
+        else
+        {
+            string hexCopy = hex;
+            _dispatcher.BeginInvoke(new Action(() =>
+                RecordPacketCore(direction, hexCopy, packetDirection)));
+        }
+    }
+
+    private void RecordPacketCore(string direction, string hex, ModbusPacketDirection packetDirection)
+    {
+        switch (_packetTransport)
+        {
+            case ModbusPacketTransport.Tcp:
+            case ModbusPacketTransport.Udp:
+                _packetRecorder.RecordMbap(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                break;
+            case ModbusPacketTransport.Rtu:
+            case ModbusPacketTransport.RtuOverTcp:
+                _packetRecorder.RecordRtu(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                break;
+            case ModbusPacketTransport.Ascii:
+                _packetRecorder.RecordAscii(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                break;
         }
     }
 

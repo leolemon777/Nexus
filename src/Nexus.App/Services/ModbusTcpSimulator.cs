@@ -12,7 +12,8 @@ namespace Nexus.App.Services
     /// 本地 Modbus TCP 模拟器 — 无需真实 PLC 即可测试所有 Modbus 功能。
     /// <para>监听 127.0.0.1:1502，预置寄存器/线圈数据。</para>
     /// <para>支持功能码: 01(读线圈), 02(读离散输入), 03(读保持寄存器), 04(读输入寄存器),
-    /// 05(写单线圈), 06(写单寄存器), 15(写多线圈), 16(写多寄存器)。</para>
+    /// 05(写单线圈), 06(写单寄存器), 15(写多线圈), 16(写多寄存器),
+    /// 22(掩码写寄存器), 23(读写多个寄存器)。</para>
     /// </summary>
     public sealed class ModbusTcpSimulator : IAsyncDisposable
     {
@@ -29,6 +30,8 @@ namespace Nexus.App.Services
         private readonly Random _rng = new Random();
         private int _simulatedLatencyMs;
         private DateTime _startTime;
+
+        public event EventHandler<string>? RequestReceived;
 
         public string Host => IPAddress.Loopback.ToString();
         public int Port { get; private set; } = 1502;
@@ -51,6 +54,11 @@ namespace Nexus.App.Services
         /// <summary>预置模拟数据，让首次连接即有数据可读。</summary>
         private void SeedData()
         {
+            Array.Clear(_holdingRegisters, 0, _holdingRegisters.Length);
+            Array.Clear(_inputRegisters, 0, _inputRegisters.Length);
+            Array.Clear(_coils, 0, _coils.Length);
+            Array.Clear(_discreteInputs, 0, _discreteInputs.Length);
+
             // 保持寄存器
             _holdingRegisters[0] = 128;
             _holdingRegisters[1] = 256;
@@ -107,8 +115,28 @@ namespace Nexus.App.Services
         {
             if (_listener is null) return;
 
+            StopCore();
+
+            if (_acceptLoop is not null)
+                try { await _acceptLoop; } catch { }
+
+            _cts?.Dispose();
+            _cts = null;
+            _acceptLoop = null;
+        }
+
+        public void Stop()
+        {
+            StopCore();
+            _cts?.Dispose();
+            _cts = null;
+            _acceptLoop = null;
+        }
+
+        private void StopCore()
+        {
             _cts?.Cancel();
-            _listener.Stop();
+            _listener?.Stop();
             _listener = null;
 
             lock (_clients)
@@ -118,12 +146,6 @@ namespace Nexus.App.Services
                 _clients.Clear();
             }
 
-            if (_acceptLoop is not null)
-                try { await _acceptLoop; } catch { }
-
-            _cts?.Dispose();
-            _cts = null;
-            _acceptLoop = null;
             _connectionCount = 0;
         }
 
@@ -185,6 +207,7 @@ namespace Nexus.App.Services
                         byte unitId = buffer[6];
                         byte[] request = new byte[remaining];
                         Buffer.BlockCopy(buffer, 7, request, 0, remaining);
+                        RequestReceived?.Invoke(this, FormatRequest(unitId, request));
 
                         var response = ProcessRequest(unitId, request);
                         if (response != null)
@@ -216,7 +239,7 @@ namespace Nexus.App.Services
 
         /// <summary>
         /// 处理 Modbus PDU 请求。
-        /// 支持功能码: 01, 02, 03, 04, 05, 06, 15, 16
+        /// 支持功能码: 01, 02, 03, 04, 05, 06, 15, 16, 22, 23
         /// </summary>
         private byte[]? ProcessRequest(byte unitId, byte[] pdu)
         {
@@ -237,6 +260,8 @@ namespace Nexus.App.Services
                         0x06 => ProcessWriteSingleRegister(pdu),
                         0x0F => ProcessWriteMultipleCoils(pdu),
                         0x10 => ProcessWriteMultipleRegisters(pdu),
+                        0x16 => ProcessMaskWriteRegister(pdu),
+                        0x17 => ProcessReadWriteMultipleRegisters(pdu),
                         _ => BuildError(fc, 0x01) // Illegal Function
                     };
                 }
@@ -346,12 +371,176 @@ namespace Nexus.App.Services
             return new byte[] { pdu[0], pdu[1], pdu[2], pdu[3], pdu[4] };
         }
 
+        private byte[] ProcessMaskWriteRegister(byte[] pdu)
+        {
+            if (pdu.Length < 7)
+                return BuildError(pdu[0], 0x03);
+
+            ushort address = (ushort)((pdu[1] << 8) | pdu[2]);
+            ushort andMask = (ushort)((pdu[3] << 8) | pdu[4]);
+            ushort orMask = (ushort)((pdu[5] << 8) | pdu[6]);
+            if (address >= _holdingRegisters.Length)
+                return BuildError(pdu[0], 0x02);
+
+            ushort current = _holdingRegisters[address];
+            _holdingRegisters[address] = (ushort)((current & andMask) | (orMask & ~andMask));
+            return new byte[] { 0x16, pdu[1], pdu[2], pdu[3], pdu[4], pdu[5], pdu[6] };
+        }
+
+        private byte[] ProcessReadWriteMultipleRegisters(byte[] pdu)
+        {
+            if (pdu.Length < 10)
+                return BuildError(pdu[0], 0x03);
+
+            ushort readStart = (ushort)((pdu[1] << 8) | pdu[2]);
+            ushort readCount = (ushort)((pdu[3] << 8) | pdu[4]);
+            ushort writeStart = (ushort)((pdu[5] << 8) | pdu[6]);
+            ushort writeCount = (ushort)((pdu[7] << 8) | pdu[8]);
+            byte writeByteCount = pdu[9];
+
+            if (readCount < 1 || readCount > 125 || readStart + readCount > _holdingRegisters.Length)
+                return BuildError(pdu[0], 0x02);
+            if (writeCount < 1 || writeCount > 121 || writeStart + writeCount > _holdingRegisters.Length)
+                return BuildError(pdu[0], 0x02);
+            if (writeByteCount != writeCount * 2 || pdu.Length < 10 + writeByteCount)
+                return BuildError(pdu[0], 0x03);
+
+            for (int i = 0; i < writeCount; i++)
+            {
+                int offset = 10 + i * 2;
+                _holdingRegisters[writeStart + i] = (ushort)((pdu[offset] << 8) | pdu[offset + 1]);
+            }
+
+            int readByteCount = readCount * 2;
+            var result = new byte[2 + readByteCount];
+            result[0] = 0x17;
+            result[1] = (byte)readByteCount;
+            for (int i = 0; i < readCount; i++)
+            {
+                ushort value = _holdingRegisters[readStart + i];
+                result[2 + i * 2] = (byte)(value >> 8);
+                result[3 + i * 2] = (byte)value;
+            }
+            return result;
+        }
+
         private static byte[] BuildError(byte fc, byte exceptionCode)
             => new byte[] { (byte)(fc | 0x80), exceptionCode };
+
+        public void ResetData()
+        {
+            lock (_gate) SeedData();
+        }
+
+        public SimulatorMemoryRow[] GetSnapshot(string area, int start, int count)
+        {
+            if (count < 1) count = 1;
+            if (count > 100) count = 100;
+            if (start < 0) start = 0;
+
+            lock (_gate)
+            {
+                var rows = new SimulatorMemoryRow[count];
+                for (int i = 0; i < count; i++)
+                {
+                    int address = start + i;
+                    rows[i] = new SimulatorMemoryRow
+                    {
+                        Area = area,
+                        Address = address,
+                        Value = GetValueUnsafe(area, address)
+                    };
+                }
+                return rows;
+            }
+        }
+
+        public void SetValue(string area, int address, string value)
+        {
+            if (address < 0) throw new ArgumentOutOfRangeException(nameof(address));
+
+            lock (_gate)
+            {
+                switch (NormalizeArea(area))
+                {
+                    case "Holding Register":
+                        if (address >= _holdingRegisters.Length) throw new ArgumentOutOfRangeException(nameof(address));
+                        _holdingRegisters[address] = ParseUShort(value);
+                        break;
+                    case "Input Register":
+                        if (address >= _inputRegisters.Length) throw new ArgumentOutOfRangeException(nameof(address));
+                        _inputRegisters[address] = ParseUShort(value);
+                        break;
+                    case "Coil":
+                        if (address >= _coils.Length) throw new ArgumentOutOfRangeException(nameof(address));
+                        _coils[address] = ParseBool(value);
+                        break;
+                    case "Discrete Input":
+                        if (address >= _discreteInputs.Length) throw new ArgumentOutOfRangeException(nameof(address));
+                        _discreteInputs[address] = ParseBool(value);
+                        break;
+                    default:
+                        throw new ArgumentException("Unknown Modbus memory area: " + area, nameof(area));
+                }
+            }
+        }
+
+        private string GetValueUnsafe(string area, int address)
+        {
+            switch (NormalizeArea(area))
+            {
+                case "Holding Register":
+                    return address < _holdingRegisters.Length ? _holdingRegisters[address].ToString(System.Globalization.CultureInfo.InvariantCulture) : "-";
+                case "Input Register":
+                    return address < _inputRegisters.Length ? _inputRegisters[address].ToString(System.Globalization.CultureInfo.InvariantCulture) : "-";
+                case "Coil":
+                    return address < _coils.Length ? (_coils[address] ? "True" : "False") : "-";
+                case "Discrete Input":
+                    return address < _discreteInputs.Length ? (_discreteInputs[address] ? "True" : "False") : "-";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string NormalizeArea(string area)
+        {
+            if (string.Equals(area, "HR", StringComparison.OrdinalIgnoreCase)) return "Holding Register";
+            if (string.Equals(area, "IR", StringComparison.OrdinalIgnoreCase)) return "Input Register";
+            if (string.Equals(area, "COIL", StringComparison.OrdinalIgnoreCase)) return "Coil";
+            if (string.Equals(area, "DI", StringComparison.OrdinalIgnoreCase)) return "Discrete Input";
+            return area;
+        }
+
+        private static ushort ParseUShort(string value)
+        {
+            return ushort.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static bool ParseBool(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            value = value.Trim().ToLowerInvariant();
+            return value == "1" || value == "true" || value == "on" || value == "yes";
+        }
+
+        private static string FormatRequest(byte unitId, byte[] pdu)
+        {
+            if (pdu.Length == 0) return "Unit=" + unitId.ToString(System.Globalization.CultureInfo.InvariantCulture) + " empty request";
+            return "Unit=" + unitId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + " FC=0x" + pdu[0].ToString("X2", System.Globalization.CultureInfo.InvariantCulture)
+                + " PDU=" + BitConverter.ToString(pdu).Replace("-", " ");
+        }
 
         public async ValueTask DisposeAsync()
         {
             await StopAsync().ConfigureAwait(false);
         }
+    }
+
+    public sealed class SimulatorMemoryRow
+    {
+        public string Area { get; set; } = string.Empty;
+        public int Address { get; set; }
+        public string Value { get; set; } = string.Empty;
     }
 }

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.Robot.Staubli</RootNamespace>
+    <AssemblyName>Nexus.Robot.Staubli</AssemblyName>
+    <Description>Nexus Staubli — VAL3 protocol implementation for Staubli robots</Description>
+    <Version>1.0.0</Version>
+    <Authors>Nexus Contributors</Authors>
+    <Company>Nexus</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial-communication robot protocol staubli VAL3</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
+  </ItemGroup>
+</Project>

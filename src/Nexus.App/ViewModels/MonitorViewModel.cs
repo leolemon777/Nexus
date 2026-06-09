@@ -432,7 +432,7 @@ namespace Nexus.App.ViewModels
             _disposed = true;
             SaveTags();
             SaveMonitoredAddresses();
-            _service.DisposeAsync().AsTask().Wait();
+            _service.Dispose();
             GC.SuppressFinalize(this);
         }
     }

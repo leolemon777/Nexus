@@ -9,7 +9,7 @@ namespace Nexus.Modbus
 {
     /// <summary>
     /// Modbus TCP 客户端 — 完整实现。
-    /// 支持功能码 01-06, 15, 16, 23。
+    /// 支持功能码 01-06, 15, 16, 22, 23。
     /// 支持地址前缀（0x/1x/3x/4x）、字节序选项、批量读写、报文日志、连接事件。
     /// </summary>
     public class ModbusTcpClient : TcpDeviceBase, IBatchReadWrite, ISubscribeDevice
@@ -96,6 +96,16 @@ namespace Nexus.Modbus
         private static ushort ParseAddress(string address) => ParseAddressEx(address).address;
 
         // ── 响应检查 ──────────────────────────────
+
+        /// <summary>从 MBAP 响应中提取 PDU（去掉 7 字节 MBAP 头）。</summary>
+        private static byte[] ExtractPdu(byte[] response)
+        {
+            if (response == null || response.Length <= 7)
+                return Array.Empty<byte>();
+            byte[] pdu = new byte[response.Length - 7];
+            Buffer.BlockCopy(response, 7, pdu, 0, pdu.Length);
+            return pdu;
+        }
 
         private static OperateResult CheckResponse(byte[] response)
         {
@@ -335,6 +345,227 @@ namespace Nexus.Modbus
         }
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
+
+        // ═══════════════════════════════════════════
+        //  FC08 — 诊断 (Diagnostics)
+        // ═══════════════════════════════════════════
+
+        /// <summary>FC08 子功能码。</summary>
+        public enum DiagnosticsSubFunction : ushort
+        {
+            /// <summary>返回查询数据（回环测试）。</summary>
+            ReturnQueryData = 0x0000,
+            /// <summary>重启通信选项。</summary>
+            RestartCommunications = 0x0001,
+            /// <summary>返回诊断寄存器。</summary>
+            ReturnDiagnosticRegister = 0x0002,
+            /// <summary>改变 ASCII 输入定界符。</summary>
+            ChangeAsciiInputDelimiter = 0x0003,
+            /// <summary>强制监听模式。</summary>
+            ForceListenOnlyMode = 0x0004,
+            /// <summary>清除计数器和诊断寄存器。</summary>
+            ClearCounters = 0x000A,
+            /// <summary>返回总线消息计数。</summary>
+            ReturnBusMessageCount = 0x000B,
+            /// <summary>返回总线通信错误计数。</summary>
+            ReturnBusCommErrorCount = 0x000C,
+            /// <summary>返回总线异常错误计数。</summary>
+            ReturnBusExceptionErrorCount = 0x000D,
+            /// <summary>返回从站消息计数。</summary>
+            ReturnSlaveMessageCount = 0x000E,
+            /// <summary>返回从站无响应计数。</summary>
+            ReturnSlaveNoResponseCount = 0x000F,
+            /// <summary>返回从站 NAK 计数。</summary>
+            ReturnSlaveNAKCount = 0x0010,
+            /// <summary>返回从站忙计数。</summary>
+            ReturnSlaveBusyCount = 0x0011,
+            /// <summary>返回总线字符过载计数。</summary>
+            ReturnBusCharOverrunCount = 0x0012,
+            /// <summary>清除过载计数器和计数器。</summary>
+            ClearOverrunCounters = 0x0014,
+            /// <summary>返回 I/O 服务器发送错误计数。</summary>
+            ReturnIopOverrunCount = 0x0015,
+        }
+
+        /// <summary>
+        /// FC08 诊断功能 — 发送诊断子功能码并返回响应数据。
+        /// </summary>
+        /// <param name="subFunction">诊断子功能码。</param>
+        /// <param name="data">发送数据（部分子功能需要特定数据）。</param>
+        /// <returns>响应数据（2 字节）。</returns>
+        public OperateResult<ushort> Diagnostics(DiagnosticsSubFunction subFunction, ushort data = 0x0000)
+        {
+            byte[] pdu =
+            {
+                0x08,
+                (byte)((ushort)subFunction >> 8), (byte)(ushort)subFunction,
+                (byte)(data >> 8), (byte)data
+            };
+
+            var result = SendAndReceive(BuildMbap(pdu));
+            if (!result.IsSuccess) return OperateResult<ushort>.Failed(result.Message);
+            var check = CheckResponse(result.Content);
+            if (!check.IsSuccess) return OperateResult<ushort>.Failed(check.Message);
+
+            byte[] respPdu = ExtractPdu(result.Content);
+            if (respPdu.Length < 5)
+                return OperateResult<ushort>.Failed("FC08 响应长度不足");
+
+            ushort respData = (ushort)((respPdu[3] << 8) | respPdu[4]);
+            return OperateResult<ushort>.Success(respData);
+        }
+
+        /// <summary>回环测试（FC08 子功能 0x0000）。</summary>
+        public OperateResult<ushort> LoopbackTest(ushort testData = 0xA5A5)
+            => Diagnostics(DiagnosticsSubFunction.ReturnQueryData, testData);
+
+        /// <summary>清除所有计数器（FC08 子功能 0x000A）。</summary>
+        public OperateResult<ushort> ClearAllCounters()
+            => Diagnostics(DiagnosticsSubFunction.ClearCounters, 0x0000);
+
+        /// <summary>返回总线消息计数。</summary>
+        public OperateResult<ushort> ReadBusMessageCount()
+            => Diagnostics(DiagnosticsSubFunction.ReturnBusMessageCount, 0x0000);
+
+        /// <summary>返回从站消息计数。</summary>
+        public OperateResult<ushort> ReadSlaveMessageCount()
+            => Diagnostics(DiagnosticsSubFunction.ReturnSlaveMessageCount, 0x0000);
+
+        // ═══════════════════════════════════════════
+        //  FC43/14 — 读设备标识 (Read Device Identification)
+        // ═══════════════════════════════════════════
+
+        /// <summary>FC43 ReadDeviceId 读取级别。</summary>
+        public enum DeviceIdReadLevel : byte
+        {
+            /// <summary>基本标识（厂商名 + 产品代码 + 版本）。</summary>
+            Basic = 0x01,
+            /// <summary>常规标识（基本 + 扩展信息）。</summary>
+            Regular = 0x02,
+            /// <summary>扩展标识（全部对象）。</summary>
+            Extended = 0x03,
+        }
+
+        /// <summary>设备标识信息。</summary>
+        public sealed class DeviceIdentification
+        {
+            /// <summary>读取级别。</summary>
+            public byte ReadLevel { get; set; }
+            /// <summary>符合性等级。</summary>
+            public byte ConformityLevel { get; set; }
+            /// <summary>是否还有更多标识对象。</summary>
+            public bool MoreFollows { get; set; }
+            /// <summary>下一对象 ID。</summary>
+            public byte NextObjectId { get; set; }
+            /// <summary>标识对象数量。</summary>
+            public int ObjectCount { get; set; }
+            /// <summary>厂商名称（ObjectId=0x00）。</summary>
+            public string VendorName { get; set; } = string.Empty;
+            /// <summary>产品代码（ObjectId=0x01）。</summary>
+            public string ProductCode { get; set; } = string.Empty;
+            /// <summary>主/次版本（ObjectId=0x02）。</summary>
+            public string MajorMinorRevision { get; set; } = string.Empty;
+            /// <summary>设备 URL（ObjectId=0x03）。</summary>
+            public string DeviceUrl { get; set; } = string.Empty;
+            /// <summary>设备名称（ObjectId=0x04）。</summary>
+            public string ProductName { get; set; } = string.Empty;
+            /// <summary>设备型号（ObjectId=0x05）。</summary>
+            public string ModelName { get; set; } = string.Empty;
+            /// <summary>用户应用名称（ObjectId=0x06）。</summary>
+            public string UserApplicationName { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// FC43/14 — 读取设备标识（Encapsulated Interface Transport / Read Device ID）。
+        /// </summary>
+        public OperateResult<DeviceIdentification> ReadDeviceId(DeviceIdReadLevel readLevel = DeviceIdReadLevel.Basic, byte objectId = 0x00)
+        {
+            byte[] pdu =
+            {
+                0x2B, 0x0E,
+                (byte)readLevel,
+                objectId
+            };
+
+            var result = SendAndReceive(BuildMbap(pdu));
+            if (!result.IsSuccess) return OperateResult<DeviceIdentification>.Failed(result.Message);
+            var check = CheckResponse(result.Content);
+            if (!check.IsSuccess) return OperateResult<DeviceIdentification>.Failed(check.Message);
+
+            byte[] respPdu = ExtractPdu(result.Content);
+            if (respPdu.Length < 9)
+                return OperateResult<DeviceIdentification>.Failed("FC43 响应长度不足");
+
+            try
+            {
+                var info = new DeviceIdentification
+                {
+                    ReadLevel = respPdu[2],
+                    ConformityLevel = respPdu[3],
+                    MoreFollows = respPdu[4] != 0,
+                    NextObjectId = respPdu[5],
+                    ObjectCount = respPdu[6]
+                };
+
+                int offset = 7;
+                for (int i = 0; i < info.ObjectCount && offset + 2 < respPdu.Length; i++)
+                {
+                    byte objId = respPdu[offset++];
+                    if (offset >= respPdu.Length) break;
+                    byte objLen = respPdu[offset++];
+                    if (offset + objLen > respPdu.Length) break;
+                    string objValue = System.Text.Encoding.ASCII.GetString(respPdu, offset, objLen);
+                    offset += objLen;
+
+                    switch (objId)
+                    {
+                        case 0x00: info.VendorName = objValue; break;
+                        case 0x01: info.ProductCode = objValue; break;
+                        case 0x02: info.MajorMinorRevision = objValue; break;
+                        case 0x03: info.DeviceUrl = objValue; break;
+                        case 0x04: info.ProductName = objValue; break;
+                        case 0x05: info.ModelName = objValue; break;
+                        case 0x06: info.UserApplicationName = objValue; break;
+                    }
+                }
+
+                return OperateResult<DeviceIdentification>.Success(info);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<DeviceIdentification>.Failed($"FC43 响应解析失败: {ex.Message}");
+            }
+        }
+
+        // ═══════════════════════════════════════════
+        //  FC23 — 读写多个寄存器 (Read/Write Multiple Registers)
+        // ═══════════════════════════════════════════
+
+        // (已有 ReadWriteMultipleRegisters 方法，见下方)
+
+        // ═══════════════════════════════════════════
+        //  FC22 — 掩码写寄存器 (Mask Write Register)
+        // ═══════════════════════════════════════════
+
+        /// <summary>
+        /// 原子掩码写保持寄存器 (FC22)。
+        /// 新值按 Modbus 规范计算为: (当前值 AND andMask) OR (orMask AND NOT andMask)。
+        /// </summary>
+        public OperateResult MaskWriteRegister(string address, ushort andMask, ushort orMask)
+        {
+            ushort addr = ParseAddress(address);
+            byte[] pdu =
+            {
+                0x16,
+                (byte)(addr >> 8), (byte)addr,
+                (byte)(andMask >> 8), (byte)andMask,
+                (byte)(orMask >> 8), (byte)orMask
+            };
+
+            var result = SendAndReceive(BuildMbap(pdu));
+            if (!result.IsSuccess) return result;
+            return CheckResponse(result.Content);
+        }
 
         // ═══════════════════════════════════════════
         //  FC15 — 写多个线圈 (Write Multiple Coils)

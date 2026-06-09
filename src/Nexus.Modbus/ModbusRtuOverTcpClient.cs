@@ -9,7 +9,7 @@ namespace Nexus.Modbus
     /// <summary>
     /// Modbus RTU Over TCP 客户端 — 通过 TCP 传输 RTU 格式报文。
     /// <para>RTU-over-TCP = RTU ADU (Station+FC+Data+CRC16) sent over TCP socket, no MBAP header.</para>
-    /// <para>支持功能码: FC01, FC02, FC03, FC04, FC05, FC06, FC15, FC16, FC23。</para>
+    /// <para>支持功能码: FC01, FC02, FC03, FC04, FC05, FC06, FC15, FC16, FC22, FC23。</para>
     /// <para>支持地址前缀（0x/1x/3x/4x）、字节序选项、字符串编码。</para>
     /// </summary>
     public class ModbusRtuOverTcpClient : TcpDeviceBase
@@ -607,6 +607,27 @@ namespace Nexus.Modbus
         }
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
+
+        // ═══════════════════════════════════════════
+        //  FC22 — 掩码写寄存器 (Mask Write Register)
+        // ═══════════════════════════════════════════
+
+        /// <summary>
+        /// 原子掩码写保持寄存器 (FC22)。
+        /// 新值按 Modbus 规范计算为: (当前值 AND andMask) OR (orMask AND NOT andMask)。
+        /// </summary>
+        public OperateResult MaskWriteRegister(string address, ushort andMask, ushort orMask)
+        {
+            ushort addr = ParseAddress(address);
+            var result = RtuSendAndReceive(new byte[]
+            {
+                0x16,
+                (byte)(addr >> 8), (byte)addr,
+                (byte)(andMask >> 8), (byte)andMask,
+                (byte)(orMask >> 8), (byte)orMask
+            });
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
 
         // ═══════════════════════════════════════════
         //  FC15 — 写多个线圈 (Write Multiple Coils)

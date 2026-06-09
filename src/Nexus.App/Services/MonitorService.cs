@@ -112,7 +112,7 @@ namespace Nexus.App.Services
         }
     }
 
-    public sealed class MonitorService : IAsyncDisposable
+    public sealed class MonitorService : IAsyncDisposable, IDisposable
     {
         private readonly ConcurrentDictionary<Guid, TagEntry> _tags = new();
         private readonly ConcurrentDictionary<Guid, MonitoredAddress> _monitoredAddresses = new();
@@ -150,6 +150,14 @@ namespace Nexus.App.Services
             if (_pollLoop is not null)
                 try { await _pollLoop; } catch (OperationCanceledException) { }
             _cts.Dispose();
+            _cts = null;
+            _pollLoop = null;
+        }
+
+        public void Stop()
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
             _cts = null;
             _pollLoop = null;
         }
@@ -356,6 +364,13 @@ namespace Nexus.App.Services
         public async ValueTask DisposeAsync()
         {
             await StopAsync().ConfigureAwait(false);
+            StopCsvLog();
+            GC.SuppressFinalize(this);
+        }
+
+        public void Dispose()
+        {
+            Stop();
             StopCsvLog();
             GC.SuppressFinalize(this);
         }

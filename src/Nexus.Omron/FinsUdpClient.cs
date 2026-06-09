@@ -614,5 +614,77 @@ namespace Nexus.Omron
         public Task<OperateResult> BatchWriteAsync(
             IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
             => Task.Run(() => BatchWrite(items), cancellationToken);
+
+        // ═══════════════════════════════════════════
+        //  FINS 设备发现（UDP 广播）
+        // ═══════════════════════════════════════════
+
+        /// <summary>
+        /// 通过 UDP 广播发现 FINS 网络 devices。
+        /// 发送 FINS Controller Read 广播命令，收集响应中的设备信息。
+        /// </summary>
+        /// <param name="broadcastPort">广播端口（默认 9600）。</param>
+        /// <param name="timeoutMs">等待响应超时（毫秒）。</param>
+        /// <returns>发现的设备列表。</returns>
+        public OperateResult<FinsDiscoveredDevice[]> DiscoverDevices(string broadcastIp = "255.255.255.255", int timeoutMs = 3000)
+        {
+            try
+            {
+                // FINS 广播帧: ICF=0xC0(广播) + RSV=0 + GCT=2 + DNA=0 + DA1=0xFF(广播) + DA2=0
+                byte sid = unchecked(++ServiceId);
+                byte[] discoveryFrame =
+                {
+                    0xC0, // ICF: 广播帧
+                    0x00, // RSV
+                    0x02, // GCT
+                    0x00, // DNA: 本地网络
+                    0xFF, // DA1: 广播地址
+                    0x00, // DA2: CPU
+                    SNA,  // SNA
+                    SA1,  // SA1
+                    SA2,  // SA2
+                    sid,  // SID
+                    0x05, 0x01 // MRC=0x05, SRC=0x01 (Controller Read)
+                };
+
+                var respResult = SendBroadcast(discoveryFrame, broadcastIp);
+
+                if (!respResult.IsSuccess)
+                    return OperateResult<FinsDiscoveredDevice[]>.Failed(respResult.Message);
+
+                var devices = new List<FinsDiscoveredDevice>();
+                byte[] resp = respResult.Content;
+
+                if (resp.Length >= 14 && (resp[0] & 0x40) != 0)
+                {
+                    var device = new FinsDiscoveredDevice
+                    {
+                        NetworkAddress = resp[6],
+                        NodeNumber = resp[7],
+                        UnitNumber = resp[8],
+                    };
+
+                    if (resp.Length >= 36)
+                    {
+                        device.ControllerModel = Encoding.ASCII.GetString(resp, 14, Math.Min(20, resp.Length - 14)).TrimEnd('\0', ' ');
+                    }
+                    else if (resp.Length > 12)
+                    {
+                        device.ControllerModel = Encoding.ASCII.GetString(resp, 12, Math.Min(20, resp.Length - 12)).TrimEnd('\0', ' ');
+                    }
+
+                    devices.Add(device);
+                }
+
+                return OperateResult<FinsDiscoveredDevice[]>.Success(devices.ToArray());
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<FinsDiscoveredDevice[]>.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>递增服务 ID。</summary>
+        private byte ServiceId;
     }
 }

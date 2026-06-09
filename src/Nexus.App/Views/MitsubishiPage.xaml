@@ -5,7 +5,6 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
 
-            <!-- 连接配置 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
                     <TextBlock Text="连接配置" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
@@ -16,13 +15,33 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Orientation="Horizontal">
-                            <TextBlock Text="型号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox Width="120" ItemsSource="{Binding ModelPresets}" SelectedIndex="0" Margin="0,0,16,0"/>
-                            <TextBlock Text="IP" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Style="{DynamicResource Input}" Width="140" Margin="0,0,16,0" Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}"/>
-                            <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Style="{DynamicResource Input}" Width="80" Text="{Binding Port, UpdateSourceTrigger=LostFocus}"/>
+                        <StackPanel Grid.Column="0">
+                            <WrapPanel Margin="0,0,0,8">
+                                <TextBlock Text="协议" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Width="160" ItemsSource="{Binding TransportPresets}" SelectedItem="{Binding SelectedTransport, Mode=TwoWay}" Margin="0,0,16,0"/>
+                                <TextBlock Text="型号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Width="150" ItemsSource="{Binding ModelPresets}" SelectedItem="{Binding SelectedModel, Mode=TwoWay}" Margin="0,0,16,0"/>
+                                <TextBlock Text="IP" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="140" Margin="0,0,16,0" Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0" Text="{Binding Port, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="超时" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="80" Text="{Binding Timeout, UpdateSourceTrigger=LostFocus}"/>
+                            </WrapPanel>
+                            <WrapPanel>
+                                <TextBlock Text="网络号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding NetworkNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="PC号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding PcNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="目标站" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="64" Margin="0,0,16,0" Text="{Binding DestinationStationNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="等待单位" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="64" Margin="0,0,16,0" Text="{Binding WaitTimeUnit, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="PLC号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding PlcNumber, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="字节序" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Width="150" ItemsSource="{Binding ByteOrderPresets}" SelectedItem="{Binding SelectedByteOrder, Mode=TwoWay}"/>
+                            </WrapPanel>
                         </StackPanel>
                         <Button Grid.Column="1" Content="连接" Style="{DynamicResource Button.Primary}" Margin="12,0,0,0" Command="{Binding ConnectCommand}"/>
                         <Button Grid.Column="2" Content="断开" Style="{DynamicResource Button.Ghost}" Margin="8,0,0,0" Command="{Binding DisconnectCmdCommand}"/>
@@ -45,7 +64,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- 数据读写 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
                     <TextBlock Text="数据读写" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
@@ -62,7 +80,6 @@
                         <ComboBox Grid.Column="3" MinWidth="110" ItemsSource="{Binding DataTypes}" SelectedItem="{Binding DataType, Mode=TwoWay}"/>
                     </Grid>
 
-                    <!-- 读取 -->
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -78,7 +95,6 @@
                         </Border>
                     </Grid>
 
-                    <!-- 写入 -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -92,7 +108,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- 通讯日志 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
                     <Grid Margin="0,0,0,6">

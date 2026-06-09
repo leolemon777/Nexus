@@ -1,14 +1,17 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Options;
+using Microsoft.Win32;
 using Nexus;
 using Nexus.App.Configuration;
+using Nexus.App.Services;
 using Nexus.Modbus;
 
 namespace Nexus.App.ViewModels;
@@ -35,6 +38,7 @@ namespace Nexus.App.ViewModels;
 public partial class ModbusTcpViewModel : ObservableObject, IDisposable
 {
     private readonly ModbusOptions _options;
+    private readonly PacketRecorderService _packetRecorder;
 
     // ── 输入参数 ──────────────────────────────
     [ObservableProperty] private string _ipAddress = "127.0.0.1";
@@ -86,9 +90,10 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     /// <summary>内置 Server 端口（来自 appsettings.json 的 <c>Modbus:VirtualServerPort</c>）。</summary>
     public int VirtualServerPort => _options.VirtualServerPort;
 
-    public ModbusTcpViewModel(IOptions<ModbusOptions> options)
+    public ModbusTcpViewModel(IOptions<ModbusOptions> options, PacketRecorderService packetRecorder)
     {
         _options = options.Value;
+        _packetRecorder = packetRecorder;
         _ipAddress = _options.DefaultIp;
         _port = _options.DefaultPort;
         _slaveId = _options.DefaultSlaveId;
@@ -355,7 +360,11 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ClearLog() => LogLines.Clear();
+    private void ClearLog()
+    {
+        LogLines.Clear();
+        _packetRecorder.Clear();
+    }
 
     // ═══════════════════════════════════════════
     //  事件订阅（client）
@@ -377,8 +386,8 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         client.OnDisconnected    -= Client_OnDisconnected;
     }
 
-    private void Client_OnMessageSent(object? sender, string hex)     => AppendLog($"[TX] {hex}");
-    private void Client_OnMessageReceived(object? sender, string hex) => AppendLog($"[RX] {hex}");
+    private void Client_OnMessageSent(object? sender, string hex)     => RecordPacket("TX", hex, ModbusPacketDirection.Request);
+    private void Client_OnMessageReceived(object? sender, string hex) => RecordPacket("RX", hex, ModbusPacketDirection.Response);
     private void Client_OnError(object? sender, string e)            => AppendLog($"[ERR] {e}");
 
     private void Client_OnDisconnected(object? sender, EventArgs e)
@@ -417,6 +426,77 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         {
             int remove = LogLines.Count - LogCap;
             for (int i = 0; i < remove; i++) LogLines.RemoveAt(0);
+        }
+    }
+
+    private void RecordPacket(string direction, string hex, ModbusPacketDirection packetDirection)
+    {
+        // 解析在任意线程（线程安全），日志输出回 UI 线程
+        if (_dispatcher.CheckAccess())
+        {
+            _packetRecorder.RecordMbap("modbus-tcp", direction, hex, packetDirection, AppendLog);
+        }
+        else
+        {
+            string hexCopy = hex;
+            _dispatcher.BeginInvoke(new Action(() =>
+                _packetRecorder.RecordMbap("modbus-tcp", direction, hexCopy, packetDirection, AppendLog)));
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  导出
+    // ═══════════════════════════════════════════
+
+    [RelayCommand]
+    private void ExportLog()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            FileName = $"Nexus_ModbusTcp_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
+        };
+
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            File.WriteAllLines(dlg.FileName, LogLines);
+            AppendLog("[OK] 日志已导出: " + dlg.FileName);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("[ERR] 导出日志失败: " + ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void ExportPacketJsonl()
+    {
+        if (_packetRecorder.Count == 0)
+        {
+            AppendLog("[WARN] 没有可导出的 Modbus 报文。");
+            return;
+        }
+
+        var dlg = new SaveFileDialog
+        {
+            Filter = "JSON Lines (*.jsonl)|*.jsonl|All files (*.*)|*.*",
+            FileName = $"Nexus_ModbusTcp_Packets_{DateTime.Now:yyyyMMdd_HHmmss}.jsonl"
+        };
+
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            if (_packetRecorder.ExportJsonl(dlg.FileName))
+                AppendLog("[OK] 报文 JSONL 已导出: " + dlg.FileName);
+            else
+                AppendLog("[ERR] 导出 JSONL 失败");
+        }
+        catch (Exception ex)
+        {
+            AppendLog("[ERR] 导出 JSONL 失败: " + ex.Message);
         }
     }
 

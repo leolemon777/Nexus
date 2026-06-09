@@ -8,7 +8,7 @@ namespace Nexus.Modbus
 {
     /// <summary>
     /// Modbus RTU 协议客户端 — 通过串口传输 RTU 格式报文。
-    /// <para>支持功能码: FC01, FC02, FC03, FC04, FC05, FC06, FC15, FC16, FC23。</para>
+    /// <para>支持功能码: FC01, FC02, FC03, FC04, FC05, FC06, FC15, FC16, FC22, FC23。</para>
     /// <para>RTU 帧结构: [Station(1)][FunctionCode(1)][Data(N)][CRC16(2)]</para>
     /// <para>继承 SerialDeviceBase，完全利用其原生异步能力，消除 Task.Run 阻塞。</para>
     /// </summary>
@@ -402,7 +402,7 @@ namespace Nexus.Modbus
         }
 
         // ═══════════════════════════════════════════
-        //  写入实现 (FC05, FC06, FC15, FC16, FC23)
+        //  写入实现 (FC05, FC06, FC15, FC16, FC22, FC23)
         // ═══════════════════════════════════════════
 
         public override OperateResult Write(string address, bool value)
@@ -437,6 +437,37 @@ namespace Nexus.Modbus
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public Task<OperateResult> WriteAsync(string address, ushort value) => WriteAsync(address, (short)value);
+
+        /// <summary>
+        /// 原子掩码写保持寄存器 (FC22)。
+        /// 新值按 Modbus 规范计算为: (当前值 AND andMask) OR (orMask AND NOT andMask)。
+        /// </summary>
+        public OperateResult MaskWriteRegister(string address, ushort andMask, ushort orMask)
+        {
+            ushort addr = ParseAddress(address);
+            var result = SendRtuPdu(new byte[]
+            {
+                0x16,
+                (byte)(addr >> 8), (byte)addr,
+                (byte)(andMask >> 8), (byte)andMask,
+                (byte)(orMask >> 8), (byte)orMask
+            });
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        /// <summary>异步原子掩码写保持寄存器 (FC22)。</summary>
+        public async Task<OperateResult> MaskWriteRegisterAsync(string address, ushort andMask, ushort orMask)
+        {
+            ushort addr = ParseAddress(address);
+            var result = await SendRtuPduAsync(new byte[]
+            {
+                0x16,
+                (byte)(addr >> 8), (byte)addr,
+                (byte)(andMask >> 8), (byte)andMask,
+                (byte)(orMask >> 8), (byte)orMask
+            }, CancellationToken.None).ConfigureAwait(false);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
 
         public override OperateResult Write(string address, int value)
         {

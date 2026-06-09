@@ -42,6 +42,11 @@ public partial class App : Application
                 // ViewModels
                 services.AddSingleton<MainViewModel>();
                 services.AddTransient<ModbusTcpViewModel>();
+                services.AddTransient<ModbusUdpViewModel>();
+                services.AddTransient<ModbusRtuViewModel>();
+                services.AddTransient<ModbusAsciiViewModel>();
+                services.AddTransient<ModbusRtuOverTcpViewModel>();
+                services.AddTransient<ModbusAsciiOverTcpViewModel>();
                 services.AddTransient<SiemensViewModel>();
                 services.AddTransient<MitsubishiViewModel>();
                 services.AddTransient<MitsubishiFxViewModel>();
@@ -71,6 +76,7 @@ public partial class App : Application
                 services.AddSingleton<AlarmViewModel>();
                 services.AddSingleton<RecipeViewModel>();
                 services.AddSingleton<DataLoggerViewModel>();
+                services.AddSingleton<PacketRecorderService>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

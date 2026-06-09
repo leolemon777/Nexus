@@ -91,6 +91,7 @@ internal sealed class ModbusUdpTestServer : IDisposable
                 0x06 => WriteSingleRegister(pdu),
                 0x0F => WriteMultipleCoils(pdu),
                 0x10 => WriteMultipleRegisters(pdu),
+                0x16 => MaskWriteRegister(pdu),
                 0x17 => ReadWriteMultiple(pdu),
                 _ => BuildException(fc, 1)
             };
@@ -174,6 +175,19 @@ internal sealed class ModbusUdpTestServer : IDisposable
         return new byte[] { 0x10, pdu[1], pdu[2], pdu[3], pdu[4] };
     }
 
+    private byte[] MaskWriteRegister(byte[] pdu)
+    {
+        ushort addr = (ushort)((pdu[1] << 8) | pdu[2]);
+        ushort andMask = (ushort)((pdu[3] << 8) | pdu[4]);
+        ushort orMask = (ushort)((pdu[5] << 8) | pdu[6]);
+        lock (_lock)
+        {
+            ushort current = _holdingRegisters[addr];
+            _holdingRegisters[addr] = (ushort)((current & andMask) | (orMask & ~andMask));
+        }
+        return new byte[] { 0x16, pdu[1], pdu[2], pdu[3], pdu[4], pdu[5], pdu[6] };
+    }
+
     private byte[] ReadWriteMultiple(byte[] pdu)
     {
         ushort readAddr = (ushort)((pdu[1] << 8) | pdu[2]);
@@ -246,13 +260,11 @@ public class ModbusUdpConnectionTests
 
 public class ModbusUdpReadTests
 {
-    private const int PortBase = 17300;
-
     [Fact]
     public void ReadInt16_HoldingRegister()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(100, 0x1234);
         server.Start();
 
@@ -267,8 +279,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadUInt16_HoldingRegister()
     {
-        int port = PortBase + 2;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(200, 60000);
         server.Start();
 
@@ -283,8 +295,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadInt32_BigEndian()
     {
-        int port = PortBase + 3;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(300, 0x1234);
         server.SetHoldingRegister(301, 0x5678);
         server.Start();
@@ -303,8 +315,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadFloat_BigEndian()
     {
-        int port = PortBase + 4;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(400, 0x3F80);
         server.SetHoldingRegister(401, 0x0000);
         server.Start();
@@ -323,8 +335,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadBool_Coil()
     {
-        int port = PortBase + 5;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetCoil(10, true);
         server.SetCoil(11, false);
         server.Start();
@@ -339,8 +351,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadBool_DiscreteInput()
     {
-        int port = PortBase + 6;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetDiscreteInput(5, true);
         server.Start();
 
@@ -353,8 +365,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadBools_MultipleCoils()
     {
-        int port = PortBase + 7;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetCoil(0, true);
         server.SetCoil(2, true);
         server.SetCoil(9, true);
@@ -375,8 +387,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadInputRegister_WithPrefix()
     {
-        int port = PortBase + 8;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetInputRegister(50, 9999);
         server.Start();
 
@@ -391,8 +403,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadString_ParsesAscii()
     {
-        int port = PortBase + 9;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(600, 0x4142);
         server.SetHoldingRegister(601, 0x4300);
         server.Start();
@@ -408,8 +420,8 @@ public class ModbusUdpReadTests
     [Fact]
     public void ReadBytes_ReturnsRawData()
     {
-        int port = PortBase + 10;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(700, 0xDEAD);
         server.SetHoldingRegister(701, 0xBEEF);
         server.Start();
@@ -425,13 +437,11 @@ public class ModbusUdpReadTests
 
 public class ModbusUdpWriteTests
 {
-    private const int PortBase = 17400;
-
     [Fact]
     public void WriteRead_Int16()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -448,8 +458,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_UInt16()
     {
-        int port = PortBase + 2;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -464,8 +474,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_Int32()
     {
-        int port = PortBase + 3;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -480,8 +490,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_Float()
     {
-        int port = PortBase + 4;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -496,8 +506,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_Bool_Coil()
     {
-        int port = PortBase + 5;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -513,8 +523,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_String()
     {
-        int port = PortBase + 6;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -529,8 +539,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteRead_Bytes()
     {
-        int port = PortBase + 7;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -546,8 +556,8 @@ public class ModbusUdpWriteTests
     [Fact]
     public void WriteMultipleCoils_SendsFC15()
     {
-        int port = PortBase + 8;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -569,13 +579,11 @@ public class ModbusUdpWriteTests
 
 public class ModbusUdpEndiannessTests
 {
-    private const int PortBase = 17500;
-
     [Fact]
     public void ReadInt32_LittleEndian_DCBA()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(100, 0x7856);
         server.SetHoldingRegister(101, 0x3412);
         server.Start();
@@ -594,8 +602,8 @@ public class ModbusUdpEndiannessTests
     [Fact]
     public void ReadInt32_MidBigEndian_BADC()
     {
-        int port = PortBase + 2;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(100, 0x3412);
         server.SetHoldingRegister(101, 0x7856);
         server.Start();
@@ -614,8 +622,8 @@ public class ModbusUdpEndiannessTests
     [Fact]
     public void ReadInt32_MidLittleEndian_CDAB()
     {
-        int port = PortBase + 3;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(100, 0x5678);
         server.SetHoldingRegister(101, 0x1234);
         server.Start();
@@ -634,8 +642,8 @@ public class ModbusUdpEndiannessTests
     [Fact]
     public void WriteInt32_LittleEndian_SendsCorrectBytes()
     {
-        int port = PortBase + 4;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1)
@@ -653,13 +661,30 @@ public class ModbusUdpEndiannessTests
 
 public class ModbusUdpFC23Tests
 {
-    private const int PortBase = 17600;
+    [Fact]
+    public void MaskWriteRegister_FC22()
+    {
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
+        server.SetHoldingRegister(50, 0x1234);
+        server.Start();
+
+        using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
+        client.Connect();
+
+        var result = client.MaskWriteRegister("50", 0xFF00, 0x00F0);
+        Assert.True(result.IsSuccess, result.Message);
+
+        var readBack = client.ReadUInt16("50");
+        Assert.True(readBack.IsSuccess, readBack.Message);
+        Assert.Equal((ushort)0x12F0, readBack.Content);
+    }
 
     [Fact]
     public void ReadWriteMultipleRegisters_FC23()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(50, 0xABCD);
         server.Start();
 
@@ -681,13 +706,11 @@ public class ModbusUdpFC23Tests
 
 public class ModbusUdpAddressPrefixTests
 {
-    private const int PortBase = 17700;
-
     [Fact]
     public void Prefix_0xxxx_ReadsCoils()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetCoil(42, true);
         server.Start();
 
@@ -700,8 +723,8 @@ public class ModbusUdpAddressPrefixTests
     [Fact]
     public void Prefix_1xxxx_ReadsDiscreteInputs()
     {
-        int port = PortBase + 2;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetDiscreteInput(7, true);
         server.Start();
 
@@ -714,8 +737,8 @@ public class ModbusUdpAddressPrefixTests
     [Fact]
     public void Prefix_3xxxx_ReadsInputRegisters()
     {
-        int port = PortBase + 3;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetInputRegister(33, 42);
         server.Start();
 
@@ -728,8 +751,8 @@ public class ModbusUdpAddressPrefixTests
     [Fact]
     public void Prefix_4xxxx_ReadsHoldingRegisters()
     {
-        int port = PortBase + 4;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(10, 12345);
         server.Start();
 
@@ -742,8 +765,8 @@ public class ModbusUdpAddressPrefixTests
     [Fact]
     public void NoPrefix_DefaultsToHoldingRegister()
     {
-        int port = PortBase + 5;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(0, 999);
         server.Start();
 
@@ -756,13 +779,11 @@ public class ModbusUdpAddressPrefixTests
 
 public class ModbusUdpStringEncodedTests
 {
-    private const int PortBase = 17800;
-
     [Fact]
     public void ReadStringEncoded_Utf8()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(0, 0x4869);
         server.Start();
 
@@ -780,8 +801,8 @@ public class ModbusUdpStringEncodedTests
     [Fact]
     public void WriteStringEncoded_Utf8()
     {
-        int port = PortBase + 2;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1)
@@ -801,13 +822,11 @@ public class ModbusUdpStringEncodedTests
 
 public class ModbusUdpMultipleSequentialTests
 {
-    private const int PortBase = 17900;
-
     [Fact]
     public void MultipleSequentialOperations()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
@@ -825,13 +844,11 @@ public class ModbusUdpMultipleSequentialTests
 
 public class ModbusUdpCustomPduTests
 {
-    private const int PortBase = 18000;
-
     [Fact]
     public void SendCustomModbus_ReturnsResponsePdu()
     {
-        int port = PortBase + 1;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.SetHoldingRegister(0, 0x1234);
         server.Start();
 
@@ -847,12 +864,10 @@ public class ModbusUdpCustomPduTests
 
 public class ModbusUdpEventTests
 {
-    private const int PortBase = 18100;
-
     [Fact]
     public void OnConnected_FiresOnConnect()
     {
-        int port = PortBase + 1;
+        int port = 18101;
         bool connected = false;
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
         client.OnConnected += (_, _) => connected = true;
@@ -864,7 +879,7 @@ public class ModbusUdpEventTests
     [Fact]
     public void OnDisconnected_FiresOnDisconnect()
     {
-        int port = PortBase + 2;
+        int port = 18102;
         bool disconnected = false;
         using var client = new ModbusUdpClient("127.0.0.1", port, station: 1);
         client.OnDisconnected += (_, _) => disconnected = true;
@@ -877,8 +892,8 @@ public class ModbusUdpEventTests
     [Fact]
     public void OnMessageSent_FiresOnWrite()
     {
-        int port = PortBase + 3;
-        using var server = new ModbusUdpTestServer(port);
+        using var server = new ModbusUdpTestServer();
+        int port = server.Port;
         server.Start();
 
         string? sentHex = null;
