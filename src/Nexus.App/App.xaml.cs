@@ -78,6 +78,7 @@ public partial class App : Application
                 services.AddSingleton<DataLoggerViewModel>();
                 services.AddSingleton<PacketRecorderService>();
                 services.AddSingleton<DiagnosticBundleService>();
+                services.AddSingleton<VirtualPlcManager>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

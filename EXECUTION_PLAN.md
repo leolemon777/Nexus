@@ -190,8 +190,8 @@ Tasks:
 | P0 | Define packet log JSONL export | Done: shared `PacketRecorderService` |
 | P0 | Add Modbus packet parsing display | Done: all 7 Modbus pages |
 | P1 | Add diagnostic bundle export | Done: `DiagnosticBundleService` ZIP export with JSONL, settings, session log |
-| P1 | Improve multi-address monitor workflows | `MonitorPage`, `MonitorViewModel` |
-| P2 | Add virtual PLC manager page | simulator services |
+| P1 | Improve multi-address monitor workflows | Done: `MonitorPage`, `MonitorViewModel` with batch import |
+| P2 | Add virtual PLC manager page | Done: `VirtualPlcManager` + `VirtualPlcPage` with 19 virtual servers |
 
 Verification:
 
@@ -212,9 +212,9 @@ Tasks:
 | P0 | Create `RELEASE_CHECKLIST.md` | release checklist |
 | P0 | Add package README metadata for Modbus | `.csproj` |
 | P0 | Add GitHub Actions build/test | Done: `.github/workflows/build-test.yml` |
-| P1 | Add NuGet pack validation | Done for Modbus artifact pack in CI |
-| P1 | Add package metadata audit | script/docs |
-| P1 | Add docs index | `docs/index.md` |
+| P1 | Add NuGet pack validation | Done: all Top 5 + 4 B-tier protocols pack in CI |
+| P1 | Add package metadata audit | Done: Top 5 + Yaskawa/Yokogawa/Inovance/Fatek have README + metadata |
+| P1 | Add docs index | Done: `docs/index.md` |
 | P2 | Add DocFX or static docs plan | docs |
 
 Verification:
@@ -223,6 +223,10 @@ Verification:
 dotnet build Nexus.slnx
 dotnet test Nexus.slnx
 dotnet pack src\Nexus.Modbus
+dotnet pack src\Nexus.Siemens
+dotnet pack src\Nexus.Mitsubishi
+dotnet pack src\Nexus.Omron
+dotnet pack src\Nexus.AllenBradley
 ```
 
 ## Milestone 6: Real Device Validation
@@ -269,7 +273,23 @@ Tasks per module:
 - Address or topic syntax docs.
 - Focused tests for missing areas.
 - Real-device or interoperability validation.
-- Package README.
+- Package README + NuGet metadata.
+
+### Completed B-Tier Promotions
+
+| Module | Package README | NuGet Metadata | Test Count | Virtual Server |
+|--------|---------------|----------------|------------|----------------|
+| `Nexus.Yaskawa` | Done | Done | 94 | Yes |
+| `Nexus.Yokogawa` | Done | Done | 82 | Yes |
+| `Nexus.Inovance` | Done | Done | 83 | Yes |
+| `Nexus.Fatek` | Done | Done | 60 | Yes |
+
+### Remaining B-Tier Modules
+
+- `Nexus.Bacnet`
+- `Nexus.Iec104`
+- `Nexus.Redis`
+- `Nexus.Mqtt`
 
 ## Milestone 8: Differentiators Beyond HSL
 
@@ -334,16 +354,26 @@ Can run after Modbus package metadata is stable.
 
 | Order | Task | Type | Verification |
 |-------|------|------|--------------|
-| 1 | Add Modbus FC43/14 Read Device Identification | ~~code/docs/tests~~ ✅ | focused Modbus tests |
-| 2 | Add Modbus FC08 diagnostics model and loopback tests | ~~code/docs/tests~~ ✅ | focused Modbus tests |
-| 3 | Extract shared WPF packet recorder/export service | ~~WPF~~ ✅ | `dotnet build src\Nexus.App` |
-| 4 | Extend WPF packet decode to Modbus RTU/ASCII/UDP/RTU-over-TCP pages | ~~WPF~~ ✅ | build + manual runtime check |
-| 5 | Add Mitsubishi MC3E ASCII frame tests | ~~tests/docs~~ ✅ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
-| 6 | Add Mitsubishi MC3E UDP tests | ~~tests/docs~~ ✅ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
-| 7 | Decide Mitsubishi FX serial consolidation path | ~~docs/code review~~ ✅ | consolidated into Nexus.Mitsubishi |
-| 8 | Add Mitsubishi HSL migration chapter | ~~docs~~ ✅ | review |
-| 9 | Add Modbus/Mitsubishi real-device target rows | ~~validation docs~~ ✅ | review |
-| 10 | Add Modbus benchmark and long-run notes | ~~docs/tests~~ ✅ | `performance.md` + `long-run.md` |
+| 1 | ~~Add Modbus FC43/14 Read Device Identification~~ ✅ | ~~code/docs/tests~~ | focused Modbus tests |
+| 2 | ~~Add Modbus FC08 diagnostics model and loopback tests~~ ✅ | ~~code/docs/tests~~ | focused Modbus tests |
+| 3 | ~~Extract shared WPF packet recorder/export service~~ ✅ | ~~WPF~~ | `dotnet build src\Nexus.App` |
+| 4 | ~~Extend WPF packet decode to Modbus RTU/ASCII/UDP/RTU-over-TCP pages~~ ✅ | ~~WPF~~ | build + manual runtime check |
+| 5 | ~~Add Mitsubishi MC3E ASCII frame tests~~ ✅ | ~~tests/docs~~ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
+| 6 | ~~Add Mitsubishi MC3E UDP tests~~ ✅ | ~~tests/docs~~ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
+| 7 | ~~Decide Mitsubishi FX serial consolidation path~~ ✅ | ~~docs/code review~~ | consolidated into Nexus.Mitsubishi |
+| 8 | ~~Add Mitsubishi HSL migration chapter~~ ✅ | ~~docs~~ | review |
+| 9 | ~~Add Modbus/Mitsubishi real-device target rows~~ ✅ | ~~validation docs~~ | review |
+| 10 | ~~Add Modbus benchmark and long-run notes~~ ✅ | ~~docs/tests~~ | `performance.md` + `long-run.md` |
+| 11 | ~~Virtual PLC Manager page (19 servers)~~ ✅ | ~~WPF~~ | `dotnet build src\Nexus.App` |
+| 12 | ~~Top 5 NuGet package metadata + README~~ ✅ | ~~packaging~~ | `dotnet pack` all 5 |
+| 13 | ~~CI workflow pack all Top 5 protocols~~ ✅ | ~~CI~~ | build-test.yml |
+| 14 | ~~B-tier package metadata + README (Yaskawa/Yokogawa/Inovance/Fatek)~~ ✅ | ~~packaging~~ | `dotnet pack` all 4 |
+| 15 | Add remaining B-tier README (Fuji/Delta/GeSrtp/Keyence/etc.) | packaging | `dotnet pack` |
+| 16 | Real-device validation for Modbus TCP | validation | validation row |
+| 17 | Add DocFX or static docs site plan | docs | doc review |
+| 18 | Real-device validation for Siemens S7 | validation | validation row |
+| 19 | Add protocol gateway prototype (Modbus→MQTT) | differentiator | build + test |
+| 20 | Data acquisition engine multi-device polling | differentiator | build + test |
 
 ## Verification Command Bank
 

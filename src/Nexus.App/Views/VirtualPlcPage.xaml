@@ -1,0 +1,104 @@
+<Page x:Class="Nexus.App.Views.VirtualPlcPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="clr-namespace:Nexus.App.Views"
+      Background="{DynamicResource Brush.Bg}">
+    <Page.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <local:InvertBoolToVisibilityConverter x:Key="InvertBoolToVisibility"/>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+            <!-- Header -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="🔌 Virtual PLC Manager" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
+                    <TextBlock Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}" Margin="0,0,0,12"
+                               Text="一键启停多个协议虚拟 PLC 服务器，用于无硬件环境下的开发调试。"/>
+
+                    <!-- Toolbar -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="▶ Start All" Style="{DynamicResource Button.Primary}" Margin="0,0,8,0"
+                                Command="{Binding StartAllCommand}"/>
+                        <Button Content="⏹ Stop All" Style="{DynamicResource Button.Danger}" Margin="0,0,8,0"
+                                Command="{Binding StopAllCommand}"/>
+                        <Border Background="{DynamicResource Brush.Surface3}" CornerRadius="{DynamicResource Radius.Md}"
+                                Padding="12,6" VerticalAlignment="Center">
+                            <TextBlock Style="{DynamicResource Body}">
+                                <Run Text="Running: "/>
+                                <Run Text="{Binding RunningCount, Mode=OneWay}" FontWeight="Bold"/>
+                                <Run Text=" / "/>
+                                <Run Text="{Binding Entries.Count, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- PLC list -->
+            <ItemsControl ItemsSource="{Binding Entries}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{DynamicResource Card}" Margin="0,0,0,6" Padding="14,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 状态指示灯 + 协议名称 -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Width="10" Height="10" Margin="0,0,8,0">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.Text3}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Ok}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding Protocol}" Style="{DynamicResource Body}" FontWeight="SemiBold"/>
+                                </StackPanel>
+
+                                <!-- 状态文本 -->
+                                <TextBlock Grid.Column="1" Text="{Binding Status}" Style="{DynamicResource Body}"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource Brush.Text3}"/>
+
+                                <!-- 端口编辑 -->
+                                <TextBox Grid.Column="2" Style="{DynamicResource Input}"
+                                         Text="{Binding Port, UpdateSourceTrigger=LostFocus}"
+                                         IsEnabled="{Binding IsRunning, Converter={StaticResource InvertBoolToVisibility}, ConverterParameter=Invert}"
+                                         VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                                <!-- Host -->
+                                <TextBlock Grid.Column="3" Style="{DynamicResource Body}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.Text3}">
+                                    <Run Text="{Binding DefaultHost, Mode=OneWay}"/>
+                                    <Run Text=":"/>
+                                    <Run Text="{Binding Port, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- Start / Stop 按钮 -->
+                                <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="▶ Start" Style="{DynamicResource Button.Ghost}" Margin="0,0,4,0"
+                                            Command="{Binding StartCommand}"
+                                            Visibility="{Binding IsRunning, Converter={StaticResource InvertBoolToVisibility}}"/>
+                                    <Button Content="⏹ Stop" Style="{DynamicResource Button.Danger}" Margin="0,0,4,0"
+                                            Command="{Binding StopCommand}"
+                                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

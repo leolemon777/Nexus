@@ -11,10 +11,14 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>industrial-communication robot Estun estun modbus protocol</PackageTags>
+    <PackageTags>industrial-communication robot Estun modbus protocol</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
     <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />

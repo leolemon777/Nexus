@@ -11,9 +11,13 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>industrial-communication PLC protocol</PackageTags>
+    <PackageTags>industrial-communication PLC protocol Redis</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 </Project>

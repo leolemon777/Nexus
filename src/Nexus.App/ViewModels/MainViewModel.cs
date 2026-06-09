@@ -210,6 +210,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         new NavGroup("🛠", "工具")
             .Add("🖥", "Modbus 模拟器",  "simulator",     typeof(Views.SimulatorPage))
+            .Add("🔌", "虚拟 PLC 管理",  "virtual-plc",   typeof(Views.VirtualPlcPage))
             .Add("📊", "实时监控",        "monitor",       typeof(Views.MonitorPage))
             .Add("🔔", "报警管理",        "alarm",         typeof(Views.AlarmPage))
             .Add("📋", "配方管理",      "recipe",        typeof(Views.RecipePage))

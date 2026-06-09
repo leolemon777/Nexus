@@ -11,7 +11,8 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>industrial-communication PLC protocol</PackageTags>
+    <PackageTags>industrial-communication PLC protocol Mqtt</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -21,4 +22,7 @@
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 </Project>

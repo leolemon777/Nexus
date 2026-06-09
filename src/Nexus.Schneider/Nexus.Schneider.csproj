@@ -11,12 +11,16 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>industrial-communication PLC protocol schneider modicon</PackageTags>
+    <PackageTags>industrial-communication PLC protocol Schneider schneider modicon</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
   </ItemGroup>
