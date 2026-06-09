@@ -40,8 +40,8 @@ Nexus Modbus is the reference protocol family for the first production-readiness
 
 Modbus is the first `Production Candidate`, but it still needs these release artifacts before public production claims:
 
-1. Real-device validation entries in `REAL_DEVICE_VALIDATION.md`.
-2. Benchmark and long-run test notes.
+1. ~~Real-device validation entries in `REAL_DEVICE_VALIDATION.md`.~~ Target rows added; real evidence pending.
+2. ~~Benchmark and long-run test notes.~~ Done: `performance.md` and `long-run.md`.
 3. Gateway/DTU field notes for RTU-over-TCP.
 4. Extended function-code coverage for diagnostics, file records, FIFO, and device identification.
 
@@ -53,4 +53,6 @@ Modbus is the first `Production Candidate`, but it still needs these release art
 - [Function Codes](function-codes.md)
 - [Byte Order](byte-order.md)
 - [Packet Logging](packet-logging.md)
+- [Performance](performance.md)
+- [Long-Run Stability](long-run.md)
 - [Troubleshooting](troubleshooting.md)

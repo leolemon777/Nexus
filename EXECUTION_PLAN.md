@@ -331,16 +331,16 @@ Can run after Modbus package metadata is stable.
 
 | Order | Task | Type | Verification |
 |-------|------|------|--------------|
-| 1 | Add Modbus FC43/14 Read Device Identification | code/docs/tests | focused Modbus tests |
-| 2 | Add Modbus FC08 diagnostics model and loopback tests | code/docs/tests | focused Modbus tests |
-| 3 | Extract shared WPF packet recorder/export service | WPF | `dotnet build src\Nexus.App` |
-| 4 | Extend WPF packet decode to Modbus RTU/ASCII/UDP/RTU-over-TCP pages | WPF | build + manual runtime check |
-| 5 | Add Mitsubishi MC3E ASCII frame tests | tests/docs | `dotnet test tests\Nexus.Mitsubishi.Tests` |
-| 6 | Add Mitsubishi MC3E UDP tests | tests/docs | `dotnet test tests\Nexus.Mitsubishi.Tests` |
-| 7 | Decide Mitsubishi FX serial consolidation path | docs/code review | focused FX tests |
-| 8 | Add Mitsubishi HSL migration chapter | docs | review |
-| 9 | Add Modbus/Mitsubishi real-device target rows | validation docs | review |
-| 10 | Add Modbus benchmark and long-run notes | docs/tests | review + focused benchmark command |
+| 1 | Add Modbus FC43/14 Read Device Identification | ~~code/docs/tests~~ ✅ | focused Modbus tests |
+| 2 | Add Modbus FC08 diagnostics model and loopback tests | ~~code/docs/tests~~ ✅ | focused Modbus tests |
+| 3 | Extract shared WPF packet recorder/export service | ~~WPF~~ ✅ | `dotnet build src\Nexus.App` |
+| 4 | Extend WPF packet decode to Modbus RTU/ASCII/UDP/RTU-over-TCP pages | ~~WPF~~ ✅ | build + manual runtime check |
+| 5 | Add Mitsubishi MC3E ASCII frame tests | ~~tests/docs~~ ✅ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
+| 6 | Add Mitsubishi MC3E UDP tests | ~~tests/docs~~ ✅ | `dotnet test tests\Nexus.Mitsubishi.Tests` |
+| 7 | Decide Mitsubishi FX serial consolidation path | ~~docs/code review~~ ✅ | consolidated into Nexus.Mitsubishi |
+| 8 | Add Mitsubishi HSL migration chapter | ~~docs~~ ✅ | review |
+| 9 | Add Modbus/Mitsubishi real-device target rows | ~~validation docs~~ ✅ | review |
+| 10 | Add Modbus benchmark and long-run notes | ~~docs/tests~~ ✅ | `performance.md` + `long-run.md` |
 
 ## Verification Command Bank
 
