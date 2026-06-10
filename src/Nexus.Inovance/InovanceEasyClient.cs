@@ -588,8 +588,12 @@ namespace Nexus.Inovance
         /// <summary>批量读取多个地址的值（逐个地址读取）。</summary>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, object?>();
-            foreach (var addr in addresses)
+            foreach (var addr in addrList)
             {
                 var r = ReadInt16(addr);
                 if (!r.IsSuccess)
