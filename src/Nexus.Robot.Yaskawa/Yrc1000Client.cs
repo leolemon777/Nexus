@@ -14,7 +14,7 @@ namespace Nexus.Robot.Yaskawa
     /// <para>Header: RequestId(2) + BlockId(1) + Reserved(1) + Cmd(2) + SubCmd(2) + DataLen(4) + Reserved(4)</para>
     /// <para>支持读写 IO、读写变量、读取位置、状态查询、伺服控制。</para>
     /// </summary>
-    public class Yrc1000Client : TcpDeviceBase, IBatchReadWrite
+    public class Yrc1000Client : TcpDeviceBase, IBatchReadWrite, ISubscribeDevice
     {
         // ── 命令码 ──────────────────────────────
         private const ushort CMD_READ_IO_INPUT = 0x0101;
@@ -553,6 +553,107 @@ namespace Nexus.Robot.Yaskawa
         public Task<OperateResult> BatchWriteAsync(
             IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
             => Task.FromResult(BatchWrite(items));
+
+        // ═══════════════════════════════════════════
+        //  ISubscribeDevice — 数据订阅接口
+        // ═══════════════════════════════════════════
+
+        private readonly object _monitorLock = new object();
+        private readonly Dictionary<string, MonitorEntry> _monitors = new Dictionary<string, MonitorEntry>();
+        private bool _monitoring;
+        private Timer? _monitorTimer;
+
+        private class MonitorEntry
+        {
+            public string Address = "";
+            public string DataType = "Int16";
+            public int IntervalMs = 1000;
+            public object? LastValue;
+        }
+
+        /// <summary>数据变化事件。</summary>
+        public event EventHandler<DataChangeEventArgs>? OnDataChanged;
+
+        /// <summary>订阅指定地址的数据变化。</summary>
+        public void Subscribe(string address, int intervalMs = 1000, string dataType = "Int16")
+        {
+            lock (_monitorLock)
+            {
+                _monitors[address] = new MonitorEntry
+                {
+                    Address = address,
+                    DataType = dataType,
+                    IntervalMs = intervalMs,
+                    LastValue = null
+                };
+            }
+        }
+
+        /// <summary>取消订阅。</summary>
+        public void Unsubscribe(string address)
+        {
+            lock (_monitorLock) { _monitors.Remove(address); }
+        }
+
+        /// <summary>启动所有订阅。</summary>
+        public void StartSubscriptions(int globalIntervalMs = 500)
+        {
+            if (_monitoring) return;
+            _monitoring = true;
+            _monitorTimer = new Timer(PollMonitors, null, globalIntervalMs, globalIntervalMs);
+        }
+
+        /// <summary>停止所有订阅。</summary>
+        public void StopSubscriptions()
+        {
+            _monitoring = false;
+            _monitorTimer?.Dispose();
+            _monitorTimer = null;
+        }
+
+        private void PollMonitors(object? state)
+        {
+            if (!_monitoring) return;
+            try
+            {
+                List<MonitorEntry> entries;
+                lock (_monitorLock) { entries = new List<MonitorEntry>(_monitors.Values); }
+
+                foreach (var entry in entries)
+                {
+                    try
+                    {
+                        object? current = entry.DataType switch
+                        {
+                            "Int16" => ReadInt16(entry.Address).Content,
+                            "UInt16" => ReadUInt16(entry.Address).Content,
+                            "Int32" => ReadInt32(entry.Address).Content,
+                            "Float" => ReadFloat(entry.Address).Content,
+                            "Bool" => ReadBool(entry.Address).Content,
+                            "String" => ReadString(entry.Address, 10).Content,
+                            _ => null
+                        };
+
+                        if (current != null && !Equals(current, entry.LastValue))
+                        {
+                            if (entry.LastValue == null) { entry.LastValue = current; continue; }
+                            var args = new DataChangeEventArgs
+                            {
+                                Address = entry.Address,
+                                OldValue = entry.LastValue,
+                                NewValue = current,
+                                Timestamp = DateTime.Now,
+                                Quality = "Good"
+                            };
+                            entry.LastValue = current;
+                            OnDataChanged?.Invoke(this, args);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
     }
 
     // ── 辅助类型 ──────────────────────────────
