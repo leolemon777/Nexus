@@ -14,10 +14,10 @@ namespace Nexus.Redis
 
     public struct RedisValue : IEquatable<RedisValue>
     {
-        private readonly string _stringValue;
+        private readonly string? _stringValue;
         private readonly long _intValue;
         private readonly double _doubleValue;
-        private readonly byte[] _bytesValue;
+        private readonly byte[]? _bytesValue;
 
         public RedisValueType ValueType { get; }
 
@@ -138,7 +138,7 @@ namespace Nexus.Redis
         public static bool operator ==(RedisValue left, RedisValue right) => left.Equals(right);
         public static bool operator !=(RedisValue left, RedisValue right) => !left.Equals(right);
 
-        private static bool ByteArrayEquals(byte[] a, byte[] b)
+        private static bool ByteArrayEquals(byte[]? a, byte[]? b)
         {
             if (a == b) return true;
             if (a == null || b == null) return false;

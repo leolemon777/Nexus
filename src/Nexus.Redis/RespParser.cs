@@ -15,10 +15,10 @@ namespace Nexus.Redis
     public class RespValue
     {
         public RespType Type { get; }
-        public string StringValue { get; }
+        public string? StringValue { get; }
         public long IntegerValue { get; }
-        public byte[] BulkValue { get; }
-        public RespValue[] ArrayValue { get; }
+        public byte[]? BulkValue { get; }
+        public RespValue[]? ArrayValue { get; }
         public bool IsNull { get; }
 
         private RespValue(RespType type)

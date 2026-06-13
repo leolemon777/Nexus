@@ -13,8 +13,8 @@ namespace Nexus.Redis
         private readonly string _host;
         private readonly int _port;
         private readonly int _timeoutMs;
-        private TcpClient _client;
-        private NetworkStream _stream;
+        private TcpClient? _client;
+        private NetworkStream? _stream;
         private readonly object _lock = new object();
         private volatile bool _disposed;
 
@@ -30,9 +30,9 @@ namespace Nexus.Redis
             }
         }
 
-        public event EventHandler OnConnected;
-        public event EventHandler OnDisconnected;
-        public event EventHandler<string> OnError;
+        public event EventHandler? OnConnected;
+        public event EventHandler? OnDisconnected;
+        public event EventHandler<string>? OnError;
 
         public RedisConnection(string host, int port = 6379, int timeoutMs = 5000)
         {
@@ -121,7 +121,7 @@ namespace Nexus.Redis
         {
             try
             {
-                NetworkStream ns;
+                NetworkStream? ns;
                 lock (_lock) { ns = _stream; }
                 if (ns == null) throw new IOException("连接已断开");
 
@@ -140,7 +140,7 @@ namespace Nexus.Redis
         {
             try
             {
-                NetworkStream ns;
+                NetworkStream? ns;
                 lock (_lock) { ns = _stream; }
                 if (ns == null) throw new IOException("连接已断开");
 
@@ -159,7 +159,7 @@ namespace Nexus.Redis
         {
             try
             {
-                NetworkStream ns;
+                NetworkStream? ns;
                 lock (_lock) { ns = _stream; }
                 if (ns == null) throw new IOException("连接已断开");
 
@@ -183,7 +183,7 @@ namespace Nexus.Redis
         {
             try
             {
-                NetworkStream ns;
+                NetworkStream? ns;
                 lock (_lock) { ns = _stream; }
                 if (ns == null) throw new IOException("连接已断开");
 

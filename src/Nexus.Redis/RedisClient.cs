@@ -16,7 +16,7 @@ namespace Nexus.Redis
         private readonly ConcurrentStack<RedisConnection> _pool;
         private readonly SemaphoreSlim _semaphore;
         private volatile bool _disposed;
-        private string _password;
+        private string _password = string.Empty;
         private int _database;
 
         public RedisClient(string host, int port = 6379, int timeoutMs = 5000, int maxPoolSize = 10)
