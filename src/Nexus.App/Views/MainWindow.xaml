@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Nexus.App"
         Icon="pack://application:,,,/Assets/app.ico"
-        Title="Nexus — Industrial Communication"
+        Title="Nexus — 工控通讯调试工具"
         Width="1440" Height="920" MinWidth="1080" MinHeight="720"
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
@@ -36,7 +36,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="NEXUS" FontSize="16" FontWeight="Black"
                                        Foreground="{DynamicResource Brush.Text}" LineHeight="20"/>
-                            <TextBlock Text="Industrial Communication" FontSize="9.5"
+                            <TextBlock Text="工控通讯库" FontSize="9.5"
                                        Foreground="{DynamicResource Brush.Text3}" Margin="0,2,0,0"/>
                         </StackPanel>
                     </DockPanel>
@@ -49,7 +49,7 @@
                                    Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center"/>
                         <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10">
                             <Run Text="🛡 " Foreground="{DynamicResource Brush.Ok}"/>
-                            <Run Text="Free &amp; Open Source" Foreground="{DynamicResource Brush.Text3}"/>
+                            <Run Text="开源免费" Foreground="{DynamicResource Brush.Text3}"/>
                         </TextBlock>
                     </Grid>
                 </Border>

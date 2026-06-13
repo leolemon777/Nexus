@@ -26,10 +26,10 @@
                         <TextBlock>
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="▶ Start"/>
+                                    <Setter Property="Text" Value="▶ 开始"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPolling}" Value="True">
-                                            <Setter Property="Text" Value="⏸ Stop"/>
+                                            <Setter Property="Text" Value="⏸ 停止"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -37,18 +37,18 @@
                         </TextBlock>
                     </Button.Content>
                 </Button>
-                <Button Content="Export CSV" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
+                <Button Content="导出 CSV" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
                         Command="{Binding ExportCsvCommand}"/>
-                <Button Content="Export JSON" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
+                <Button Content="导出 JSON" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
                         Command="{Binding ExportJsonCommand}"/>
-                <Button Content="Clear History" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
+                <Button Content="清空历史" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
                         Command="{Binding ClearHistoryCommand}"/>
-                <Button Content="Clear All" Style="{DynamicResource Button.Danger}" Margin="0,0,8,4"
+                <Button Content="清空全部" Style="{DynamicResource Button.Danger}" Margin="0,0,8,4"
                         Command="{Binding ClearAllMonitoredAddressesCommand}"/>
                 <Border Background="{DynamicResource Brush.Surface3}" CornerRadius="{DynamicResource Radius.Md}"
                         Padding="12,6" VerticalAlignment="Center" Margin="0,0,8,4">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Window (s): " Style="{DynamicResource Body}" VerticalAlignment="Center"/>
+                        <TextBlock Text="窗口(秒): " Style="{DynamicResource Body}" VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding ChartTimeWindowSeconds}" Style="{DynamicResource Body}"
                                    FontWeight="Bold" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -60,9 +60,9 @@
                         </Ellipse.Fill>
                     </Ellipse>
                     <TextBlock Style="{DynamicResource Body}" VerticalAlignment="Center">
-                        <Run Text="Addresses: "/>
+                        <Run Text="地址数: "/>
                         <Run Text="{Binding MonitoredCount, Mode=OneWay}" FontWeight="Bold"/>
-                        <Run Text=" | Polling: "/>
+                        <Run Text=" | 轮询: "/>
                         <Run Text="{Binding IsPolling, Mode=OneWay}"/>
                     </TextBlock>
                 </StackPanel>
@@ -80,7 +80,7 @@
             <!-- LEFT: Address list + Add form -->
             <Border Style="{DynamicResource Card}" Margin="0,0,4,0">
                 <DockPanel>
-                    <TextBlock Text="Monitored Addresses" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,8"/>
+                    <TextBlock Text="监控地址" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,8"/>
 
                     <!-- Add form -->
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
@@ -98,23 +98,23 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Text="Address" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBlock Text="地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <TextBox Grid.Row="0" Grid.Column="1" Style="{DynamicResource Input}"
                                      Text="{Binding NewMonAddress, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4"/>
 
-                            <TextBlock Grid.Row="1" Text="Alias" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBlock Grid.Row="1" Text="别名" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <TextBox Grid.Row="1" Grid.Column="1" Style="{DynamicResource Input}"
                                      Text="{Binding NewMonAlias, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4"/>
 
-                            <TextBlock Grid.Row="2" Text="Type" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBlock Grid.Row="2" Text="类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding DataTypes}"
                                       SelectedItem="{Binding NewMonDataType}" Margin="0,0,0,4"/>
 
-                            <TextBlock Grid.Row="3" Text="Interval" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBlock Grid.Row="3" Text="间隔" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding IntervalPresets}"
                                       SelectedItem="{Binding NewMonIntervalMs}" Margin="0,0,0,4"/>
 
-                            <TextBlock Grid.Row="4" Text="Color" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBlock Grid.Row="4" Text="颜色" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding ChartColorPalette}"
                                       SelectedItem="{Binding NewMonColor}" Margin="0,0,0,4">
                                     <ComboBox.ItemTemplate>
@@ -131,7 +131,7 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
 
-                            <Button Grid.Row="5" Grid.ColumnSpan="2" Content="+ Add Address"
+                            <Button Grid.Row="5" Grid.ColumnSpan="2" Content="+ 添加地址"
                                     Style="{DynamicResource Button.Primary}" Margin="0,4,0,0"
                                     Command="{Binding AddMonitoredAddressCommand}" HorizontalAlignment="Stretch"/>
 
@@ -185,7 +185,7 @@
             <!-- CENTER: Chart -->
             <Border Style="{DynamicResource Card}" Grid.Column="1" Margin="4,0">
                 <DockPanel>
-                    <TextBlock Text="Real-time Trend" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,6"/>
+                    <TextBlock Text="实时趋势" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,6"/>
                     <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}">
                         <controls:RealtimeChart x:Name="RealtimeChartControl"
                                                 Data="{Binding MonitoredAddresses}"
@@ -197,7 +197,7 @@
             <!-- RIGHT: Current values + Log -->
             <Border Style="{DynamicResource Card}" Grid.Column="2" Margin="4,0,0,0">
                 <DockPanel>
-                    <TextBlock Text="Current Values" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,8"/>
+                    <TextBlock Text="当前值" Style="{DynamicResource Label}" DockPanel.Dock="Top" Margin="0,0,0,8"/>
 
                     <!-- Values list -->
                     <ListBox ItemsSource="{Binding MonitoredAddresses}" Background="Transparent"
@@ -244,8 +244,8 @@
                     <Separator DockPanel.Dock="Top" Background="{DynamicResource Brush.Line}" Margin="0,8,0,8"/>
                     <DockPanel>
                         <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
-                            <TextBlock Text="Log" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
-                            <Button Content="Clear" Style="{DynamicResource Button.Text}" HorizontalAlignment="Right"
+                            <TextBlock Text="日志" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                            <Button Content="清空" Style="{DynamicResource Button.Text}" HorizontalAlignment="Right"
                                     Command="{Binding ClearLogCommand}" FontSize="11" Padding="6,4"/>
                         </Grid>
                         <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="6">

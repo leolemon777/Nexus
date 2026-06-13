@@ -117,9 +117,9 @@
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeaderWidth="0"
                               CanUserAddRows="False" CanUserDeleteRows="False" Height="220">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Area" Binding="{Binding Area}" Width="*"/>
-                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="160"/>
-                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="210"/>
+                            <DataGridTextColumn Header="区域" Binding="{Binding Area}" Width="*"/>
+                            <DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="160"/>
+                            <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="210"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </StackPanel>

@@ -26,7 +26,7 @@
                         <Border Background="{DynamicResource Brush.Surface3}" CornerRadius="{DynamicResource Radius.Md}"
                                 Padding="12,6" VerticalAlignment="Center">
                             <TextBlock Style="{DynamicResource Body}">
-                                <Run Text="Running: "/>
+                                <Run Text="运行中: "/>
                                 <Run Text="{Binding RunningCount, Mode=OneWay}" FontWeight="Bold"/>
                                 <Run Text=" / "/>
                                 <Run Text="{Binding Entries.Count, Mode=OneWay}"/>
