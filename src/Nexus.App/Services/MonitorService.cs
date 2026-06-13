@@ -165,10 +165,14 @@ namespace Nexus.App.Services
         private DeviceConnection? _defaultDevice;
         private readonly object _deviceLock = new();
 
+        private readonly AdvancedTagEngine _advancedTagEngine = new();
+
         public bool IsRunning => _pollLoop is not null;
         public int TagCount => _tags.Count;
         public event EventHandler<TagEntry>? TagValueChanged;
         public event EventHandler<(MonitoredAddress Address, DataPoint Point)>? OnDataPoint;
+
+        public AdvancedTagEngine AdvancedTags => _advancedTagEngine;
 
         private System.IO.StreamWriter? _csvWriter;
 
@@ -374,6 +378,14 @@ namespace Nexus.App.Services
                             await ReadAndUpdateAsync(addr, ct).ConfigureAwait(false);
                         }
                     }
+
+                    var sourceValues = new Dictionary<string, double>();
+                    foreach (var addr in _monitoredAddresses.Values)
+                    {
+                        if (double.TryParse(addr.CurrentValueText, out var val))
+                            sourceValues[addr.Address] = val;
+                    }
+                    _advancedTagEngine.UpdateSourceValues(sourceValues);
                 }
                 catch (OperationCanceledException) { break; }
                 catch { }

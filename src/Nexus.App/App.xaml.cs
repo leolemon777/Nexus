@@ -8,6 +8,7 @@ using Nexus.App.Configuration;
 using Nexus.App.ViewModels;
 using Nexus.App.Services;
 using Nexus.App.Views;
+using Nexus.Security;
 
 namespace Nexus.App;
 
@@ -86,6 +87,7 @@ public partial class App : Application
                 services.AddTransient<RobotYaskawaViewModel>();
                 services.AddTransient<RobotYamahaViewModel>();
                 services.AddTransient<RobotStaubliViewModel>();
+                services.AddSingleton<UserService>();
                 services.AddSingleton<SimulatorViewModel>();
                 services.AddSingleton<MonitorViewModel>();
                 services.AddSingleton<AlarmService>();
@@ -99,6 +101,7 @@ public partial class App : Application
                 services.AddSingleton<DiagnosticBundleService>();
                 services.AddSingleton<VirtualPlcManager>();
                 services.AddTransient<HmiViewModel>();
+                services.AddTransient<TagConfigViewModel>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

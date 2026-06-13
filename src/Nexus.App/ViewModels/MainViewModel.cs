@@ -256,6 +256,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🔔", "报警管理",        "alarm",         typeof(Views.AlarmPage))
             .Add("📋", "配方管理",      "recipe",        typeof(Views.RecipePage))
             .Add("🗄", "数据记录",      "datalogger",    typeof(Views.DataLoggerPage))
+            .Add("🏷", "标签配置",      "tagconfig",     typeof(Views.TagConfigPage))
             .Add("⚙️", "设置",            "settings",      typeof(Views.SettingsPage)),
     };
 

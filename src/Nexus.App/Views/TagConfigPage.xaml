@@ -1,0 +1,224 @@
+<Page x:Class="Nexus.App.Views.TagConfigPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{DynamicResource Brush.Bg}">
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Page.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+
+            <!-- 工具栏：导入导出 + 筛选 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="标签配置" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="🔄 刷新" Style="{DynamicResource Button.Text}" Command="{Binding RefreshListCommand}" Margin="0,0,4,0"/>
+                            <Button Content="🗑 清空" Style="{DynamicResource Button.Text}" Command="{Binding ClearAllCommand}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 筛选 -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,8,0">
+                            <TextBlock Text="搜索 (名称/描述/地址)" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding FilterText, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,0,0">
+                            <TextBlock Text="设备筛选" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding FilterDevice, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 导入导出按钮 -->
+                    <WrapPanel Margin="0,4,0,0">
+                        <Button Content="📥 导入 JSON" Style="{DynamicResource Button.Primary}" Command="{Binding ImportJsonCommand}" Margin="0,0,6,0"/>
+                        <Button Content="📥 导入 CSV" Style="{DynamicResource Button.Primary}" Command="{Binding ImportCsvCommand}" Margin="0,0,6,0"/>
+                        <Button Content="📤 导出 JSON" Style="{DynamicResource Button.Text}" Command="{Binding ExportJsonCommand}" Margin="0,0,6,0"/>
+                        <Button Content="📤 导出 CSV" Style="{DynamicResource Button.Text}" Command="{Binding ExportCsvCommand}" Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding TagCount, StringFormat='标签总数: {0}'}"
+                                   VerticalAlignment="Center" Margin="12,0,0,0"
+                                   Foreground="{DynamicResource Brush.Text2}"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 新增标签 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="新增标签" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Margin="0,0,8,8">
+                            <TextBlock Text="标签全名 *" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewFullName, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,8">
+                            <TextBlock Text="设备名" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewDeviceName, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,8,8">
+                            <TextBlock Text="分组" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewGroupName, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Margin="0,0,0,8">
+                            <TextBlock Text="地址" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewAddress, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Margin="0,0,8,0">
+                            <TextBlock Text="数据类型" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding DataTypes}" SelectedItem="{Binding NewDataType, Mode=TwoWay}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="描述" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewDescription, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock Text="单位" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding NewUnit, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="3" Margin="0,0,0,0" VerticalAlignment="Bottom">
+                            <Button Content="➕ 添加标签" Style="{DynamicResource Button.Primary}" Command="{Binding AddTagCommand}" Height="32"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 标签列表 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="标签列表" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                    </Grid>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="4" MinHeight="200">
+                        <DataGrid ItemsSource="{Binding Tags}"
+                                  SelectedItem="{Binding SelectedTag}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  GridLinesVisibility="Horizontal"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  RowBackground="Transparent"
+                                  AlternatingRowBackground="Transparent"
+                                  HeadersVisibility="Column"
+                                  SelectionMode="Single"
+                                  VirtualizingStackPanel.IsVirtualizing="True"
+                                  VirtualizingStackPanel.VirtualizationMode="Recycling">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="标签全名" Binding="{Binding FullName}" Width="180"/>
+                                <DataGridTextColumn Header="设备" Binding="{Binding DeviceName}" Width="80"/>
+                                <DataGridTextColumn Header="分组" Binding="{Binding GroupName}" Width="80"/>
+                                <DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="90"/>
+                                <DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="70"/>
+                                <DataGridTextColumn Header="描述" Binding="{Binding Description}" Width="*"/>
+                                <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="50"/>
+                                <DataGridTextColumn Header="扫描(ms)" Binding="{Binding ScanRateMs}" Width="70"/>
+                                <DataGridCheckBoxColumn Header="启用" Binding="{Binding Enabled}" Width="50"/>
+                                <DataGridCheckBoxColumn Header="只读" Binding="{Binding ReadOnly}" Width="50"/>
+                                <DataGridTextColumn Header="报警高" Binding="{Binding AlarmHigh, StringFormat={}{0:G}}" Width="70"/>
+                                <DataGridTextColumn Header="报警低" Binding="{Binding AlarmLow, StringFormat={}{0:G}}" Width="70"/>
+                                <DataGridTextColumn Header="倍率" Binding="{Binding ScaleMultiplier, StringFormat={}{0:G}}" Width="55"/>
+                                <DataGridTextColumn Header="偏移" Binding="{Binding ScaleOffset, StringFormat={}{0:G}}" Width="55"/>
+                                <DataGridTextColumn Header="权限" Binding="{Binding AccessLevel}" Width="65"/>
+                                <DataGridTemplateColumn Header="操作" Width="60">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="✕" FontSize="12" Padding="6,2" Foreground="#FF4444"
+                                                    Command="{Binding DataContext.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 选中标签详情 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8"
+                    Visibility="{Binding HasSelectedTag, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="标签详情" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Margin="0,0,8,8">
+                            <TextBlock Text="标签全名" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.FullName}" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,8">
+                            <TextBlock Text="设备" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.DeviceName}" FontWeight="SemiBold"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,0,8">
+                            <TextBlock Text="地址" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.Address}" FontWeight="SemiBold" FontFamily="Consolas"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Margin="0,0,8,8">
+                            <TextBlock Text="数据类型" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.DataType}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,8,8">
+                            <TextBlock Text="描述" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.Description}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,8">
+                            <TextBlock Text="单位" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.Unit}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="2" Margin="0,0,8,0">
+                            <TextBlock Text="扫描周期" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.ScanRateMs, StringFormat={}{0} ms}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="缩放公式" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock FontFamily="Consolas">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="Scaled = Raw × {0:G} + {1:G}">
+                                        <Binding Path="SelectedTag.ScaleMultiplier"/>
+                                        <Binding Path="SelectedTag.ScaleOffset"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,0">
+                            <TextBlock Text="访问权限" Style="{DynamicResource Body}" Foreground="{DynamicResource Brush.Text3}"/>
+                            <TextBlock Text="{Binding SelectedTag.AccessLevel}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

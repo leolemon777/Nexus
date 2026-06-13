@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Nexus.App.Services;
+using Nexus.Security;
 using Nexus;
 
 namespace Nexus.App.ViewModels
@@ -18,6 +19,8 @@ namespace Nexus.App.ViewModels
     public partial class MonitorViewModel : ObservableObject, IDisposable
     {
         private readonly MonitorService _service = new();
+        private readonly EventEngine _eventEngine = new();
+        private readonly UserService _userService;
         private readonly Dispatcher _dispatcher;
         private bool _disposed;
 
@@ -70,6 +73,30 @@ namespace Nexus.App.ViewModels
         public string[] WriteDataTypes { get; } = { "Int16", "UInt16", "Int32", "Float", "Double", "Bool", "String" };
         public ObservableCollection<string> AlarmHistory { get; } = new();
 
+        // Advanced tags
+        public AdvancedTagEngine AdvancedTagEngine => _service.AdvancedTags;
+        public ObservableCollection<AdvancedTag> AdvancedTags { get; } = new();
+
+        [ObservableProperty] private string _newAdvTagName = "";
+        [ObservableProperty] private AdvancedTagType _newAdvTagType = AdvancedTagType.Scaled;
+        [ObservableProperty] private string _newAdvTagSource = "D100";
+        [ObservableProperty] private double _newAdvTagMultiplier = 1.0;
+        [ObservableProperty] private double _newAdvTagOffset = 0.0;
+        [ObservableProperty] private double _newAdvTagMinValue = 0.0;
+        [ObservableProperty] private double _newAdvTagMaxValue = 100.0;
+        [ObservableProperty] private double _newAdvTagDeadband = 1.0;
+        [ObservableProperty] private AggregationFunction _newAdvTagAggFunction = AggregationFunction.Average;
+        [ObservableProperty] private int _newAdvTagWindowSize = 10;
+        [ObservableProperty] private string _newAdvTagExpression = "";
+
+        public AdvancedTagType[] AdvancedTagTypes { get; } = (AdvancedTagType[])Enum.GetValues(typeof(AdvancedTagType));
+        public AggregationFunction[] AggregationFunctions { get; } = (AggregationFunction[])Enum.GetValues(typeof(AggregationFunction));
+
+        // Data logging (CSV/JSONL with rotation)
+        private RotatingDataLogger? _dataLogger;
+        [ObservableProperty] private bool _isDataLogging;
+        [ObservableProperty] private string _dataLogPath = "";
+
         // Playback
         private DataRecorder? _recorder;
         private PlaybackData? _playbackData;
@@ -109,11 +136,14 @@ namespace Nexus.App.ViewModels
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "Nexus", "monitored_addresses.json");
 
-        public MonitorViewModel()
+        public MonitorViewModel(UserService userService)
         {
+            _userService = userService;
             _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
             _service.TagValueChanged += OnTagValueChanged;
             _service.OnDataPoint += OnDataPointReceived;
+            _eventEngine.OnDataChanged += OnEventEngineDataChanged;
+            _eventEngine.OnAlarm += OnEventEngineAlarm;
         }
 
         public void Initialize()
@@ -204,6 +234,21 @@ namespace Nexus.App.ViewModels
         }
 
         [RelayCommand]
+        private async Task DiscoverTags()
+        {
+            if (_device == null || !_device.IsConnected)
+            {
+                AppendLog("[DISC] 未连接设备");
+                return;
+            }
+            var tags = await TagDiscovery.DiscoverAsync(_device, "modbus", 200);
+            foreach (var tag in tags)
+            {
+                AppendLog($"[DISC] 发现: {tag.Address} ({tag.DataType}) - {tag.Description}");
+            }
+        }
+
+        [RelayCommand]
         private async Task TogglePollingAsync()
         {
             if (IsPolling)
@@ -240,6 +285,32 @@ namespace Nexus.App.ViewModels
             _service.StopCsvLog();
             IsCsvLogging = false;
             AppendLog("[CSV] 日志已停止");
+        }
+
+        [RelayCommand]
+        private void StartDataLogging()
+        {
+            if (IsDataLogging) return;
+            string basePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Nexus", "logs", "data_log");
+            _dataLogger = new RotatingDataLogger(basePath);
+            _dataLogger.OnLog += (_, msg) => _dispatcher.BeginInvoke(() => AppendLog(msg));
+            _dataLogger.Start();
+            IsDataLogging = true;
+            DataLogPath = basePath;
+            AppendLog("[DLog] 数据记录已启动");
+        }
+
+        [RelayCommand]
+        private void StopDataLogging()
+        {
+            if (!IsDataLogging) return;
+            _dataLogger?.Stop();
+            _dataLogger?.Dispose();
+            _dataLogger = null;
+            IsDataLogging = false;
+            AppendLog("[DLog] 数据记录已停止");
         }
 
         [RelayCommand]
@@ -307,6 +378,12 @@ namespace Nexus.App.ViewModels
         [RelayCommand]
         private async Task WriteToMonitor()
         {
+            if (!_userService.HasPermission(UserRole.Operator))
+            {
+                AppendLog("[ERR] 权限不足: 需要 Operator 角色");
+                return;
+            }
+
             if (_device == null || !_device.IsConnected)
             {
                 AppendLog("[ERR] 未连接设备");
@@ -605,6 +682,12 @@ namespace Nexus.App.ViewModels
         [RelayCommand]
         private async Task ApplyRecipe(Recipe? recipe)
         {
+            if (!_userService.HasPermission(UserRole.Operator))
+            {
+                AppendLog("[ERR] 权限不足: 需要 Operator 角色");
+                return;
+            }
+
             if (recipe == null || _device == null || !_device.IsConnected)
             {
                 AppendLog("[RCP] 无法应用配方: 未连接设备");
@@ -633,13 +716,74 @@ namespace Nexus.App.ViewModels
             }
         }
 
+        // ── Advanced tag commands ──────────────────────
+
+        [RelayCommand]
+        private void AddAdvancedTag()
+        {
+            if (string.IsNullOrWhiteSpace(NewAdvTagName)) return;
+
+            var tag = new AdvancedTag
+            {
+                Name = NewAdvTagName.Trim(),
+                Type = NewAdvTagType,
+                SourceTagNames = new[] { NewAdvTagSource.Trim() },
+                Expression = NewAdvTagExpression.Trim(),
+                Multiplier = NewAdvTagMultiplier,
+                Offset = NewAdvTagOffset,
+                MinValue = NewAdvTagMinValue,
+                MaxValue = NewAdvTagMaxValue,
+                DeadbandValue = NewAdvTagDeadband,
+                AggFunction = NewAdvTagAggFunction,
+                WindowSize = NewAdvTagWindowSize
+            };
+            AdvancedTagEngine.AddTag(tag);
+            AdvancedTags.Add(tag);
+            AppendLog($"[AT] 添加高级标签: {tag.Name} ({tag.Type})");
+            NewAdvTagName = "";
+        }
+
+        [RelayCommand]
+        private void RemoveAdvancedTag(AdvancedTag? tag)
+        {
+            if (tag == null) return;
+            AdvancedTagEngine.RemoveTag(tag.Name);
+            AdvancedTags.Remove(tag);
+            AppendLog($"[AT] 移除高级标签: {tag.Name}");
+        }
+
         // ── Data point handler ───────────────────────────
+
+        private void OnEventEngineDataChanged(object? sender, DataChangeEvent e)
+        {
+            _dispatcher.BeginInvoke(new Action(() =>
+            {
+                AppendLog($"[EVT] {e.TagName}: {e.OldValue:F2} → {e.NewValue:F2} (Δ{e.ChangeAmount:F2})");
+            }));
+        }
+
+        private void OnEventEngineAlarm(object? sender, AlarmEvent e)
+        {
+            _dispatcher.BeginInvoke(new Action(() =>
+            {
+                string entry = $"{DateTime.Now:HH:mm:ss.fff} [{e.TagName}] {e.Message}";
+                AlarmHistory.Insert(0, entry);
+                if (AlarmHistory.Count > 200) AlarmHistory.RemoveAt(AlarmHistory.Count - 1);
+                AppendLog($"[ALM-E] {entry}");
+                PlayAlarmSound();
+            }));
+        }
 
         private void OnDataPointReceived(object? sender, (MonitoredAddress Address, DataPoint Point) e)
         {
             if (_recorder != null && IsRecording)
             {
                 _recorder.Record(e.Address.Address, e.Address.DisplayName, e.Point.Value, e.Point.Time);
+            }
+
+            if (_dataLogger != null && IsDataLogging)
+            {
+                _dataLogger.Log(e.Address.Address, e.Address.DisplayName, e.Point.Value, e.Address.Quality, e.Address.DataType);
             }
         }
 
@@ -794,8 +938,14 @@ namespace Nexus.App.ViewModels
             _webServer?.Stop();
             _webServer?.Dispose();
             _webServer = null;
+            _dataLogger?.Stop();
+            _dataLogger?.Dispose();
+            _dataLogger = null;
             SaveTags();
             SaveMonitoredAddresses();
+            _eventEngine.OnDataChanged -= OnEventEngineDataChanged;
+            _eventEngine.OnAlarm -= OnEventEngineAlarm;
+            _eventEngine.Dispose();
             _service.Dispose();
             GC.SuppressFinalize(this);
         }
