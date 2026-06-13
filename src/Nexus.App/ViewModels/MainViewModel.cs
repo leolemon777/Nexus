@@ -179,7 +179,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🦾", "EKI 机器人通讯",    "kuka",     typeof(Views.KukaPage)),
 
         new NavGroup("🌐", "OPC UA", BrandLogos.TryLoad("opcua.png"))
-            .Add("🌐", "OPC UA Client",     "opcua",    typeof(Views.OpcUaPage)),
+            .Add("🌐", "OPC UA Client",     "opcua",          typeof(Views.OpcUaPage))
+            .Add("🌐", "OPC UA Server",     "opcua-server",   typeof(Views.OpcUaServerPage)),
 
         new NavGroup("🔵", "安川 YASKAWA", BrandLogos.TryLoad("yaskawa.png"))
             .Add("🔵", "Memobus TCP",     "yaskawa",     typeof(Views.YaskawaPage)),

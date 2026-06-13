@@ -1,0 +1,115 @@
+<Page x:Class="Nexus.App.Views.OpcUaServerPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="clr-namespace:Nexus.App.Views"
+      Background="{DynamicResource Brush.Bg}">
+    <Page.Resources>
+        <local:BooleanInverterConverter x:Key="InvertBool"/>
+    </Page.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+            <!-- Server control -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="OPC UA 服务器" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <WrapPanel>
+                        <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0"
+                                 Text="{Binding Port}" IsEnabled="{Binding IsRunning, Converter={StaticResource InvertBool}}"/>
+                        <Button Style="{DynamicResource Button.Primary}" Margin="0,0,8,0"
+                                Command="{Binding ToggleServerCommand}">
+                            <Button.Content>
+                                <TextBlock>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="启动服务器"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                    <Setter Property="Text" Value="停止服务器"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button.Content>
+                        </Button>
+                        <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Brush.Ok}">
+                            <Run Text="端点: "/><Run Text="{Binding EndpointUrl}"/>
+                            <Run Text=" | 会话: "/><Run Text="{Binding SessionCount}"/>
+                        </TextBlock>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Add node -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="添加 OPC UA 节点" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <WrapPanel>
+                        <TextBlock Text="名称" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Style="{DynamicResource Input}" Width="140" Margin="0,0,8,0"
+                                 Text="{Binding NewNodeName, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox MinWidth="100" Margin="0,0,8,0"
+                                  ItemsSource="{Binding DataTypes}" SelectedItem="{Binding NewNodeDataType}"/>
+                        <TextBlock Text="初始值" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,8,0"
+                                 Text="{Binding NewNodeValue, UpdateSourceTrigger=LostFocus}"/>
+                        <Button Content="添加" Style="{DynamicResource Button.Primary}" Command="{Binding AddNodeCommand}"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Node list -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="节点列表" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="刷新" Style="{DynamicResource Button.Text}" Command="{Binding RefreshNodesCommand}"/>
+                            <TextBlock Text="节点数:" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                            <TextBlock Text="{Binding NodeCount}" Style="{DynamicResource Body}" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                    <DataGrid ItemsSource="{Binding Nodes}" AutoGenerateColumns="False" IsReadOnly="True"
+                              Background="{DynamicResource Brush.Bg}" BorderThickness="1"
+                              BorderBrush="{DynamicResource Brush.Line}"
+                              HeadersVisibility="Column" RowHeaderWidth="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="NodeId" Binding="{Binding NodeId}" Width="120"/>
+                            <DataGridTextColumn Header="名称" Binding="{Binding DisplayName}" Width="*"/>
+                            <DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="80"/>
+                            <DataGridTextColumn Header="当前值" Binding="{Binding Value}" Width="120"/>
+                            <DataGridTextColumn Header="质量" Binding="{Binding StatusCode}" Width="80"/>
+                            <DataGridTextColumn Header="时间戳" Binding="{Binding Timestamp, StringFormat=HH:mm:ss}" Width="100"/>
+                            <DataGridTemplateColumn Header="操作" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="✕" Style="{DynamicResource Button.Text}"
+                                                Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- Log -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="日志" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" Height="150">
+                        <ListBox Background="Transparent" BorderThickness="0"
+                                 Foreground="{DynamicResource Brush.Text2}"
+                                 FontFamily="Consolas" FontSize="11"
+                                 ItemsSource="{Binding LogLines}"
+                                 VirtualizingStackPanel.IsVirtualizing="True"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

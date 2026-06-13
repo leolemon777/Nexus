@@ -68,6 +68,7 @@ public partial class App : Application
                 services.AddTransient<XinjeViewModel>();
                 services.AddTransient<KukaViewModel>();
                 services.AddTransient<OpcUaViewModel>();
+                services.AddTransient<OpcUaServerViewModel>();
                 services.AddTransient<YaskawaViewModel>();
                 services.AddTransient<YokogawaViewModel>();
                 services.AddTransient<SchneiderViewModel>();
