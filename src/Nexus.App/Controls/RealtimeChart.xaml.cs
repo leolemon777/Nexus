@@ -272,6 +272,42 @@ namespace Nexus.App.Controls
                 }
                 geometry.Freeze();
                 dc.DrawGeometry(null, pen, geometry);
+
+                var visiblePoints = points.Where(p => {
+                    double ago = (now - p.Time).TotalSeconds;
+                    return ago >= windowStart && ago <= windowEnd;
+                }).ToList();
+
+                if (visiblePoints.Count > 0)
+                {
+                    double min = visiblePoints.Min(p => p.Value);
+                    double max = visiblePoints.Max(p => p.Value);
+                    double avg = visiblePoints.Average(p => p.Value);
+
+                    var dashPen = new Pen(new SolidColorBrush(color) { Opacity = 0.3 }, 1);
+                    dashPen.DashStyle = DashStyles.Dash;
+                    dashPen.Freeze();
+
+                    double minY = chartBottom - ((min - globalMin) / yRange) * chartHeight;
+                    double maxY = chartBottom - ((max - globalMin) / yRange) * chartHeight;
+                    double avgY = chartBottom - ((avg - globalMin) / yRange) * chartHeight;
+
+                    dc.DrawLine(dashPen, new Point(chartLeft, minY), new Point(chartRight, minY));
+                    dc.DrawLine(dashPen, new Point(chartLeft, avgY), new Point(chartRight, avgY));
+
+                    var statTypeface = new Typeface("Consolas");
+                    var statBrush = new SolidColorBrush(color);
+
+                    string minText = $"MIN:{min:G6}";
+                    string maxText = $"MAX:{max:G6}";
+                    string avgText = $"AVG:{avg:G6}";
+
+                    double labelX = chartRight - 100;
+
+                    DrawText(dc, minText, statTypeface, 9, statBrush, labelX, minY - 12);
+                    DrawText(dc, avgText, statTypeface, 9, statBrush, labelX, avgY - 12);
+                    DrawText(dc, maxText, statTypeface, 9, statBrush, labelX, maxY - 12);
+                }
             }
 
             dc.Pop();
@@ -415,6 +451,12 @@ namespace Nexus.App.Controls
             for (int i = 0; i < nice.Length; i++)
                 if (nice[i] >= raw) return nice[i];
             return 3600;
+        }
+
+        private static void DrawText(DrawingContext dc, string text, Typeface typeface, double size, Brush brush, double x, double y)
+        {
+            var ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, size, brush, 1.0);
+            dc.DrawText(ft, new Point(x, y));
         }
     }
 }

@@ -94,6 +94,7 @@ public partial class App : Application
                 services.AddSingleton<RecipeViewModel>();
                 services.AddSingleton<DataLoggerViewModel>();
                 services.AddSingleton<PacketRecorderService>();
+                services.AddSingleton<ConnectionTemplateService>();
                 services.AddSingleton<DiagnosticBundleService>();
                 services.AddSingleton<VirtualPlcManager>();
 

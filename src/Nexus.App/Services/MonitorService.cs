@@ -49,6 +49,8 @@ namespace Nexus.App.Services
         /// <summary>报警信息。</summary>
         [ObservableProperty] private string _alarmMessage = string.Empty;
 
+        public event EventHandler<(MonitoredAddress addr, string message)>? AlarmTriggered;
+
         private readonly List<DataPoint> _dataPoints = new();
         private readonly object _dataLock = new();
         private readonly int _maxPoints;
@@ -83,22 +85,26 @@ namespace Nexus.App.Services
 
         private void CheckAlarm(double value)
         {
+            bool wasAlarming = IsAlarming;
             bool alarming = false;
             string msg = string.Empty;
 
             if (AlarmHigh.HasValue && value > AlarmHigh.Value)
             {
                 alarming = true;
-                msg = $"⚠ 高报警: {value:F2} > {AlarmHigh.Value:F2}";
+                msg = $"高报警: {value:F2} > {AlarmHigh.Value:F2}";
             }
             else if (AlarmLow.HasValue && value < AlarmLow.Value)
             {
                 alarming = true;
-                msg = $"⚠ 低报警: {value:F2} < {AlarmLow.Value:F2}";
+                msg = $"低报警: {value:F2} < {AlarmLow.Value:F2}";
             }
 
             IsAlarming = alarming;
             AlarmMessage = msg;
+
+            if (alarming && !wasAlarming)
+                AlarmTriggered?.Invoke(this, (this, msg));
         }
 
         private void RecalcMinMax()

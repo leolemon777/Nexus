@@ -46,6 +46,19 @@ namespace Nexus.App.ViewModels
         [ObservableProperty] private int _chartTimeWindowSeconds = 60;
         [ObservableProperty] private bool _isDeviceConnected;
 
+        public ObservableCollection<AddressGroup> AddressGroups { get; } = new();
+        [ObservableProperty] private string _newGroupName = "";
+
+        [ObservableProperty] private string _writeAddress = "D100";
+        [ObservableProperty] private string _writeValue = "0";
+        [ObservableProperty] private string _writeDataType = "Int16";
+        [ObservableProperty] private bool _alarmSoundEnabled = true;
+
+        public string[] WriteDataTypes { get; } = { "Int16", "UInt16", "Int32", "Float", "Double", "Bool", "String" };
+        public ObservableCollection<string> AlarmHistory { get; } = new();
+
+        private IReadWriteDevice? _device;
+
         public string[] DataTypes { get; } =
             { "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Float", "Double", "String", "Bool" };
 
@@ -87,6 +100,7 @@ namespace Nexus.App.ViewModels
 
         public void SetDevice(IReadWriteDevice? device)
         {
+            _device = device;
             _service.SetDevice(device);
             IsDeviceConnected = device?.IsConnected ?? false;
         }
@@ -182,6 +196,39 @@ namespace Nexus.App.ViewModels
         [RelayCommand]
         private void ClearLog() => LogLines.Clear();
 
+        [RelayCommand]
+        private async Task WriteToMonitor()
+        {
+            if (_device == null || !_device.IsConnected)
+            {
+                AppendLog("[ERR] 未连接设备");
+                return;
+            }
+
+            try
+            {
+                OperateResult result = WriteDataType switch
+                {
+                    "Int16" => _device.Write(WriteAddress, short.Parse(WriteValue)),
+                    "UInt16" => _device.Write(WriteAddress, ushort.Parse(WriteValue)),
+                    "Int32" => _device.Write(WriteAddress, int.Parse(WriteValue)),
+                    "Float" => _device.Write(WriteAddress, float.Parse(WriteValue)),
+                    "Double" => _device.Write(WriteAddress, double.Parse(WriteValue)),
+                    "Bool" => _device.Write(WriteAddress, WriteValue == "1" || WriteValue.ToLower() == "true"),
+                    "String" => _device.Write(WriteAddress, WriteValue),
+                    _ => _device.Write(WriteAddress, short.Parse(WriteValue))
+                };
+
+                AppendLog(result.IsSuccess
+                    ? $"[W] {WriteAddress} = {WriteValue} 成功"
+                    : $"[W] {WriteAddress} 写入失败: {result.Message}");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERR] 写入异常: {ex.Message}");
+            }
+        }
+
         // ── Monitored address commands ───────────────────
 
         [RelayCommand]
@@ -198,6 +245,7 @@ namespace Nexus.App.ViewModels
                 SeriesColor = NewMonColor
             };
 
+            addr.AlarmTriggered += OnAlarmTriggered;
             _service.AddMonitoredAddress(addr);
             MonitoredAddresses.Add(addr);
             MonitoredCount = MonitoredAddresses.Count;
@@ -248,6 +296,7 @@ namespace Nexus.App.ViewModels
                 // 避免重复地址
                 if (MonitoredAddresses.Any(a => a.Address == addr.Address)) continue;
 
+                addr.AlarmTriggered += OnAlarmTriggered;
                 _service.AddMonitoredAddress(addr);
                 MonitoredAddresses.Add(addr);
                 added++;
@@ -279,6 +328,34 @@ namespace Nexus.App.ViewModels
             foreach (var addr in MonitoredAddresses)
                 addr.ClearHistory();
             AppendLog("[CLR] 已清除历史数据");
+        }
+
+        // ── Address group commands ─────────────────────
+
+        [RelayCommand]
+        private void AddGroup()
+        {
+            if (string.IsNullOrWhiteSpace(NewGroupName)) return;
+            AddressGroups.Add(new AddressGroup { Name = NewGroupName.Trim() });
+            NewGroupName = string.Empty;
+        }
+
+        [RelayCommand]
+        private void RemoveGroup(AddressGroup? group)
+        {
+            if (group == null) return;
+            foreach (var addr in group.Addresses)
+                MonitoredAddresses.Add(addr);
+            AddressGroups.Remove(group);
+        }
+
+        [RelayCommand]
+        private void MoveToGroup(MonitoredAddress? addr)
+        {
+            if (addr == null || AddressGroups.Count == 0) return;
+            var target = AddressGroups[AddressGroups.Count - 1];
+            MonitoredAddresses.Remove(addr);
+            target.Addresses.Add(addr);
         }
 
         [RelayCommand]
@@ -344,6 +421,24 @@ namespace Nexus.App.ViewModels
         private void OnDataPointReceived(object? sender, (MonitoredAddress Address, DataPoint Point) e)
         {
             // Chart updates are driven by a timer in RealtimeChart; no per-point UI dispatch needed
+        }
+
+        private void OnAlarmTriggered(object? sender, (MonitoredAddress addr, string message) e)
+        {
+            _dispatcher.BeginInvoke(new Action(() =>
+            {
+                string entry = $"{DateTime.Now:HH:mm:ss.fff} [{e.addr.DisplayName}] {e.message}";
+                AlarmHistory.Insert(0, entry);
+                if (AlarmHistory.Count > 200) AlarmHistory.RemoveAt(AlarmHistory.Count - 1);
+                AppendLog($"[ALM] {entry}");
+                PlayAlarmSound();
+            }));
+        }
+
+        private void PlayAlarmSound()
+        {
+            if (!AlarmSoundEnabled) return;
+            try { System.Media.SystemSounds.Beep.Play(); } catch { }
         }
 
         private void OnTagValueChanged(object? sender, TagEntry tag)
@@ -435,6 +530,7 @@ namespace Nexus.App.ViewModels
                         IntervalMs = dto.IntervalMs,
                         SeriesColor = dto.SeriesColor
                     };
+                    addr.AlarmTriggered += OnAlarmTriggered;
                     _service.AddMonitoredAddress(addr);
                     MonitoredAddresses.Add(addr);
                 }
@@ -489,5 +585,12 @@ namespace Nexus.App.ViewModels
         public string DataType { get; set; } = "Int16";
         public int IntervalMs { get; set; } = 1000;
         public string SeriesColor { get; set; } = "#58A6FF";
+    }
+
+    public partial class AddressGroup : ObservableObject
+    {
+        public string Name { get; set; } = string.Empty;
+        public ObservableCollection<MonitoredAddress> Addresses { get; } = new();
+        [ObservableProperty] private bool _isExpanded = true;
     }
 }

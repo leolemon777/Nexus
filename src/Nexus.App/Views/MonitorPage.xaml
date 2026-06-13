@@ -69,6 +69,25 @@
             </WrapPanel>
         </Border>
 
+        <!-- 直接写入 -->
+        <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock Text="写入" FontWeight="Bold" Foreground="{DynamicResource Brush.Warn}" 
+                           VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <TextBlock Text="地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Style="{DynamicResource Input}" Width="120" Margin="0,0,16,0"
+                         Text="{Binding WriteAddress, UpdateSourceTrigger=LostFocus}"/>
+                <TextBlock Text="类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox MinWidth="100" Margin="0,0,16,0"
+                          ItemsSource="{Binding WriteDataTypes}" SelectedItem="{Binding WriteDataType}"/>
+                <TextBlock Text="值" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Style="{DynamicResource Input}" Width="120" Margin="0,0,16,0"
+                         Text="{Binding WriteValue, UpdateSourceTrigger=LostFocus}"/>
+                <Button Content="写入" Style="{DynamicResource Button.Danger}" 
+                        Command="{Binding WriteToMonitorCommand}"/>
+            </WrapPanel>
+        </Border>
+
         <!-- Main content: 3-column layout -->
         <Grid Grid.Row="1" Margin="12,8,12,12">
             <Grid.ColumnDefinitions>
@@ -142,6 +161,25 @@
                                     Click="BatchImport_Click" HorizontalAlignment="Stretch"/>
                         </Grid>
                     </StackPanel>
+
+                    <!-- 地址分组 -->
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                            <TextBlock Text="地址分组" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                            <Button Content="+ 新建组" Style="{DynamicResource Button.Text}" HorizontalAlignment="Right"
+                                    Command="{Binding AddGroupCommand}" FontSize="11" Padding="6,4"/>
+                        </Grid>
+                        <TreeView Background="Transparent" BorderThickness="0" MaxHeight="120">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="True"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeViewItem Header="全部地址" IsExpanded="True">
+                                <!-- This will show the flat address list below -->
+                            </TreeViewItem>
+                        </TreeView>
+                    </DockPanel>
 
                     <!-- Address list -->
                     <ListBox ItemsSource="{Binding MonitoredAddresses}" Background="Transparent"
@@ -239,6 +277,62 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!-- Write section -->
+                    <Separator DockPanel.Dock="Top" Background="{DynamicResource Brush.Line}" Margin="0,8,0,8"/>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="写入" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Style="{DynamicResource Input}"
+                                     Text="{Binding WriteAddress, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4"/>
+
+                            <TextBlock Grid.Row="1" Text="类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding WriteDataTypes}"
+                                      SelectedItem="{Binding WriteDataType}" Margin="0,0,0,4"/>
+
+                            <TextBlock Grid.Row="2" Text="值" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,4"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{DynamicResource Input}"
+                                     Text="{Binding WriteValue, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4"/>
+
+                            <Button Grid.Row="3" Grid.ColumnSpan="2" Content="写入"
+                                    Style="{DynamicResource Button.Primary}" Margin="0,4,0,0"
+                                    Command="{Binding WriteToMonitorCommand}" HorizontalAlignment="Stretch"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 报警历史 -->
+                    <Separator DockPanel.Dock="Top" Background="{DynamicResource Brush.Line}" Margin="0,4,0,4"/>
+                    <DockPanel DockPanel.Dock="Top">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                            <TextBlock Text="报警历史" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <CheckBox Content="声音" IsChecked="{Binding AlarmSoundEnabled}" 
+                                          VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11"/>
+                                <Button Content="清空" Style="{DynamicResource Button.Text}" 
+                                        Command="{Binding ClearAlarmHistoryCommand}" FontSize="11" Padding="6,4"/>
+                            </StackPanel>
+                        </Grid>
+                        <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="6" MaxHeight="120">
+                            <ListBox Background="Transparent" BorderThickness="0"
+                                     Foreground="{DynamicResource Brush.Warn}"
+                                     FontFamily="Consolas" FontSize="11"
+                                     ItemsSource="{Binding AlarmHistory}"
+                                     VirtualizingStackPanel.IsVirtualizing="True"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                        </Border>
+                    </DockPanel>
 
                     <!-- Log section -->
                     <Separator DockPanel.Dock="Top" Background="{DynamicResource Brush.Line}" Margin="0,8,0,8"/>

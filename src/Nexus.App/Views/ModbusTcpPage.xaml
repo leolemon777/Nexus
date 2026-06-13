@@ -99,6 +99,42 @@
                 </StackPanel>
             </Border>
 
+            <!-- 连接模板 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="连接模板" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <WrapPanel Margin="0,0,0,8">
+                        <TextBox Style="{DynamicResource Input}" Width="160" Margin="0,0,8,0"
+                                 Text="{Binding TemplateName, UpdateSourceTrigger=LostFocus}" />
+                        <Button Content="保存模板" Style="{DynamicResource Button.Primary}"
+                                Command="{Binding SaveAsTemplateCommand}"/>
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding SavedTemplates}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="6,4" Margin="0,0,0,2" Background="{DynamicResource Brush.Surface2}"
+                                        CornerRadius="{DynamicResource Radius.Sm}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="加载" Style="{DynamicResource Button.Text}"
+                                                Command="{Binding DataContext.LoadTemplateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" Margin="8,0"/>
+                                        <Button Grid.Column="2" Content="✕" Style="{DynamicResource Button.Text}"
+                                                Command="{Binding DataContext.DeleteTemplateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
             <!-- 数据读写 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>

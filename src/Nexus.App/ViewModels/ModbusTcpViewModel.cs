@@ -41,6 +41,7 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
 {
     private readonly ModbusOptions _options;
     private readonly PacketRecorderService _packetRecorder;
+    private readonly ConnectionTemplateService _templateService;
 
     // ── 输入参数 ──────────────────────────────
     [ObservableProperty] private string _ipAddress = "127.0.0.1";
@@ -60,6 +61,10 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isServerRunning;
     [ObservableProperty] private string _lastResult = "--";
     [ObservableProperty] private string _multiFormatResult = string.Empty;
+
+    // ── 连接模板 ──────────────────────────────
+    public ObservableCollection<ConnectionTemplate> SavedTemplates { get; } = new();
+    [ObservableProperty] private string _templateName = "";
 
     /// <summary>支持的数据类型列表（绑定到 ComboBox）。</summary>
     public string[] DataTypes { get; } =
@@ -105,10 +110,11 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
 
     private bool HasConnection => _client != null || _pool != null;
 
-    public ModbusTcpViewModel(IOptions<ModbusOptions> options, PacketRecorderService packetRecorder)
+    public ModbusTcpViewModel(IOptions<ModbusOptions> options, PacketRecorderService packetRecorder, ConnectionTemplateService templateService)
     {
         _options = options.Value;
         _packetRecorder = packetRecorder;
+        _templateService = templateService;
         _ipAddress = _options.DefaultIp;
         _port = _options.DefaultPort;
         _slaveId = _options.DefaultSlaveId;
@@ -120,6 +126,7 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         AppendLog("Modbus TCP 调试器已就绪。");
         AppendLog($"提示：可先点击\"启动内置 Server\"在 127.0.0.1:{VirtualServerPort} 模拟 PLC，再连接并读写。");
+        LoadTemplates();
     }
 
     // ═══════════════════════════════════════════
@@ -634,6 +641,62 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         DetachPoolEvents(pool);
         pool.Dispose();
         _pool = null;
+    }
+
+    // ═══════════════════════════════════════════
+    //  连接模板
+    // ═══════════════════════════════════════════
+
+    [RelayCommand]
+    private void SaveAsTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(TemplateName)) return;
+        var tpl = new ConnectionTemplate
+        {
+            Name = TemplateName.Trim(),
+            Protocol = "Modbus TCP",
+            IpAddress = IpAddress,
+            Port = Port,
+            Station = SlaveId
+        };
+        _templateService.AddOrUpdate(tpl);
+        RefreshTemplates();
+        TemplateName = string.Empty;
+        AppendLog($"[TPL] 已保存连接模板: {tpl.Name}");
+    }
+
+    [RelayCommand]
+    private void LoadTemplate(ConnectionTemplate? tpl)
+    {
+        if (tpl == null) return;
+        IpAddress = tpl.IpAddress;
+        Port = tpl.Port;
+        SlaveId = tpl.Station;
+        tpl.LastUsedAt = DateTime.Now;
+        _templateService.AddOrUpdate(tpl);
+        AppendLog($"[TPL] 已加载模板: {tpl.Name}");
+    }
+
+    [RelayCommand]
+    private void DeleteTemplate(ConnectionTemplate? tpl)
+    {
+        if (tpl == null) return;
+        _templateService.Remove(tpl.Name);
+        SavedTemplates.Remove(tpl);
+        AppendLog($"[TPL] 已删除模板: {tpl.Name}");
+    }
+
+    private void LoadTemplates()
+    {
+        _templateService.Load();
+        RefreshTemplates();
+    }
+
+    private void RefreshTemplates()
+    {
+        SavedTemplates.Clear();
+        foreach (var t in _templateService.Templates)
+            SavedTemplates.Add(t);
     }
 
     // ═══════════════════════════════════════════
