@@ -82,6 +82,14 @@
                         </Border>
                     </Grid>
 
+                    <!-- 多格式显示 -->
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" Margin="0,6,0,0">
+                        <TextBlock Text="{Binding MultiFormatResult, Mode=OneWay}" 
+                                   FontFamily="Consolas, Courier New" FontSize="11"
+                                   Foreground="{DynamicResource Brush.Text2}"
+                                   TextWrapping="Wrap" LineHeight="18"/>
+                    </Border>
+
                     <!-- 写入 -->
                     <Grid>
                         <Grid.ColumnDefinitions>

@@ -59,12 +59,18 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _isServerRunning;
     [ObservableProperty] private string _lastResult = "--";
+    [ObservableProperty] private string _multiFormatResult = string.Empty;
 
     /// <summary>支持的数据类型列表（绑定到 ComboBox）。</summary>
     public string[] DataTypes { get; } =
     {
         "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
-        "Float", "Double", "String", "Bool", "Bytes"
+        "Float", "Double", "String", "Bool", "Bytes",
+        "Hex16", "Hex32", "Hex64",
+        "BCD16", "BCD32",
+        "Word", "DWord",
+        "Char",
+        "Int16-Swap", "Int32-Swap", "Float-Swap", "Double-Swap"
     };
 
     /// <summary>支持的功能码列表（绑定到 ComboBox）。</summary>
@@ -242,18 +248,30 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         {
             string? resultText = DataType switch
             {
-                "Int16"  => await ReadAndFormatAsync(addr, client => client.ReadInt16Async(addr)),
-                "UInt16" => await ReadAndFormatAsync(addr, client => client.ReadUInt16Async(addr)),
-                "Int32"  => await ReadAndFormatAsync(addr, client => client.ReadInt32Async(addr)),
-                "UInt32" => await ReadAndFormatAsync(addr, client => client.ReadUInt32Async(addr)),
-                "Int64"  => await ReadAndFormatAsync(addr, client => client.ReadInt64Async(addr)),
-                "UInt64" => await ReadAndFormatAsync(addr, client => client.ReadUInt64Async(addr)),
-                "Float"  => await ReadAndFormatAsync(addr, client => client.ReadFloatAsync(addr)),
-                "Double" => await ReadAndFormatAsync(addr, client => client.ReadDoubleAsync(addr)),
-                "String" => await ReadAndFormatAsync(addr, client => client.ReadStringAsync(addr, (ushort)Quantity)),
-                "Bool"   => await ReadAndFormatAsync(addr, client => client.ReadBoolAsync(addr)),
-                "Bytes"  => await ReadBytesAndFormatAsync(addr, (ushort)Quantity),
-                _        => "[ERR] 未知数据类型",
+                "Int16"       => await ReadAndFormatAsync(addr, client => client.ReadInt16Async(addr)),
+                "UInt16"      => await ReadAndFormatAsync(addr, client => client.ReadUInt16Async(addr)),
+                "Int32"       => await ReadAndFormatAsync(addr, client => client.ReadInt32Async(addr)),
+                "UInt32"      => await ReadAndFormatAsync(addr, client => client.ReadUInt32Async(addr)),
+                "Int64"       => await ReadAndFormatAsync(addr, client => client.ReadInt64Async(addr)),
+                "UInt64"      => await ReadAndFormatAsync(addr, client => client.ReadUInt64Async(addr)),
+                "Float"       => await ReadAndFormatAsync(addr, client => client.ReadFloatAsync(addr)),
+                "Double"      => await ReadAndFormatAsync(addr, client => client.ReadDoubleAsync(addr)),
+                "String"      => await ReadAndFormatAsync(addr, client => client.ReadStringAsync(addr, (ushort)Quantity)),
+                "Bool"        => await ReadAndFormatAsync(addr, client => client.ReadBoolAsync(addr)),
+                "Bytes"       => await ReadBytesAndFormatAsync(addr, (ushort)Quantity),
+                "BCD16"       => await ReadRawAndFormatAsync(addr, 2, d => DataConverter.DecodeBcd16(DataConverter.ToUInt16(d, 0)).ToString()),
+                "Hex16"       => await ReadRawAndFormatAsync(addr, 2, d => DataConverter.ToHex16(DataConverter.ToUInt16(d, 0))),
+                "Word"        => await ReadRawAndFormatAsync(addr, 2, d => DataConverter.ToWordString(d)),
+                "Char"        => await ReadRawAndFormatAsync(addr, 1, d => DataConverter.ToChar(d).ToString()),
+                "Hex32"       => await ReadRawAndFormatAsync(addr, 4, d => DataConverter.ToHex32(DataConverter.ToUInt32(d, 0))),
+                "BCD32"       => await ReadRawAndFormatAsync(addr, 4, d => DataConverter.DecodeBcd32(DataConverter.ToUInt32(d, 0)).ToString()),
+                "DWord"       => await ReadRawAndFormatAsync(addr, 4, d => DataConverter.ToDWordString(d)),
+                "Hex64"       => await ReadRawAndFormatAsync(addr, 8, d => DataConverter.ToHex64(DataConverter.ToInt64(d, 0))),
+                "Int16-Swap"  => await ReadRawAndFormatAsync(addr, 2, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 2, Endianness.LittleEndian); return DataConverter.ToInt16(s, 0).ToString(); }),
+                "Int32-Swap"  => await ReadRawAndFormatAsync(addr, 4, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 4, Endianness.LittleEndian); return DataConverter.ToInt32(s, 0).ToString(); }),
+                "Float-Swap"  => await ReadRawAndFormatAsync(addr, 4, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 4, Endianness.LittleEndian); return DataConverter.ToFloat(s, 0).ToString("F4", CultureInfo.InvariantCulture); }),
+                "Double-Swap" => await ReadRawAndFormatAsync(addr, 8, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 8, Endianness.LittleEndian); return DataConverter.ToDouble(s, 0).ToString("F6", CultureInfo.InvariantCulture); }),
+                _             => "[ERR] 未知数据类型",
             };
 
             if (resultText != null) LastResult = resultText;
@@ -291,6 +309,61 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         string hex = BitConverter.ToString(r.Content).Replace("-", " ");
         AppendLog($"[RD] {addr} ({len} bytes) = {hex}");
         return hex;
+    }
+
+    private async Task<string?> ReadRawAndFormatAsync(string addr, ushort len, Func<byte[], string> convert)
+    {
+        var r = await ExecuteReadAsync(client => client.ReadBytesAsync(addr, len)).ConfigureAwait(true);
+        if (!r.IsSuccess)
+        {
+            AppendLog($"[ERR] 读取 {addr} 失败: {r.Message}");
+            return null;
+        }
+        string text = convert(r.Content);
+        UpdateMultiFormatResult(r.Content);
+        AppendLog($"[RD] {addr} ({DataType}) = {text}");
+        return text;
+    }
+
+    private void UpdateMultiFormatResult(byte[] data)
+    {
+        if (data == null || data.Length < 2)
+        {
+            MultiFormatResult = "(数据不足)";
+            return;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"原始字节: {DataConverter.ToHexString(data, 0, Math.Min(data.Length, 8))}");
+
+        if (data.Length >= 2)
+        {
+            short i16 = DataConverter.ToInt16(data, 0);
+            ushort u16 = DataConverter.ToUInt16(data, 0);
+            sb.AppendLine($"Int16:    {i16,10}    UInt16:   {u16,10}");
+            sb.AppendLine($"Hex16:    0x{u16:X4}          BCD16:    {DataConverter.DecodeBcd16(u16),10}");
+            sb.AppendLine($"Word:     {u16} (0x{u16:X4})");
+        }
+
+        if (data.Length >= 4)
+        {
+            int i32 = DataConverter.ToInt32(data, 0);
+            uint u32 = DataConverter.ToUInt32(data, 0);
+            float f32 = DataConverter.ToFloat(data, 0);
+            sb.AppendLine($"Int32:    {i32,10}    UInt32:   {u32,10}");
+            sb.AppendLine($"Hex32:    0x{u32:X8}  BCD32:    {DataConverter.DecodeBcd32(u32),10}");
+            sb.AppendLine($"Float:    {f32,10:F4}    DWord:    {u32} (0x{u32:X8})");
+        }
+
+        if (data.Length >= 8)
+        {
+            long i64 = DataConverter.ToInt64(data, 0);
+            double f64 = DataConverter.ToDouble(data, 0);
+            sb.AppendLine($"Int64:    {i64,20}    Double:   {f64,20:F6}");
+            sb.AppendLine($"Hex64:    0x{i64:X16}");
+        }
+
+        MultiFormatResult = sb.ToString();
     }
 
     // ═══════════════════════════════════════════

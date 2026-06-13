@@ -273,5 +273,112 @@ namespace Nexus
             for (int i = offset; i < end; i++) sb.AppendFormat("{0:X2} ", data[i]);
             return sb.ToString().Trim();
         }
+
+        // ── BCD 编解码 ──────────────────────────────
+
+        /// <summary>将 16 位整数编码为 BCD 格式（如 1234 → 0x1234）。</summary>
+        public static ushort EncodeBcd16(int value)
+        {
+            if (value < 0 || value > 9999) return 0;
+            return (ushort)(((value / 1000) << 12) | ((value % 1000 / 100) << 8) | ((value % 100 / 10) << 4) | (value % 10));
+        }
+
+        /// <summary>将 BCD 格式的 16 位值解码为整数（如 0x1234 → 1234）。</summary>
+        public static int DecodeBcd16(ushort bcd)
+        {
+            return ((bcd >> 12) & 0xF) * 1000 + ((bcd >> 8) & 0xF) * 100 + ((bcd >> 4) & 0xF) * 10 + (bcd & 0xF);
+        }
+
+        /// <summary>将 32 位整数编码为 BCD 格式。</summary>
+        public static uint EncodeBcd32(int value)
+        {
+            if (value < 0 || value > 99999999) return 0;
+            uint result = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                result |= (uint)(value % 10) << (i * 4);
+                value /= 10;
+            }
+            return result;
+        }
+
+        /// <summary>将 BCD 格式的 32 位值解码为整数。</summary>
+        public static int DecodeBcd32(uint bcd)
+        {
+            int result = 0;
+            for (int i = 7; i >= 0; i--)
+            {
+                result = result * 10 + (int)((bcd >> (i * 4)) & 0xF);
+            }
+            return result;
+        }
+
+        /// <summary>从字节数组读取 BCD16 值。</summary>
+        public static int ReadBcd16(byte[] data, int offset = 0)
+            => DecodeBcd16(ToUInt16(data, offset));
+
+        /// <summary>从字节数组读取 BCD32 值。</summary>
+        public static int ReadBcd32(byte[] data, int offset = 0)
+            => DecodeBcd32(ToUInt32(data, offset));
+
+        // ── Hex display ────────────────────────────
+
+        /// <summary>将 16 位值格式化为十六进制显示（如 0x1234）。</summary>
+        public static string ToHex16(short value) => $"0x{(ushort)value:X4}";
+        public static string ToHex16(ushort value) => $"0x{value:X4}";
+
+        /// <summary>将 32 位值格式化为十六进制显示。</summary>
+        public static string ToHex32(int value) => $"0x{value:X8}";
+        public static string ToHex32(uint value) => $"0x{value:X8}";
+
+        /// <summary>将 64 位值格式化为十六进制显示。</summary>
+        public static string ToHex64(long value) => $"0x{value:X16}";
+
+        /// <summary>将浮点数的二进制表示格式化为十六进制。</summary>
+        public static string ToHexFloat(float value)
+        {
+            unsafe
+            {
+                int bits = *(int*)&value;
+                return $"0x{bits:X8}";
+            }
+        }
+
+        /// <summary>将双精度数的二进制表示格式化为十六进制。</summary>
+        public static string ToHexDouble(double value)
+        {
+            unsafe
+            {
+                long bits = *(long*)&value;
+                return $"0x{bits:X16}";
+            }
+        }
+
+        // ── Word/DWord display ─────────────────────
+
+        /// <summary>将 16 位原始寄存器值格式化为 Word 显示（如 65535 或 0xFFFF）。</summary>
+        public static string ToWordString(byte[] data, int offset = 0)
+            => $"{ToUInt16(data, offset)} (0x{ToUInt16(data, offset):X4})";
+
+        /// <summary>将 32 位原始寄存器值格式化为 DWord 显示。</summary>
+        public static string ToDWordString(byte[] data, int offset = 0)
+            => $"{ToUInt32(data, offset)} (0x{ToUInt32(data, offset):X8})";
+
+        // ── Char / ASCII ───────────────────────────
+
+        /// <summary>将字节作为 ASCII 字符显示。</summary>
+        public static char ToChar(byte[] data, int offset = 0)
+            => (char)data[offset];
+
+        /// <summary>将字节数组作为 ASCII 字符串显示。</summary>
+        public static string ToAsciiString(byte[] data, int offset, int length)
+        {
+            var sb = new StringBuilder(length);
+            for (int i = offset; i < offset + length && i < data.Length; i++)
+            {
+                sb.Append(data[i] >= 0x20 && data[i] <= 0x7E ? (char)data[i] : '.');
+            }
+            return sb.ToString();
+        }
     }
 }

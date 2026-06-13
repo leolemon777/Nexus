@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Nexus.App.Services;
 using Nexus.Modbus;
+using Nexus;
 
 namespace Nexus.App.ViewModels;
 
@@ -23,11 +24,17 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     [ObservableProperty] private string _lastResult = "--";
     [ObservableProperty] private string _addressValidationHint = string.Empty;
     [ObservableProperty] private bool _isAddressValid = true;
+    [ObservableProperty] private string _multiFormatResult = string.Empty;
 
     public string[] DataTypes { get; } =
     {
         "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
-        "Float", "Double", "String", "Bool", "Bytes"
+        "Float", "Double", "String", "Bool", "Bytes",
+        "Hex16", "Hex32", "Hex64",
+        "BCD16", "BCD32",
+        "Word", "DWord",
+        "Char",
+        "Int16-Swap", "Int32-Swap", "Float-Swap", "Double-Swap"
     };
 
     public virtual string AddressHint => "e.g. D100, M200";
@@ -61,6 +68,47 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
         _packetTransport = transport;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         AppendLog(ProtocolName + " ready.");
+    }
+
+    protected void UpdateMultiFormatResult(byte[] data)
+    {
+        if (data == null || data.Length < 2)
+        {
+            MultiFormatResult = "(数据不足)";
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"原始字节: {DataConverter.ToHexString(data, 0, Math.Min(data.Length, 8))}");
+
+        if (data.Length >= 2)
+        {
+            short i16 = DataConverter.ToInt16(data, 0);
+            ushort u16 = DataConverter.ToUInt16(data, 0);
+            sb.AppendLine($"Int16:    {i16,10}    UInt16:   {u16,10}");
+            sb.AppendLine($"Hex16:    0x{u16:X4}          BCD16:    {DataConverter.DecodeBcd16(u16),10}");
+            sb.AppendLine($"Word:     {u16} (0x{u16:X4})");
+        }
+
+        if (data.Length >= 4)
+        {
+            int i32 = DataConverter.ToInt32(data, 0);
+            uint u32 = DataConverter.ToUInt32(data, 0);
+            float f32 = DataConverter.ToFloat(data, 0);
+            sb.AppendLine($"Int32:    {i32,10}    UInt32:   {u32,10}");
+            sb.AppendLine($"Hex32:    0x{u32:X8}  BCD32:    {DataConverter.DecodeBcd32(u32),10}");
+            sb.AppendLine($"Float:    {f32,10:F4}    DWord:    {u32} (0x{u32:X8})");
+        }
+
+        if (data.Length >= 8)
+        {
+            long i64 = DataConverter.ToInt64(data, 0);
+            double f64 = DataConverter.ToDouble(data, 0);
+            sb.AppendLine($"Int64:    {i64,20}    Double:   {f64,20:F6}");
+            sb.AppendLine($"Hex64:    0x{i64:X16}");
+        }
+
+        MultiFormatResult = sb.ToString();
     }
 
     protected abstract OperateResult DoConnect();
@@ -143,18 +191,30 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
         {
             string? resultText = DataType switch
             {
-                "Int16"  => await ReadFmt(addr, () => client.ReadInt16Async(addr)),
-                "UInt16" => await ReadFmt(addr, () => client.ReadUInt16Async(addr)),
-                "Int32"  => await ReadFmt(addr, () => client.ReadInt32Async(addr)),
-                "UInt32" => await ReadFmt(addr, () => client.ReadUInt32Async(addr)),
-                "Int64"  => await ReadFmt(addr, () => client.ReadInt64Async(addr)),
-                "UInt64" => await ReadFmt(addr, () => client.ReadUInt64Async(addr)),
-                "Float"  => await ReadFmt(addr, () => client.ReadFloatAsync(addr)),
-                "Double" => await ReadFmt(addr, () => client.ReadDoubleAsync(addr)),
-                "String" => await ReadFmt(addr, () => client.ReadStringAsync(addr, 20)),
-                "Bool"   => await ReadFmt(addr, () => client.ReadBoolAsync(addr)),
-                "Bytes"  => await ReadBytesFmt(client, addr, 10),
-                _        => "[ERR] Unknown data type",
+                "Int16"       => await ReadFmt(addr, () => client.ReadInt16Async(addr)),
+                "UInt16"      => await ReadFmt(addr, () => client.ReadUInt16Async(addr)),
+                "Int32"       => await ReadFmt(addr, () => client.ReadInt32Async(addr)),
+                "UInt32"      => await ReadFmt(addr, () => client.ReadUInt32Async(addr)),
+                "Int64"       => await ReadFmt(addr, () => client.ReadInt64Async(addr)),
+                "UInt64"      => await ReadFmt(addr, () => client.ReadUInt64Async(addr)),
+                "Float"       => await ReadFmt(addr, () => client.ReadFloatAsync(addr)),
+                "Double"      => await ReadFmt(addr, () => client.ReadDoubleAsync(addr)),
+                "String"      => await ReadFmt(addr, () => client.ReadStringAsync(addr, 20)),
+                "Bool"        => await ReadFmt(addr, () => client.ReadBoolAsync(addr)),
+                "Bytes"       => await ReadBytesFmt(client, addr, 10),
+                "BCD16"       => await ReadRawFmt(client, addr, 2, d => DataConverter.DecodeBcd16(DataConverter.ToUInt16(d, 0)).ToString()),
+                "Hex16"       => await ReadRawFmt(client, addr, 2, d => DataConverter.ToHex16(DataConverter.ToUInt16(d, 0))),
+                "Word"        => await ReadRawFmt(client, addr, 2, d => DataConverter.ToWordString(d)),
+                "Char"        => await ReadRawFmt(client, addr, 1, d => DataConverter.ToChar(d).ToString()),
+                "Hex32"       => await ReadRawFmt(client, addr, 4, d => DataConverter.ToHex32(DataConverter.ToUInt32(d, 0))),
+                "BCD32"       => await ReadRawFmt(client, addr, 4, d => DataConverter.DecodeBcd32(DataConverter.ToUInt32(d, 0)).ToString()),
+                "DWord"       => await ReadRawFmt(client, addr, 4, d => DataConverter.ToDWordString(d)),
+                "Hex64"       => await ReadRawFmt(client, addr, 8, d => DataConverter.ToHex64(DataConverter.ToInt64(d, 0))),
+                "Int16-Swap"  => await ReadRawFmt(client, addr, 2, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 2, Endianness.LittleEndian); return DataConverter.ToInt16(s, 0).ToString(); }),
+                "Int32-Swap"  => await ReadRawFmt(client, addr, 4, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 4, Endianness.LittleEndian); return DataConverter.ToInt32(s, 0).ToString(); }),
+                "Float-Swap"  => await ReadRawFmt(client, addr, 4, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 4, Endianness.LittleEndian); return DataConverter.ToFloat(s, 0).ToString("F4", System.Globalization.CultureInfo.InvariantCulture); }),
+                "Double-Swap" => await ReadRawFmt(client, addr, 8, d => { var s = (byte[])d.Clone(); DataConverter.Reorder(s, 0, 8, Endianness.LittleEndian); return DataConverter.ToDouble(s, 0).ToString("F6", System.Globalization.CultureInfo.InvariantCulture); }),
+                _             => "[ERR] Unknown data type",
             };
             if (resultText != null) LastResult = resultText;
         }
@@ -178,6 +238,16 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
         string hex = BitConverter.ToString(r.Content).Replace("-", " ");
         AppendLog("[RD] " + addr + " (" + len + " bytes) = " + hex);
         return hex;
+    }
+
+    private async Task<string?> ReadRawFmt(IReadWriteDevice client, string addr, ushort len, Func<byte[], string> convert)
+    {
+        var r = await client.ReadBytesAsync(addr, len).ConfigureAwait(true);
+        if (!r.IsSuccess) { AppendLog("[ERR] Read " + addr + " failed: " + r.Message); return null; }
+        string text = convert(r.Content);
+        UpdateMultiFormatResult(r.Content);
+        AppendLog("[RD] " + addr + " (" + DataType + ") = " + text);
+        return text;
     }
 
     // ── 写入（含地址校验 + 确认对话框）──────
