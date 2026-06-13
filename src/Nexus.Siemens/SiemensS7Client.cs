@@ -1492,6 +1492,107 @@ namespace Nexus.Siemens
         public Task<OperateResult> WriteCounterAsync(int counterNumber, short value, CancellationToken ct = default)
             => Task.Run(() => WriteCounter(counterNumber, value), ct);
 
+        /// <summary>
+        /// 批量读取多个定时器当前值。
+        /// </summary>
+        public OperateResult<short[]> ReadTimers(int startTimer, int count)
+        {
+            if (count <= 0) return OperateResult<short[]>.Success(new short[0]);
+            var addresses = Enumerable.Range(startTimer, count).Select(i => $"T{i}").ToArray();
+            var r = BatchReadRaw(addresses);
+            if (!r.IsSuccess) return OperateResult<short[]>.Failed(r.Message, r.ErrorCode);
+
+            var result = new short[count];
+            for (int i = 0; i < count; i++)
+            {
+                if (r.Content[i].Length >= 2)
+                    result[i] = DataConverter.ToInt16(r.Content[i], 0);
+            }
+            return OperateResult<short[]>.Success(result);
+        }
+
+        /// <summary>异步批量读取定时器。</summary>
+        public Task<OperateResult<short[]>> ReadTimersAsync(int startTimer, int count, CancellationToken ct = default)
+            => Task.Run(() => ReadTimers(startTimer, count), ct);
+
+        /// <summary>
+        /// 批量读取多个计数器当前值。
+        /// </summary>
+        public OperateResult<short[]> ReadCounters(int startCounter, int count)
+        {
+            if (count <= 0) return OperateResult<short[]>.Success(new short[0]);
+            var addresses = Enumerable.Range(startCounter, count).Select(i => $"C{i}").ToArray();
+            var r = BatchReadRaw(addresses);
+            if (!r.IsSuccess) return OperateResult<short[]>.Failed(r.Message, r.ErrorCode);
+
+            var result = new short[count];
+            for (int i = 0; i < count; i++)
+            {
+                if (r.Content[i].Length >= 2)
+                    result[i] = DataConverter.ToInt16(r.Content[i], 0);
+            }
+            return OperateResult<short[]>.Success(result);
+        }
+
+        /// <summary>异步批量读取计数器。</summary>
+        public Task<OperateResult<short[]>> ReadCountersAsync(int startCounter, int count, CancellationToken ct = default)
+            => Task.Run(() => ReadCounters(startCounter, count), ct);
+
+        // ── PLC 状态检测 ──────────────────────────
+
+        /// <summary>
+        /// 读取 PLC 运行状态（通过 SZL 0x0424 模块状态信息）。
+        /// 返回 "RUN"、"STOP" 或 "STARTUP"。
+        /// </summary>
+        public OperateResult<string> ReadPlcStatus()
+        {
+            byte[] readStatusReq =
+            {
+                0x03, 0x00, 0x00, 0x21, 0x02, 0xF0, 0x80, 0x32,
+                0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,
+                0x00, 0x08, 0x00, 0x00, 0x01, 0x12, 0x04, 0x11,
+                0x44, 0x01, 0x00, 0xFF, 0x09, 0x00, 0x04, 0x04,
+                0x24, 0x00, 0x00
+            };
+
+            var resp = SendAndReceive(readStatusReq);
+            if (!resp.IsSuccess) return OperateResult<string>.Failed(resp.Message, resp.ErrorCode);
+
+            byte[] raw = resp.Content;
+            if (raw == null || raw.Length < 32)
+                return OperateResult<string>.Failed($"ReadPlcStatus 响应长度不足: {raw?.Length ?? 0}");
+
+            // SZL 0x0424 数据在响应尾部
+            // 状态字节通常在偏移 32 附近 (SZL ID + 数据)
+            // RUN=0x08, STOP=0x04, STARTUP=0x02
+            int statusOffset = raw.Length >= 34 ? 32 : raw.Length - 2;
+            if (statusOffset < 0) statusOffset = 0;
+
+            byte statusByte = raw[statusOffset];
+            string status;
+            switch (statusByte)
+            {
+                case 0x08:
+                    status = "RUN";
+                    break;
+                case 0x04:
+                    status = "STOP";
+                    break;
+                case 0x02:
+                    status = "STARTUP";
+                    break;
+                default:
+                    status = $"UNKNOWN(0x{statusByte:X2})";
+                    break;
+            }
+
+            return OperateResult<string>.Success(status);
+        }
+
+        /// <summary>异步读取 PLC 运行状态。</summary>
+        public Task<OperateResult<string>> ReadPlcStatusAsync(CancellationToken ct = default)
+            => Task.Run(() => ReadPlcStatus(), ct);
+
         // ── 辅助方法 ──────────────────────────────
 
         /// <summary>

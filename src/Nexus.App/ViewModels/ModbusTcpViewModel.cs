@@ -2,6 +2,8 @@ using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -738,6 +740,30 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
         {
             AppendLog("[ERR] 导出失败: " + ex.Message);
         }
+    }
+
+    // ═══════════════════════════════════════════
+    //  简易批量读取（逗号分隔地址）
+    // ═══════════════════════════════════════════
+
+    [ObservableProperty] private string _batchAddresses = "0, 10, 20, 100";
+    [ObservableProperty] private string _batchResults = string.Empty;
+
+    [RelayCommand]
+    private async Task BatchRead()
+    {
+        if (!HasConnection) { AppendLog("[ERR] 未连接"); return; }
+
+        var addresses = BatchAddresses.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(a => a.Trim()).ToList();
+
+        var sb = new StringBuilder();
+        foreach (var addr in addresses)
+        {
+            var result = await ExecuteReadAsync(client => client.ReadInt16Async(addr)).ConfigureAwait(true);
+            sb.AppendLine(result.IsSuccess ? $"{addr} = {result.Content}" : $"{addr} = 错误: {result.Message}");
+        }
+        BatchResults = sb.ToString();
     }
 
     // ═══════════════════════════════════════════

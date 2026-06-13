@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nexus.Modbus\Nexus.Modbus.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.Siemens\Nexus.Siemens.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.Core\Nexus.Core.csproj" />
+  </ItemGroup>
+</Project>

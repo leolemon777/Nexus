@@ -60,6 +60,9 @@
     <Project Path="src/Nexus.Delixi/Nexus.Delixi.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="tests/Nexus.Benchmarks/Nexus.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Core.Tests/Nexus.Core.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.Tests/Nexus.Modbus.Tests.csproj" />

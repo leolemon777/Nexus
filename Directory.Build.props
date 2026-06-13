@@ -19,7 +19,15 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <!-- MinVer: automatic version from git tags -->
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="5.0.0" PrivateAssets="All" />
+  </ItemGroup>
 
   <!-- Test projects should not be packaged -->
   <PropertyGroup Condition="'$(IsTestProject)' == 'true'">

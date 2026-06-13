@@ -1,11 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using Nexus.App.Services;
 using Nexus.Modbus;
 
@@ -250,6 +252,29 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     {
         LogLines.Clear();
         _packetRecorder?.Clear();
+    }
+
+    [RelayCommand]
+    private void ExportLog()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "文本文件|*.txt|CSV文件|*.csv|所有文件|*.*",
+            FileName = $"{ProtocolName}_log_{DateTime.Now:yyyyMMdd_HHmmss}"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                File.WriteAllLines(dialog.FileName, LogLines);
+                AppendLog($"[OK] 日志已导出: {dialog.FileName}");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERR] 导出失败: {ex.Message}");
+            }
+        }
     }
 
     [RelayCommand]

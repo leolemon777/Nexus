@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -256,6 +259,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public event Action<NavItem>? NavigationRequested;
 
+    private string _templateName = "";
+
     public NavItem? SelectedNav
     {
         get => _selectedNav;
@@ -266,6 +271,63 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             if (value != null) NavigationRequested?.Invoke(value);
         }
+    }
+
+    public string TemplateName
+    {
+        get => _templateName;
+        set { _templateName = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<string> SavedTemplates { get; } = new();
+
+    private static string TemplatesFilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Nexus", "connection_templates.json");
+
+    public void SaveTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(TemplateName)) return;
+
+        var templates = LoadTemplatesFromFile();
+        templates[TemplateName] = new Dictionary<string, string>
+        {
+            ["SavedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        };
+
+        Directory.CreateDirectory(Path.GetDirectoryName(TemplatesFilePath)!);
+        File.WriteAllText(TemplatesFilePath, JsonSerializer.Serialize(templates, new JsonSerializerOptions { WriteIndented = true }));
+
+        if (!SavedTemplates.Contains(TemplateName))
+            SavedTemplates.Add(TemplateName);
+    }
+
+    public void LoadTemplate(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var templates = LoadTemplatesFromFile();
+        if (templates.ContainsKey(name))
+        {
+            TemplateName = name;
+        }
+    }
+
+    public void LoadSavedTemplateNames()
+    {
+        SavedTemplates.Clear();
+        foreach (var key in LoadTemplatesFromFile().Keys)
+            SavedTemplates.Add(key);
+    }
+
+    private Dictionary<string, Dictionary<string, string>> LoadTemplatesFromFile()
+    {
+        try
+        {
+            if (!File.Exists(TemplatesFilePath)) return new();
+            var json = File.ReadAllText(TemplatesFilePath);
+            return JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json) ?? new();
+        }
+        catch { return new(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

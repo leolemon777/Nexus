@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.Modbus\Nexus.Modbus.csproj" />
   </ItemGroup>
 
 </Project>

@@ -22,6 +22,9 @@ dotnet run --project src/Nexus.App
 
 # Restore packages (needed after adding new .csproj files)
 dotnet restore Nexus.slnx
+
+# Run benchmarks (Release mode required for accurate results)
+dotnet run --project tests/Nexus.Benchmarks -c Release
 ```
 
 ## Architecture Overview

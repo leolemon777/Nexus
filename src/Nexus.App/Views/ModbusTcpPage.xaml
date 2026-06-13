@@ -167,6 +167,58 @@
                 </StackPanel>
             </Border>
 
+            <!-- 地址浏览器 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="地址浏览器" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <TextBlock Style="{DynamicResource Body}" Text="双击地址快速读取" Margin="0,0,0,6"/>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" Height="200">
+                        <TreeView Background="Transparent" BorderThickness="0">
+                            <TreeViewItem Header="保持寄存器 (4xxxx)" IsExpanded="True">
+                                <TreeViewItem Header="40001"/><TreeViewItem Header="40002"/>
+                                <TreeViewItem Header="40003"/><TreeViewItem Header="40004"/>
+                                <TreeViewItem Header="40005"/><TreeViewItem Header="40006"/>
+                                <TreeViewItem Header="40007"/><TreeViewItem Header="40008"/>
+                                <TreeViewItem Header="40009"/><TreeViewItem Header="40010"/>
+                            </TreeViewItem>
+                            <TreeViewItem Header="输入寄存器 (3xxxx)">
+                                <TreeViewItem Header="30001"/><TreeViewItem Header="30002"/>
+                                <TreeViewItem Header="30003"/><TreeViewItem Header="30004"/>
+                                <TreeViewItem Header="30005"/>
+                            </TreeViewItem>
+                            <TreeViewItem Header="线圈 (0xxxx)">
+                                <TreeViewItem Header="00001"/><TreeViewItem Header="00002"/>
+                                <TreeViewItem Header="00003"/><TreeViewItem Header="00004"/>
+                                <TreeViewItem Header="00005"/><TreeViewItem Header="00006"/>
+                                <TreeViewItem Header="00007"/><TreeViewItem Header="00008"/>
+                            </TreeViewItem>
+                        </TreeView>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 批量读取 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="批量读取" Style="{DynamicResource Label}" Margin="0,0,0,6"/>
+                    <WrapPanel Margin="0,0,0,8">
+                        <TextBlock Text="地址(逗号分隔)" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Style="{DynamicResource Input}" Width="400"
+                                 Text="{Binding BatchAddresses, UpdateSourceTrigger=LostFocus}"/>
+                    </WrapPanel>
+                    <Button Content="批量读取" Style="{DynamicResource Button.Primary}" 
+                            Command="{Binding BatchReadCommand}"/>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8" Margin="0,8,0,0">
+                        <TextBox Text="{Binding BatchResults, Mode=OneWay}" 
+                                 Style="{DynamicResource Input}"
+                                 FontFamily="Consolas" FontSize="12"
+                                 IsReadOnly="True" TextWrapping="Wrap"
+                                 AcceptsReturn="True" MaxHeight="150"
+                                 BorderThickness="0" Background="Transparent"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- 通讯日志 -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
                 <StackPanel>
