@@ -27,6 +27,28 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // 全局异常捕获 — 防止未处理异常导致闪退
+        DispatcherUnhandledException += (s, args) =>
+        {
+            MessageBox.Show($"UI 线程异常:\n\n{args.Exception.Message}\n\n{args.Exception.StackTrace}",
+                "Nexus 错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+        {
+            var ex = args.ExceptionObject as Exception;
+            MessageBox.Show($"应用异常:\n\n{ex?.Message}\n\n{ex?.StackTrace}",
+                "Nexus 致命错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, args) =>
+        {
+            MessageBox.Show($"后台任务异常:\n\n{args.Exception?.Message}",
+                "Nexus 错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.SetObserved();
+        };
+
         ThemeManager.Init("mono", "soft");
 
         _host = Host.CreateDefaultBuilder()
