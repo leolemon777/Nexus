@@ -8,34 +8,60 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.x'
-    
+
     - name: Restore dependencies
       run: dotnet restore Nexus.slnx
-    
+
     - name: Build
       run: dotnet build Nexus.slnx --no-restore --configuration Release
-    
+
     - name: Test
       run: dotnet test Nexus.slnx --no-build --configuration Release --verbosity normal
-    
-    - name: Pack NuGet
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+  pack-and-publish:
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore
+      run: dotnet restore Nexus.slnx
+
+    - name: Pack all libraries
+      shell: pwsh
       run: |
-        dotnet pack src/Nexus.Core/Nexus.Core.csproj --configuration Release --output ./nupkgs
-        dotnet pack src/Nexus.Modbus/Nexus.Modbus.csproj --configuration Release --output ./nupkgs
-        dotnet pack src/Nexus.Siemens/Nexus.Siemens.csproj --configuration Release --output ./nupkgs
-    
+        $projects = Get-ChildItem -Path src -Filter "Nexus.*.csproj" -Recurse | Where-Object {
+          $_.Name -ne "Nexus.App.csproj"
+        }
+        foreach ($proj in $projects) {
+          Write-Host "Packing $($proj.FullName)..."
+          dotnet pack $proj.FullName --configuration Release --output ./nupkgs --no-build
+        }
+
     - name: Upload NuGet artifacts
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
         name: nuget-packages
         path: ./nupkgs/*.nupkg
+
+    # Uncomment when ready to publish to nuget.org
+    # - name: Push to NuGet
+    #   run: |
+    #     dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

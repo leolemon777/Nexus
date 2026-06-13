@@ -14,6 +14,7 @@ publish/
 *.dll
 *.exe
 *.pdb
+nupkgs/
 
 ## IDE
 .vscode/
@@ -34,3 +35,10 @@ logs/
 TestResults/
 coverage/
 *.coverage
+
+## Docs build output
+docs/_site/
+
+## Environment / secrets
+.env
+appsettings.Development.json

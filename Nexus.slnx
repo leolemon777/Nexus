@@ -105,5 +105,18 @@
     <Project Path="tests/Nexus.Rkc.Tests/Nexus.Rkc.Tests.csproj" />
     <Project Path="tests/Nexus.Toledo.Tests/Nexus.Toledo.Tests.csproj" />
     <Project Path="tests/Nexus.VirtualPlc.Tests/Nexus.VirtualPlc.Tests.csproj" />
+    <Project Path="tests/Nexus.MegMeet.Tests/Nexus.MegMeet.Tests.csproj" />
+    <Project Path="tests/Nexus.OpenProtocol.Tests/Nexus.OpenProtocol.Tests.csproj" />
+    <Project Path="tests/Nexus.Sam.Tests/Nexus.Sam.Tests.csproj" />
+    <Project Path="tests/Nexus.ToyoPuc.Tests/Nexus.ToyoPuc.Tests.csproj" />
+    <Project Path="tests/Nexus.OpcUa.Tests/Nexus.OpcUa.Tests.csproj" />
+    <Project Path="tests/Nexus.Vigor.Tests/Nexus.Vigor.Tests.csproj" />
+    <Project Path="tests/Nexus.Yamatake.Tests/Nexus.Yamatake.Tests.csproj" />
+    <Project Path="tests/Nexus.YuDian.Tests/Nexus.YuDian.Tests.csproj" />
+    <Project Path="tests/Nexus.Delixi.Tests/Nexus.Delixi.Tests.csproj" />
+    <Project Path="tests/Nexus.EcFan.Tests/Nexus.EcFan.Tests.csproj" />
+    <Project Path="tests/Nexus.Freedom.Tests/Nexus.Freedom.Tests.csproj" />
+    <Project Path="tests/Nexus.Geniitek.Tests/Nexus.Geniitek.Tests.csproj" />
+    <Project Path="tests/Nexus.Knx.Tests/Nexus.Knx.Tests.csproj" />
   </Folder>
 </Solution>
