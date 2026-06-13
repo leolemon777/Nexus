@@ -49,6 +49,9 @@ namespace Nexus.App.Services
         /// <summary>报警信息。</summary>
         [ObservableProperty] private string _alarmMessage = string.Empty;
 
+        /// <summary>该地址所属设备。null 表示使用默认设备。</summary>
+        public Guid? DeviceId { get; set; }
+
         public event EventHandler<(MonitoredAddress addr, string message)>? AlarmTriggered;
 
         private readonly List<DataPoint> _dataPoints = new();
@@ -158,7 +161,8 @@ namespace Nexus.App.Services
         private CancellationTokenSource? _cts;
         private Task? _pollLoop;
 
-        private IReadWriteDevice? _device;
+        private readonly ConcurrentDictionary<Guid, DeviceConnection> _devices = new();
+        private DeviceConnection? _defaultDevice;
         private readonly object _deviceLock = new();
 
         public bool IsRunning => _pollLoop is not null;
@@ -168,10 +172,62 @@ namespace Nexus.App.Services
 
         private System.IO.StreamWriter? _csvWriter;
 
+        // ── Multi-device management ─────────────────────
+
+        public void AddDevice(DeviceConnection connection)
+        {
+            _devices[connection.Id] = connection;
+            lock (_deviceLock)
+            {
+                if (_defaultDevice == null) _defaultDevice = connection;
+            }
+        }
+
+        public void RemoveDevice(Guid deviceId)
+        {
+            if (_devices.TryRemove(deviceId, out var conn))
+            {
+                lock (_deviceLock)
+                {
+                    if (_defaultDevice?.Id == deviceId)
+                        _defaultDevice = _devices.Values.FirstOrDefault();
+                }
+                conn.Dispose();
+            }
+        }
+
+        public DeviceConnection? GetDevice(Guid deviceId)
+            => _devices.TryGetValue(deviceId, out var conn) ? conn : null;
+
+        public IReadOnlyCollection<DeviceConnection> GetDevices()
+            => _devices.Values.ToList().AsReadOnly();
+
+        public void SetDefaultDevice(Guid deviceId)
+        {
+            if (_devices.TryGetValue(deviceId, out var conn))
+            {
+                lock (_deviceLock)
+                    _defaultDevice = conn;
+            }
+        }
+
         public void SetDevice(IReadWriteDevice? device)
         {
             lock (_deviceLock)
-                _device = device;
+            {
+                if (_defaultDevice != null)
+                    _defaultDevice.Device.Disconnect();
+                if (device != null)
+                {
+                    var conn = new DeviceConnection(device, "Default", "", "");
+                    _devices[conn.Id] = conn;
+                    _defaultDevice = conn;
+                }
+                else
+                {
+                    _defaultDevice = null;
+                }
+            }
         }
 
         public Task StartAsync(CancellationToken ct = default)
@@ -326,15 +382,23 @@ namespace Nexus.App.Services
 
         private async Task ReadAndUpdateAsync(MonitoredAddress addr, CancellationToken ct)
         {
-            IReadWriteDevice? dev;
+            DeviceConnection? targetDevice;
             lock (_deviceLock)
-                dev = _device;
+            {
+                if (addr.DeviceId.HasValue)
+                    targetDevice = GetDevice(addr.DeviceId.Value);
+                else
+                    targetDevice = null;
+                targetDevice ??= _defaultDevice;
+            }
 
-            if (dev == null || !dev.IsConnected)
+            if (targetDevice == null || !targetDevice.IsConnected)
             {
                 addr.Quality = "Bad";
                 return;
             }
+
+            var dev = targetDevice.Device;
 
             try
             {
@@ -404,6 +468,9 @@ namespace Nexus.App.Services
         {
             await StopAsync().ConfigureAwait(false);
             StopCsvLog();
+            foreach (var conn in _devices.Values)
+                conn.Dispose();
+            _devices.Clear();
             GC.SuppressFinalize(this);
         }
 
@@ -411,6 +478,9 @@ namespace Nexus.App.Services
         {
             Stop();
             StopCsvLog();
+            foreach (var conn in _devices.Values)
+                conn.Dispose();
+            _devices.Clear();
             GC.SuppressFinalize(this);
         }
     }

@@ -69,6 +69,117 @@
             </WrapPanel>
         </Border>
 
+        <!-- 多设备管理 -->
+        <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
+            <StackPanel>
+                <Grid Margin="0,0,0,6">
+                    <TextBlock Text="设备连接" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11"
+                               Foreground="{DynamicResource Brush.Text3}">
+                        <Run Text="设备数: "/><Run Text="{Binding ConnectedDevices.Count}" FontWeight="Bold"/>
+                    </TextBlock>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding ConnectedDevices}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="6,4" Margin="0,0,0,2" Background="{DynamicResource Brush.Surface2}"
+                                    CornerRadius="{DynamicResource Radius.Sm}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.Warn}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Ok}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12"/>
+                                        <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Text3}">
+                                            <Run Text="{Binding Protocol}"/><Run Text=" | "/><Run Text="{Binding Address}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="设为默认" Style="{DynamicResource Button.Text}"
+                                            Command="{Binding DataContext.SetDefaultDeviceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" FontSize="11"/>
+                                    <Button Grid.Column="3" Content="✕" Style="{DynamicResource Button.Text}"
+                                            Command="{Binding DataContext.RemoveDeviceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" FontSize="11"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- 数据回放控制 -->
+        <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
+            <StackPanel>
+                <Grid Margin="0,0,0,6">
+                    <TextBlock Text="数据录制/回放" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Ellipse Width="8" Height="8" Margin="0,0,6,0">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.Text3}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                                            <Setter Property="Fill" Value="Red"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                    </StackPanel>
+                </Grid>
+                <WrapPanel>
+                    <Button Margin="0,0,8,4">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource Button.Primary}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                                        <Setter Property="Content" Value="⏹ 停止录制"/>
+                                        <Setter Property="Command" Value="{Binding StopRecordingCommand}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsRecording}" Value="False">
+                                        <Setter Property="Content" Value="⏺ 开始录制"/>
+                                        <Setter Property="Command" Value="{Binding StartRecordingCommand}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="📂 加载回放" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
+                            Command="{Binding LoadPlaybackCommand}"/>
+                    <Button Content="退出回放" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,4"
+                            Command="{Binding ExitPlaybackCommand}" Visibility="{Binding IsPlaybackMode, Converter={StaticResource NonZeroToVisible}}"/>
+                </WrapPanel>
+                <Border Background="{DynamicResource Brush.Surface3}" CornerRadius="{DynamicResource Radius.Md}"
+                        Padding="8,4" Margin="0,4,0,0" Visibility="{Binding IsPlaybackMode, Converter={StaticResource NonZeroToVisible}}">
+                    <StackPanel>
+                        <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Text3}">
+                            <Run Text="文件: "/><Run Text="{Binding PlaybackFilePath}"/>
+                        </TextBlock>
+                        <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Text3}">
+                            <Run Text="数据点: "/><Run Text="{Binding PlaybackPointCount}" FontWeight="Bold"/>
+                            <Run Text=" | "/><Run Text="{Binding PlaybackTimeRange}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
         <!-- 直接写入 -->
         <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
             <WrapPanel VerticalAlignment="Center">

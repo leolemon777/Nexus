@@ -24,6 +24,7 @@ namespace Nexus.App.ViewModels
         public ObservableCollection<TagEntry> Tags { get; } = new();
         public ObservableCollection<string> LogLines { get; } = new();
         public ObservableCollection<MonitoredAddress> MonitoredAddresses { get; } = new();
+        public ObservableCollection<DeviceConnection> ConnectedDevices { get; } = new();
 
         [ObservableProperty] private bool _isPolling;
         [ObservableProperty] private int _tagCount;
@@ -56,6 +57,17 @@ namespace Nexus.App.ViewModels
 
         public string[] WriteDataTypes { get; } = { "Int16", "UInt16", "Int32", "Float", "Double", "Bool", "String" };
         public ObservableCollection<string> AlarmHistory { get; } = new();
+
+        // Playback
+        private DataRecorder? _recorder;
+        private PlaybackData? _playbackData;
+
+        [ObservableProperty] private bool _isRecording;
+        [ObservableProperty] private bool _isPlaybackMode;
+        [ObservableProperty] private string _playbackFilePath = string.Empty;
+        [ObservableProperty] private double _playbackProgress;
+        [ObservableProperty] private string _playbackTimeRange = "";
+        [ObservableProperty] private int _playbackPointCount;
 
         private IReadWriteDevice? _device;
 
@@ -103,6 +115,30 @@ namespace Nexus.App.ViewModels
             _device = device;
             _service.SetDevice(device);
             IsDeviceConnected = device?.IsConnected ?? false;
+        }
+
+        public void AddDeviceConnection(DeviceConnection connection)
+        {
+            _service.AddDevice(connection);
+            ConnectedDevices.Add(connection);
+            AppendLog($"[+] 添加设备: {connection.Name} ({connection.Protocol})");
+        }
+
+        [RelayCommand]
+        private void RemoveDevice(DeviceConnection? device)
+        {
+            if (device == null) return;
+            _service.RemoveDevice(device.Id);
+            ConnectedDevices.Remove(device);
+            AppendLog($"[-] 移除设备: {device.Name}");
+        }
+
+        [RelayCommand]
+        private void SetDefaultDevice(DeviceConnection? device)
+        {
+            if (device == null) return;
+            _service.SetDefaultDevice(device.Id);
+            AppendLog($"[★] 默认设备: {device.Name}");
         }
 
         // ── Tag commands (existing) ──────────────────────
@@ -195,6 +231,65 @@ namespace Nexus.App.ViewModels
 
         [RelayCommand]
         private void ClearLog() => LogLines.Clear();
+
+        // ── Recording / Playback commands ────────────────
+
+        [RelayCommand]
+        private void StartRecording()
+        {
+            if (IsRecording) return;
+            string path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                $"Nexus_Record_{DateTime.Now:yyyyMMdd_HHmmss}.jsonl");
+            _recorder = new DataRecorder();
+            _recorder.StartRecording(path);
+            IsRecording = true;
+            PlaybackFilePath = path;
+            AppendLog($"[REC] 录制已启动: {path}");
+        }
+
+        [RelayCommand]
+        private void StopRecording()
+        {
+            if (!IsRecording || _recorder == null) return;
+            _recorder.StopRecording();
+            IsRecording = false;
+            AppendLog($"[REC] 录制已停止 ({_recorder.PointCount} 个数据点)");
+        }
+
+        [RelayCommand]
+        private void LoadPlayback()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "JSONL 文件|*.jsonl|所有文件|*.*"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            _playbackData = new PlaybackData();
+            _playbackData.LoadFromFile(dialog.FileName);
+            IsPlaybackMode = true;
+            PlaybackFilePath = dialog.FileName;
+            PlaybackPointCount = _playbackData.PointCount;
+            PlaybackTimeRange = $"{_playbackData.StartTime:HH:mm:ss} ~ {_playbackData.EndTime:HH:mm:ss} ({_playbackData.Duration.TotalMinutes:F1} 分钟)";
+            AppendLog($"[PBL] 已加载回放数据: {_playbackData.PointCount} 个点, {PlaybackTimeRange}");
+        }
+
+        [RelayCommand]
+        private void ExitPlayback()
+        {
+            IsPlaybackMode = false;
+            _playbackData = null;
+            PlaybackProgress = 0;
+            AppendLog("[PBL] 已退出回放模式");
+        }
+
+        [RelayCommand]
+        private void PlaybackGoTo(double position)
+        {
+            if (_playbackData == null || _playbackData.PointCount == 0) return;
+            PlaybackProgress = Math.Clamp(position, 0, 1);
+        }
 
         [RelayCommand]
         private async Task WriteToMonitor()
@@ -420,7 +515,10 @@ namespace Nexus.App.ViewModels
 
         private void OnDataPointReceived(object? sender, (MonitoredAddress Address, DataPoint Point) e)
         {
-            // Chart updates are driven by a timer in RealtimeChart; no per-point UI dispatch needed
+            if (_recorder != null && IsRecording)
+            {
+                _recorder.Record(e.Address.Address, e.Address.DisplayName, e.Point.Value, e.Point.Time);
+            }
         }
 
         private void OnAlarmTriggered(object? sender, (MonitoredAddress addr, string message) e)
