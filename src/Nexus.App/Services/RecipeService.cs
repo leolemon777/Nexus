@@ -99,6 +99,28 @@ namespace Nexus.App.Services
             return (success, failed);
         }
 
+        /// <summary>从当前监控地址创建配方</summary>
+        public Recipe CreateFromCurrentValues(string name, IEnumerable<MonitoredAddress> addresses)
+        {
+            var recipe = new Recipe
+            {
+                Name = name,
+                Description = $"从当前监控值创建于 {DateTime.Now:yyyy-MM-dd HH:mm:ss}"
+            };
+            foreach (var addr in addresses)
+            {
+                recipe.Parameters.Add(new RecipeParameter
+                {
+                    Name = addr.Alias,
+                    Address = addr.Address,
+                    Value = addr.CurrentValueText,
+                    DataType = addr.DataType,
+                    Description = addr.Alias
+                });
+            }
+            return recipe;
+        }
+
         /// <summary>从设备读取配方参数当前值</summary>
         public async Task<Recipe> ReadCurrentValuesAsync(IReadWriteDevice device, Recipe recipe)
         {

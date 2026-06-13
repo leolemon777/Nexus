@@ -62,6 +62,11 @@ namespace Nexus.App.ViewModels
         [ObservableProperty] private string _webServerUrl = "";
         [ObservableProperty] private int _webClientCount;
 
+        // Report & Recipe
+        private readonly RecipeService _recipeService = new();
+        public ObservableCollection<Recipe> Recipes { get; } = new();
+        [ObservableProperty] private string _newRecipeName = "";
+
         public string[] WriteDataTypes { get; } = { "Int16", "UInt16", "Int32", "Float", "Double", "Bool", "String" };
         public ObservableCollection<string> AlarmHistory { get; } = new();
 
@@ -115,6 +120,7 @@ namespace Nexus.App.ViewModels
         {
             LoadSavedTags();
             LoadMonitoredAddresses();
+            LoadRecipes();
         }
 
         public void SetDevice(IReadWriteDevice? device)
@@ -562,6 +568,68 @@ namespace Nexus.App.ViewModels
             catch (Exception ex)
             {
                 AppendLog($"[ERR] JSON 导出失败: {ex.Message}");
+            }
+        }
+
+        // ── Report commands ─────────────────────────────
+
+        [RelayCommand]
+        private void GenerateCsvReport()
+        {
+            var csv = ReportGenerator.GenerateCsvReport(MonitoredAddresses);
+            var path = ReportGenerator.SaveReport(csv, ".csv");
+            AppendLog($"[RPT] CSV 报表已生成: {path}");
+        }
+
+        [RelayCommand]
+        private void GenerateHtmlReport()
+        {
+            var html = ReportGenerator.GenerateHtmlReport(MonitoredAddresses);
+            var path = ReportGenerator.SaveReport(html, ".html");
+            AppendLog($"[RPT] HTML 报表已生成: {path}");
+        }
+
+        // ── Recipe commands ─────────────────────────────
+
+        [RelayCommand]
+        private void SaveAsRecipe()
+        {
+            if (string.IsNullOrWhiteSpace(NewRecipeName)) return;
+            var recipe = _recipeService.CreateFromCurrentValues(NewRecipeName, MonitoredAddresses);
+            _recipeService.SaveRecipe(recipe);
+            LoadRecipes();
+            AppendLog($"[RCP] 配方已保存: {NewRecipeName}");
+            NewRecipeName = string.Empty;
+        }
+
+        [RelayCommand]
+        private async Task ApplyRecipe(Recipe? recipe)
+        {
+            if (recipe == null || _device == null || !_device.IsConnected)
+            {
+                AppendLog("[RCP] 无法应用配方: 未连接设备");
+                return;
+            }
+            var (success, failed) = await _recipeService.ApplyRecipeAsync(_device, recipe);
+            AppendLog($"[RCP] 配方 '{recipe.Name}' 已应用: 成功 {success}, 失败 {failed}");
+        }
+
+        [RelayCommand]
+        private void DeleteRecipe(Recipe? recipe)
+        {
+            if (recipe == null) return;
+            _recipeService.DeleteRecipe(recipe.Name);
+            Recipes.Remove(recipe);
+            AppendLog($"[RCP] 配方已删除: {recipe.Name}");
+        }
+
+        private void LoadRecipes()
+        {
+            Recipes.Clear();
+            foreach (var name in _recipeService.ListRecipes())
+            {
+                var r = _recipeService.LoadRecipe(name);
+                if (r != null) Recipes.Add(r);
             }
         }
 

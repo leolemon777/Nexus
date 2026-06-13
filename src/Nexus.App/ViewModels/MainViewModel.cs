@@ -251,6 +251,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🖥", "Modbus 模拟器",  "simulator",     typeof(Views.SimulatorPage))
             .Add("🔌", "虚拟 PLC 管理",  "virtual-plc",   typeof(Views.VirtualPlcPage))
             .Add("📊", "实时监控",        "monitor",       typeof(Views.MonitorPage))
+            .Add("🎨", "HMI 工艺图",      "hmi",           typeof(Views.HmiPage))
             .Add("🔔", "报警管理",        "alarm",         typeof(Views.AlarmPage))
             .Add("📋", "配方管理",      "recipe",        typeof(Views.RecipePage))
             .Add("🗄", "数据记录",      "datalogger",    typeof(Views.DataLoggerPage))

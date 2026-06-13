@@ -97,6 +97,7 @@ public partial class App : Application
                 services.AddSingleton<ConnectionTemplateService>();
                 services.AddSingleton<DiagnosticBundleService>();
                 services.AddSingleton<VirtualPlcManager>();
+                services.AddTransient<HmiViewModel>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

@@ -1,0 +1,88 @@
+<Page x:Class="Nexus.App.Views.HmiPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="clr-namespace:Nexus.App.Controls"
+      xmlns:models="clr-namespace:Nexus.App.Models"
+      Background="{DynamicResource Brush.Bg}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <Border Style="{DynamicResource Card}" Margin="12,12,12,0">
+            <WrapPanel>
+                <TextBlock Text="HMI 工艺图" Style="{DynamicResource Label}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+
+                <Button Content="添加元素" Style="{DynamicResource Button.Primary}" Margin="0,0,8,0"
+                        Command="{Binding AddElementCommand}"/>
+
+                <ComboBox MinWidth="120" Margin="0,0,16,0"
+                          ItemsSource="{Binding ToolTypes}"
+                          SelectedItem="{Binding SelectedTool}"/>
+
+                <Button Content="开始" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,0"
+                        Command="{Binding StartPollingCommand}"/>
+                <Button Content="停止" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,0"
+                        Command="{Binding StopPollingCommand}"/>
+
+                <Button Content="保存" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,0"
+                        Command="{Binding SaveDashboardCommand}"/>
+
+                <CheckBox Content="编辑模式" IsChecked="{Binding IsEditMode}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource Brush.Text3}">
+                    <Run Text="元素: "/><Run Text="{Binding Elements.Count, Mode=OneWay}"/>
+                </TextBlock>
+            </WrapPanel>
+        </Border>
+
+        <!-- Canvas -->
+        <Border Style="{DynamicResource Card}" Margin="12,8,12,12" Grid.Row="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="240"/>
+                </Grid.ColumnDefinitions>
+
+                <controls:HmiCanvas Elements="{Binding Elements}" IsEditMode="{Binding IsEditMode}"/>
+
+                <!-- Property panel -->
+                <Border Grid.Column="1" Background="{DynamicResource Brush.Surface}"
+                        BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0" Padding="8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="属性" Style="{DynamicResource Label}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="标签" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.Label, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="绑定地址" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.BoundAddress, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="单位" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.Unit, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="量程下限" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.MinValue, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="量程上限" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.MaxValue, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="报警上限" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.AlarmHigh, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="报警下限" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
+                            <TextBox Style="{DynamicResource Input}" Text="{Binding SelectedElement.AlarmLow, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                            <Button Content="删除元素" Style="{DynamicResource Button.Danger}" Margin="0,8,0,0"
+                                    Command="{Binding DeleteElementCommand}"
+                                    CommandParameter="{Binding SelectedElement}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

@@ -229,6 +229,23 @@
             </WrapPanel>
         </Border>
 
+        <!-- 报表与配方 -->
+        <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock Text="报表" Style="{DynamicResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <Button Content="导出 CSV" Style="{DynamicResource Button.Ghost}" Margin="0,0,8,0"
+                        Command="{Binding GenerateCsvReportCommand}"/>
+                <Button Content="导出 HTML" Style="{DynamicResource Button.Ghost}" Margin="0,0,16,0"
+                        Command="{Binding GenerateHtmlReportCommand}"/>
+
+                <TextBlock Text="配方" Style="{DynamicResource Label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Style="{DynamicResource Input}" Width="120" Margin="0,0,8,0"
+                         Text="{Binding NewRecipeName, UpdateSourceTrigger=LostFocus}"/>
+                <Button Content="保存配方" Style="{DynamicResource Button.Primary}" Margin="0,0,8,0"
+                        Command="{Binding SaveAsRecipeCommand}"/>
+            </WrapPanel>
+        </Border>
+
         <!-- Main content: 3-column layout -->
         <Grid Grid.Row="1" Margin="12,8,12,12">
             <Grid.ColumnDefinitions>
