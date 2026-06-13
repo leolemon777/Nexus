@@ -199,6 +199,36 @@
             </WrapPanel>
         </Border>
 
+        <!-- Web 远程监控 -->
+        <Border Style="{DynamicResource Card}" Margin="12,4,12,0">
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock Text="Web 远程监控" Style="{DynamicResource Label}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <Button Margin="0,0,8,0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Button.Primary}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsWebServerRunning}" Value="False">
+                                    <Setter Property="Content" Value="启动 Web 服务"/>
+                                    <Setter Property="Command" Value="{Binding ToggleWebServerCommand}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsWebServerRunning}" Value="True">
+                                    <Setter Property="Content" Value="停止 Web 服务"/>
+                                    <Setter Property="Command" Value="{Binding ToggleWebServerCommand}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <TextBlock VerticalAlignment="Center" FontSize="12" Visibility="{Binding IsWebServerRunning, Converter={StaticResource NonZeroToVisible}}">
+                    <Run Text="已启动: "/><Run Text="{Binding WebServerUrl, Mode=OneWay}"/>
+                    <Run Text=" ("/><Run Text="{Binding WebClientCount, Mode=OneWay}"/><Run Text=" 个客户端)"/>
+                </TextBlock>
+                <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                <TextBox Style="{DynamicResource Input}" Width="80" VerticalAlignment="Center"
+                         Text="{Binding WebServerPort}" IsEnabled="{Binding IsWebServerRunning, Converter={x:Static local:InvertBoolConverter.Instance}}"/>
+            </WrapPanel>
+        </Border>
+
         <!-- Main content: 3-column layout -->
         <Grid Grid.Row="1" Margin="12,8,12,12">
             <Grid.ColumnDefinitions>

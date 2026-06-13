@@ -55,6 +55,13 @@ namespace Nexus.App.ViewModels
         [ObservableProperty] private string _writeDataType = "Int16";
         [ObservableProperty] private bool _alarmSoundEnabled = true;
 
+        // Web remote monitoring
+        private WebMonitorServer? _webServer;
+        [ObservableProperty] private bool _isWebServerRunning;
+        [ObservableProperty] private int _webServerPort = 8080;
+        [ObservableProperty] private string _webServerUrl = "";
+        [ObservableProperty] private int _webClientCount;
+
         public string[] WriteDataTypes { get; } = { "Int16", "UInt16", "Int32", "Float", "Double", "Bool", "String" };
         public ObservableCollection<string> AlarmHistory { get; } = new();
 
@@ -321,6 +328,53 @@ namespace Nexus.App.ViewModels
             catch (Exception ex)
             {
                 AppendLog($"[ERR] 写入异常: {ex.Message}");
+            }
+        }
+
+        // ── Web remote monitoring ──────────────────────
+
+        [RelayCommand]
+        private void ToggleWebServer()
+        {
+            if (IsWebServerRunning)
+            {
+                _webServer?.Stop();
+                _webServer?.Dispose();
+                _webServer = null;
+                IsWebServerRunning = false;
+                WebServerUrl = "";
+                WebClientCount = 0;
+                AppendLog("[Web] 远程监控已停止");
+            }
+            else
+            {
+                _webServer = new WebMonitorServer();
+                _webServer.Configure(
+                    getDevices: () => ConnectedDevices.Select(d => (object)new
+                    {
+                        name = d.Name,
+                        protocol = d.Protocol,
+                        address = d.Address,
+                        isConnected = d.IsConnected
+                    }).ToList(),
+                    getMonitoredAddresses: () => MonitoredAddresses.Select(a => (object)new
+                    {
+                        address = a.Address,
+                        alias = a.Alias,
+                        dataType = a.DataType,
+                        currentValueText = a.CurrentValueText,
+                        quality = a.Quality,
+                        lastUpdateTime = a.LastUpdateTime,
+                        intervalMs = a.IntervalMs,
+                        isAlarming = a.IsAlarming,
+                        alarmMessage = a.AlarmMessage
+                    }).ToList()
+                );
+                _webServer.OnLog += (_, msg) => _dispatcher.BeginInvoke(() => AppendLog(msg));
+                _webServer.Start(WebServerPort);
+                IsWebServerRunning = true;
+                WebServerUrl = _webServer.Url ?? $"http://localhost:{WebServerPort}";
+                AppendLog($"[Web] 远程监控已启动: {WebServerUrl}");
             }
         }
 
@@ -669,6 +723,9 @@ namespace Nexus.App.ViewModels
         {
             if (_disposed) return;
             _disposed = true;
+            _webServer?.Stop();
+            _webServer?.Dispose();
+            _webServer = null;
             SaveTags();
             SaveMonitoredAddresses();
             _service.Dispose();
