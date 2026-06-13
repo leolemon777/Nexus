@@ -38,6 +38,7 @@ coverage/
 
 ## Docs build output
 docs/_site/
+docs/api/
 
 ## Environment / secrets
 .env
