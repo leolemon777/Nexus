@@ -20,4 +20,20 @@ public partial class Iec61850ViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Iec61850;
+
+// 创建客户端
+var client = new Iec61850Client(""192.168.1.52"");
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""LD0/LLN0$MX$Temperature"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""LD0/LLN0$MX$Temperature"", (short)123);
+
+client.Disconnect();";
 }

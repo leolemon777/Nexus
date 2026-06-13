@@ -20,4 +20,20 @@ public partial class RobotEfortViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Robot.Efort;
+
+// 创建客户端
+var client = new EfortClient(""192.168.1.70"", 8080);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""J1"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""J1"", (short)123);
+
+client.Disconnect();";
 }

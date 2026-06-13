@@ -26,4 +26,20 @@ public partial class FetchWriteViewModel : ProtocolViewModelBase
     }
 
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Siemens;
+
+// 创建客户端
+var client = new SiemensFetchWriteClient(""192.168.1.110"", 102);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""DB1.100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""DB1.100"", (short)123);
+
+client.Disconnect();";
 }

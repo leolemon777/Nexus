@@ -16,6 +16,22 @@ public partial class SiemensViewModel : ProtocolViewModelBase
 
     public string[] ModelPresets { get; } = { "S7-1200", "S7-1500", "S7-300", "S7-400", "S7-200Smart", "S7-200" };
 
+    public override string SampleCode => @"using Nexus.Siemens;
+
+// 创建客户端
+var client = new SiemensS7Client(SiemensPLCS.S7_1200, ""192.168.1.110"", 102);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""DB1.DBW100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""DB1.DBW100"", (short)123);
+
+client.Disconnect();";
+
     private SiemensS7Client? _client;
 
     protected override OperateResult DoConnect()

@@ -20,4 +20,20 @@ public partial class OpcUaViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.OpcUa;
+
+// 创建客户端
+var client = new OpcUaClient(""opc.tcp://127.0.0.1:4840"");
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""ns=2;s=Temperature"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""ns=2;s=Temperature"", (short)123);
+
+client.Disconnect();";
 }

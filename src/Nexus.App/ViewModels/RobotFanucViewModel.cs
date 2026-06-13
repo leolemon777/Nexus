@@ -20,4 +20,20 @@ public partial class RobotFanucViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Robot.Fanuc;
+
+// 创建客户端
+var client = new FanucRobotClient(""192.168.1.71"", 6000);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""R1"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""R1"", (short)123);
+
+client.Disconnect();";
 }

@@ -20,4 +20,20 @@ public partial class ToledoViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Toledo;
+
+// 创建客户端
+var client = new ToledoClient(""192.168.1.61"", 10000);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""0"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""0"", (short)123);
+
+client.Disconnect();";
 }

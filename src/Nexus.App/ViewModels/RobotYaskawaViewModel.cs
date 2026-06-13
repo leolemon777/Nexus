@@ -20,4 +20,20 @@ public partial class RobotYaskawaViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Robot.Yaskawa;
+
+// 创建客户端
+var client = new Yrc1000Client(""192.168.1.74"", 80);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""IO_IN_0"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""IO_IN_0"", (short)123);
+
+client.Disconnect();";
 }

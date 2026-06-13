@@ -20,4 +20,20 @@ public partial class Iec104ViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Iec104;
+
+// 创建客户端
+var client = new Iec104Client(""192.168.1.51"");
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""1"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""1"", (short)123);
+
+client.Disconnect();";
 }

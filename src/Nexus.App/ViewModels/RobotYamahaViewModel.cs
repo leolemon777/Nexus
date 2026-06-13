@@ -20,4 +20,20 @@ public partial class RobotYamahaViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Robot.Yamaha;
+
+// 创建客户端
+var client = new YamahaRcxClient(""192.168.1.75"", 10000);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""IO_STATUS"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""IO_STATUS"", (short)123);
+
+client.Disconnect();";
 }

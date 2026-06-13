@@ -13,6 +13,24 @@ public partial class BeckhoffViewModel : ProtocolViewModelBase
     public override string ProtocolName => "Beckhoff ADS";
     public override string AddressHint => "e.g. MAIN.myVar, 0x4010:0x0";
 
+    public override string SampleCode => @"using Nexus.Beckhoff;
+
+// 创建客户端
+var client = new BeckhoffAdsClient(""192.168.1.1"", 48898);
+client.TargetNetId = ""192.168.1.1.1.1"";
+client.TargetPort = 851;
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""MAIN.myVar"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""MAIN.myVar"", (short)123);
+
+client.Disconnect();";
+
     private BeckhoffAdsClient? _client;
 
     protected override OperateResult DoConnect()

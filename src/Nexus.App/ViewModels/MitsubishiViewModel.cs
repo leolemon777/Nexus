@@ -52,6 +52,22 @@ public partial class MitsubishiViewModel : ProtocolViewModelBase
         nameof(Endianness.MidLittleEndian)
     };
 
+    public override string SampleCode => @"using Nexus.Mitsubishi;
+
+// 创建客户端
+var client = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, ""192.168.1.10"", 6000);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""D100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""D100"", (short)123);
+
+client.Disconnect();";
+
     private IReadWriteDevice? _client;
 
     protected override OperateResult DoConnect()

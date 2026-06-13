@@ -744,6 +744,47 @@ public partial class ModbusTcpViewModel : ObservableObject, IDisposable
     //  释放
     // ═══════════════════════════════════════════
 
+    // ── 示例代码 ──────────────────────────────
+
+    public string SampleCode => @"using Nexus.Modbus;
+
+// 创建客户端
+var client = new ModbusTcpClient(""192.168.1.100"", 502) { SlaveAddress = 1 };
+client.Connect();
+
+// 读取保持寄存器 (FC03)
+var result = client.ReadInt16(""40001"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 读取输入寄存器 (FC04)
+var input = client.ReadInt16(""30001"");
+
+// 读取线圈 (FC01)
+var coil = client.ReadBool(""00001"");
+
+// 写入单个寄存器 (FC06)
+client.Write(""40001"", (short)123);
+
+// 写入多个寄存器 (FC16)
+client.Write(""40001"", (int)12345);
+
+// 写入线圈 (FC05)
+client.Write(""00001"", true);
+
+// 批量读写 (FC23)
+var batch = client.ReadWriteMultipleRegisters(
+    readAddress: 0, readCount: 10,
+    writeAddress: 100, writeData: new byte[] { 0x00, 0x01 });
+
+client.Disconnect();";
+
+    [RelayCommand]
+    private void CopyCode()
+    {
+        try { Clipboard.SetText(SampleCode); } catch { }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

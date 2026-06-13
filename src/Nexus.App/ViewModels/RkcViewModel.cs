@@ -20,4 +20,20 @@ public partial class RkcViewModel : ProtocolViewModelBase
     }
     protected override void DoDisconnect() { _client?.Disconnect(); _client?.Dispose(); _client = null; }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Rkc;
+
+// 创建客户端
+var client = new RkcTemperatureClient(""192.168.1.60"", 10001);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""01"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""01"", (short)123);
+
+client.Disconnect();";
 }

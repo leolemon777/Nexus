@@ -11,6 +11,19 @@ public partial class Dnp3ViewModel : ProtocolViewModelBase
     public override string ProtocolName => "DNP3";
     public override string AddressHint => "e.g. Group30Var1:0";
 
+    public override string SampleCode => @"using Nexus.Dnp3;
+
+// 创建客户端
+var client = new Dnp3Client(""192.168.1.50"", 20000);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""Group30Var1:0"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+client.Disconnect();";
+
     private Dnp3Client? _client;
 
     protected override OperateResult DoConnect()

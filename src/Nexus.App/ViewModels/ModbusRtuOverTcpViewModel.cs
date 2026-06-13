@@ -21,6 +21,22 @@ public partial class ModbusRtuOverTcpViewModel : ProtocolViewModelBase
     }
 
     public override string ProtocolName => "Modbus RTU Over TCP";
+
+    public override string SampleCode => @"using Nexus.Modbus;
+
+// 创建客户端
+var client = new ModbusRtuOverTcpClient(""127.0.0.1"", 502, 1);
+client.Connect();
+
+// 读取保持寄存器 (FC03)
+var result = client.ReadInt16(""40001"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入单个寄存器 (FC06)
+client.Write(""40001"", (short)123);
+
+client.Disconnect();";
     public override string AddressHint => "e.g. 0, 100, 40001, 00001";
 
     protected override OperateResult DoConnect()

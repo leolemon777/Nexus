@@ -30,4 +30,23 @@ public partial class EurothermViewModel : ProtocolViewModelBase
         _serial?.Close(); _serial?.Dispose(); _serial = null;
     }
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Modbus;
+using System.IO.Ports;
+
+// 创建串口 (Eurotherm 2400/2500 使用 Modbus RTU)
+var serial = new SerialPort(""COM1"", 9600, Parity.None, 8, StopBits.One);
+serial.Open();
+var client = new ModbusRtuClient(new SystemSerialPortAdapter(serial), 1);
+
+// 读取 (地址 1 = PV)
+var result = client.ReadInt16(""1"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入 (地址 2 = SP)
+client.Write(""2"", (short)123);
+
+client.Disconnect();
+serial.Close();";
 }

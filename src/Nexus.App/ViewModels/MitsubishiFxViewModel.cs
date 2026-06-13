@@ -32,4 +32,23 @@ public partial class MitsubishiFxViewModel : ProtocolViewModelBase
     }
 
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Mitsubishi;
+using System.IO.Ports;
+
+// 创建串口连接
+var serial = new SerialPort(""COM1"", 9600, Parity.Even, 7, StopBits.One);
+serial.Open();
+var client = new FxSerialClient(new SerialPortAdapter(serial));
+
+// 读取
+var result = client.ReadInt16(""D100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""D100"", (short)123);
+
+client.Dispose();
+serial.Close();";
 }

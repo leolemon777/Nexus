@@ -11,6 +11,22 @@ public partial class LsXgtViewModel : ProtocolViewModelBase
     public override string ProtocolName => "LS XGT";
     public override string AddressHint => "e.g. D100, M100, P100, K100";
 
+    public override string SampleCode => @"using Nexus.LsElectric;
+
+// 创建客户端
+var client = new LsXgtClient(""192.168.1.1"", 2004);
+client.Connect();
+
+// 读取
+var result = client.ReadInt16(""D100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""D100"", (short)123);
+
+client.Disconnect();";
+
     private LsXgtClient? _client;
 
     protected override OperateResult DoConnect()

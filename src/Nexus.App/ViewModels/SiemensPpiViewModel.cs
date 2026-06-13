@@ -32,6 +32,25 @@ public partial class SiemensPpiViewModel : ProtocolViewModelBase
     }
 
     protected override IReadWriteDevice? GetClient() => _client;
+
+    public override string SampleCode => @"using Nexus.Siemens;
+using System.IO.Ports;
+
+// 创建串口连接
+var serial = new SerialPort(""COM1"", 9600, Parity.None, 8, StopBits.One);
+serial.Open();
+var client = new SiemensPpiClient(new SerialPortAdapter(serial)) { SlaveAddress = 2 };
+
+// 读取
+var result = client.ReadInt16(""V100"");
+if (result.IsSuccess)
+    Console.WriteLine($""值: {result.Content}"");
+
+// 写入
+client.Write(""V100"", (short)123);
+
+client.Disconnect();
+serial.Close();";
 }
 
 // 简单的 SerialPort 适配器，实现 ISerialPort 接口

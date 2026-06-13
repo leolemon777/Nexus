@@ -397,6 +397,18 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
         }
     }
 
+    // ── 示例代码 ──────────────────────────────
+
+    /// <summary>当前协议的示例代码（子类覆盖）。</summary>
+    public virtual string SampleCode => $"// {ProtocolName}\n// 在此协议页面查看示例代码";
+
+    /// <summary>复制示例代码到剪贴板。</summary>
+    [RelayCommand]
+    private void CopyCode()
+    {
+        try { Clipboard.SetText(SampleCode); } catch { }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

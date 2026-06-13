@@ -110,6 +110,26 @@
                 </StackPanel>
             </Border>
 
+            <!-- 示例代码 -->
+            <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="示例代码" Style="{DynamicResource Label}" VerticalAlignment="Center"/>
+                        <Button Content="复制代码" Style="{DynamicResource Button.Text}" 
+                                HorizontalAlignment="Right"
+                                Command="{Binding CopyCodeCommand}"/>
+                    </Grid>
+                    <Border Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="8">
+                        <TextBox Text="{Binding SampleCode, Mode=OneWay}" 
+                                 Style="{DynamicResource Input}"
+                                 FontFamily="Consolas, Courier New" FontSize="12"
+                                 IsReadOnly="True" TextWrapping="Wrap"
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                                 MaxHeight="300" BorderThickness="0" Background="Transparent"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </Page>
