@@ -424,7 +424,7 @@ namespace Nexus.Omron
             byte bitOffset = finsFrame[16];
             ushort readCount = (ushort)((finsFrame[17] << 8) | finsFrame[18]);
 
-            byte[] data = ReadFromMemory(areaCode, wordAddr, readCount, bitAccess);
+            byte[]? data = ReadFromMemory(areaCode, wordAddr, readCount, bitAccess);
             if (data == null)
                 return BuildFinsResponse(header, FinsCommandCode.MemoryAreaRead, 0x0301);
 

@@ -20,6 +20,8 @@ namespace Nexus.Modbus
 
         /// <summary>字节序。</summary>
         public Endianness ByteOrder { get; set; } = Endianness.BigEndian;
+        protected byte? _addressStationOverride;
+        protected Endianness? _addressByteOrderOverride;
 
         /// <summary>字符串编码选项。</summary>
         public StringEncoding StringEncodingOption { get; set; } = StringEncoding.Ascii;
@@ -80,8 +82,9 @@ namespace Nexus.Modbus
         /// </summary>
         protected async Task<OperateResult<byte[]>> SendRtuPduAsync(byte[] pdu, CancellationToken ct)
         {
+            byte station = TakeStation();
             byte[] request = new byte[1 + pdu.Length + 2];
-            request[0] = Station;
+            request[0] = station;
             Buffer.BlockCopy(pdu, 0, request, 1, pdu.Length);
 
             ushort crc = CrcCalculator.ComputeCrc16(request, 0, 1 + pdu.Length);
@@ -95,8 +98,8 @@ namespace Nexus.Modbus
             if (!CrcCalculator.VerifyCrc16(response))
                 return OperateResult<byte[]>.Failed("RTU 响应 CRC 校验失败");
 
-            if (response[0] != Station)
-                return OperateResult<byte[]>.Failed($"响应站号不匹配: 期望={Station}, 实际={response[0]}");
+            if (response[0] != station)
+                return OperateResult<byte[]>.Failed($"响应站号不匹配: 期望={station}, 实际={response[0]}");
 
             byte fc = response[1];
             if ((fc & 0x80) != 0)
@@ -131,12 +134,89 @@ namespace Nexus.Modbus
         //  地址解析（支持前缀模式）
         // ═══════════════════════════════════════════
 
-        private static (ushort address, byte readFc, byte writeFc) ParseAddressEx(string address)
+        protected byte TakeStation()
+        {
+            byte station = _addressStationOverride ?? Station;
+            _addressStationOverride = null;
+            return station;
+        }
+
+        protected void CaptureAddressContext(string address)
+        {
+            var context = AddressContext.Parse(address);
+            string? stationValue = GetAddressParameter(context, "unit", "station", "slave", "s");
+            if (stationValue != null)
+            {
+                if (!int.TryParse(stationValue, out int station) || station < byte.MinValue || station > byte.MaxValue)
+                    throw new AddressParseException(address, $"站号超出范围: {stationValue}");
+                _addressStationOverride = (byte)station;
+            }
+            else
+            {
+                _addressStationOverride = null;
+            }
+
+            string? byteOrderValue = GetAddressParameter(context, "bo", "byteOrder", "byteorder", "endian", "endianness");
+            if (byteOrderValue != null)
+            {
+                if (!TryParseByteOrder(byteOrderValue, out var byteOrder))
+                    throw new AddressParseException(address, $"字节序无效: {byteOrderValue}");
+                _addressByteOrderOverride = byteOrder;
+            }
+            else
+            {
+                _addressByteOrderOverride = null;
+            }
+        }
+
+        protected static string? GetAddressParameter(AddressContext context, params string[] keys)
+        {
+            foreach (var key in keys)
+                foreach (var kvp in context.Parameters)
+                    if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Value;
+            return null;
+        }
+
+        protected static bool TryParseByteOrder(string value, out Endianness byteOrder)
+        {
+            string normalized = value.Trim().Replace("-", "").Replace("_", "").ToLowerInvariant();
+            switch (normalized)
+            {
+                case "be":
+                case "big":
+                case "bigendian":
+                case "abcd":
+                    byteOrder = Endianness.BigEndian;
+                    return true;
+                case "le":
+                case "little":
+                case "littleendian":
+                case "dcba":
+                    byteOrder = Endianness.LittleEndian;
+                    return true;
+                case "midbig":
+                case "midbigendian":
+                case "badc":
+                    byteOrder = Endianness.MidBigEndian;
+                    return true;
+                case "midlittle":
+                case "midlittleendian":
+                case "cdab":
+                    byteOrder = Endianness.MidLittleEndian;
+                    return true;
+                default:
+                    return Enum.TryParse(value, true, out byteOrder);
+            }
+        }
+
+        protected virtual (ushort address, byte readFc, byte writeFc) ParseAddressEx(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
                 throw new ArgumentException("地址不能为空");
 
-            address = address.Trim();
+            CaptureAddressContext(address);
+            address = AddressContext.ExtractCoreAddress(address).Trim();
             char prefix = address[0];
             string numPart = address.Substring(1);
 
@@ -153,26 +233,28 @@ namespace Nexus.Modbus
             return (ParseUshort(address), 0x03, 0x06);
         }
 
-        private static ushort ParseUshort(string s) => ushort.Parse(s.TrimStart('0').Length == 0 ? "0" : s.TrimStart('0'));
-        private static ushort ParseAddress(string address) => ParseAddressEx(address).address;
+        protected static ushort ParseUshort(string s) => ushort.Parse(s.TrimStart('0').Length == 0 ? "0" : s.TrimStart('0'));
+        private ushort ParseAddress(string address) => ParseAddressEx(address).address;
 
         // ═══════════════════════════════════════════
         //  字节序数据转换
         // ═══════════════════════════════════════════
 
-        private short ToInt16Ordered(byte[] data, int offset) => ByteOrder switch
+        private Endianness CurrentByteOrder => _addressByteOrderOverride ?? ByteOrder;
+
+        private short ToInt16Ordered(byte[] data, int offset) => CurrentByteOrder switch
         {
             Endianness.LittleEndian => (short)(data[offset] | (data[offset + 1] << 8)),
             _ => DataConverter.ToInt16(data, offset)
         };
 
-        private ushort ToUInt16Ordered(byte[] data, int offset) => ByteOrder switch
+        private ushort ToUInt16Ordered(byte[] data, int offset) => CurrentByteOrder switch
         {
             Endianness.LittleEndian => (ushort)(data[offset] | (data[offset + 1] << 8)),
             _ => DataConverter.ToUInt16(data, offset)
         };
 
-        private int ToInt32Ordered(byte[] data, int offset) => ByteOrder switch
+        private int ToInt32Ordered(byte[] data, int offset) => CurrentByteOrder switch
         {
             Endianness.BigEndian => DataConverter.ToInt32(data, offset),
             Endianness.LittleEndian => data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24),
@@ -187,15 +269,16 @@ namespace Nexus.Modbus
             unsafe { return *(float*)&v; }
         }
 
-        private byte[] GetBytesOrdered(short value) => ByteOrder == Endianness.LittleEndian
+        private byte[] GetBytesOrdered(short value) => CurrentByteOrder == Endianness.LittleEndian
             ? new byte[] { (byte)value, (byte)(value >> 8) }
             : DataConverter.GetBytes(value);
 
         private byte[] GetBytesOrdered(int value)
         {
-            if (ByteOrder == Endianness.BigEndian) return DataConverter.GetBytes(value);
-            if (ByteOrder == Endianness.LittleEndian) return new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) };
-            if (ByteOrder == Endianness.MidBigEndian) return new byte[] { (byte)(value >> 16), (byte)(value >> 24), (byte)value, (byte)(value >> 8) };
+            var byteOrder = CurrentByteOrder;
+            if (byteOrder == Endianness.BigEndian) return DataConverter.GetBytes(value);
+            if (byteOrder == Endianness.LittleEndian) return new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) };
+            if (byteOrder == Endianness.MidBigEndian) return new byte[] { (byte)(value >> 16), (byte)(value >> 24), (byte)value, (byte)(value >> 8) };
             return new byte[] { (byte)(value >> 8), (byte)value, (byte)(value >> 24), (byte)(value >> 16) };
         }
 
@@ -203,6 +286,10 @@ namespace Nexus.Modbus
         {
             unsafe { int v = *(int*)&value; return GetBytesOrdered(v); }
         }
+
+        private byte[] GetBytesOrdered(long value) => DataConverter.GetBytes(value, CurrentByteOrder);
+        private byte[] GetBytesOrdered(ulong value) => DataConverter.GetBytes(value, CurrentByteOrder);
+        private byte[] GetBytesOrdered(double value) => DataConverter.GetBytes(value, CurrentByteOrder);
 
         // ═══════════════════════════════════════════
         //  读取实现 (FC01 - FC04)
@@ -298,7 +385,7 @@ namespace Nexus.Modbus
             byte fc = readFc == 0x04 ? (byte)0x04 : (byte)0x03;
             var r = SendRtuPdu(new byte[] { fc, (byte)(addr >> 8), (byte)addr, 0, 4 });
             if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 2));
+            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 2, CurrentByteOrder));
         }
 
         public override async Task<OperateResult<long>> ReadInt64Async(string address)
@@ -307,7 +394,7 @@ namespace Nexus.Modbus
             byte fc = readFc == 0x04 ? (byte)0x04 : (byte)0x03;
             var result = await SendRtuPduAsync(new byte[] { fc, (byte)(addr >> 8), (byte)addr, 0, 4 }, CancellationToken.None).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<long>.Failed(result.Message, result.ErrorCode);
-            return OperateResult<long>.Success(DataConverter.ToInt64(result.Content, 2));
+            return OperateResult<long>.Success(DataConverter.ToInt64(result.Content, 2, CurrentByteOrder));
         }
 
         public override OperateResult<ulong> ReadUInt64(string address)
@@ -346,7 +433,7 @@ namespace Nexus.Modbus
             byte fc = readFc == 0x04 ? (byte)0x04 : (byte)0x03;
             var r = SendRtuPdu(new byte[] { fc, (byte)(addr >> 8), (byte)addr, 0, 4 });
             if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<double>.Success(DataConverter.ToDouble(r.Content, 2));
+            return OperateResult<double>.Success(DataConverter.ToDouble(r.Content, 2, CurrentByteOrder));
         }
 
         public override async Task<OperateResult<double>> ReadDoubleAsync(string address)
@@ -355,7 +442,7 @@ namespace Nexus.Modbus
             byte fc = readFc == 0x04 ? (byte)0x04 : (byte)0x03;
             var result = await SendRtuPduAsync(new byte[] { fc, (byte)(addr >> 8), (byte)addr, 0, 4 }, CancellationToken.None).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<double>.Failed(result.Message, result.ErrorCode);
-            return OperateResult<double>.Success(DataConverter.ToDouble(result.Content, 2));
+            return OperateResult<double>.Success(DataConverter.ToDouble(result.Content, 2, CurrentByteOrder));
         }
 
         public override OperateResult<string> ReadString(string address, ushort length)
@@ -484,10 +571,29 @@ namespace Nexus.Modbus
 
         public override OperateResult Write(string address, uint value) => Write(address, (int)value);
         public Task<OperateResult> WriteAsync(string address, uint value) => WriteAsync(address, (int)value);
-        public override OperateResult Write(string address, long value) => Write(address, (int)value);
-        public Task<OperateResult> WriteAsync(string address, long value) => WriteAsync(address, (int)value);
-        public override OperateResult Write(string address, ulong value) => Write(address, (int)value);
-        public Task<OperateResult> WriteAsync(string address, ulong value) => WriteAsync(address, (int)value);
+        public override OperateResult Write(string address, long value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
+        }
+
+        public Task<OperateResult> WriteAsync(string address, long value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));
+        }
+
+        public override OperateResult Write(string address, ulong value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
+        }
+
+        public Task<OperateResult> WriteAsync(string address, ulong value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));
+        }
 
         public override OperateResult Write(string address, float value)
         {
@@ -501,8 +607,17 @@ namespace Nexus.Modbus
             return WriteMultipleRegistersAsync(addr, 2, GetBytesOrdered(value));
         }
 
-        public override OperateResult Write(string address, double value) => Write(address, (float)value);
-        public Task<OperateResult> WriteAsync(string address, double value) => WriteAsync(address, (float)value);
+        public override OperateResult Write(string address, double value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
+        }
+
+        public Task<OperateResult> WriteAsync(string address, double value)
+        {
+            ushort addr = ParseAddress(address);
+            return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));
+        }
 
         public override OperateResult Write(string address, string value)
         {

@@ -202,7 +202,7 @@ namespace Nexus.Schneider.Tests
         [Fact]
         public void VirtualServer_SetGetHoldingRegister()
         {
-            using (var server = new SchneiderVirtualServer(15020))
+            using (var server = new SchneiderVirtualServer(0))
             {
                 server.SetHoldingRegister(100, 12345);
                 Assert.Equal(12345, server.GetHoldingRegister(100));
@@ -212,7 +212,7 @@ namespace Nexus.Schneider.Tests
         [Fact]
         public void VirtualServer_SetGetCoil()
         {
-            using (var server = new SchneiderVirtualServer(15021))
+            using (var server = new SchneiderVirtualServer(0))
             {
                 server.SetCoil(50, true);
                 Assert.True(server.GetCoil(50));
@@ -223,7 +223,7 @@ namespace Nexus.Schneider.Tests
         [Fact]
         public void VirtualServer_StartStop()
         {
-            using (var server = new SchneiderVirtualServer(15022))
+            using (var server = new SchneiderVirtualServer(0))
             {
                 server.Start();
                 Assert.True(true); // 没有异常即成功
@@ -263,7 +263,7 @@ namespace Nexus.Schneider.Tests
         {
             byte[] data = new byte[] { 0x00, 0x64, 0x01, 0x90 }; // 100, 400
             byte[] pdu = SchneiderModiconClient.BuildWriteMultipleRegistersPdu(300, data);
-            Assert.Equal(11, pdu.Length); // FC(1) + addr(2) + count(2) + byteCount(1) + data(4) + pad(1)
+            Assert.Equal(10, pdu.Length); // FC(1) + addr(2) + count(2) + byteCount(1) + data(4)
             Assert.Equal(0x10, pdu[0]);     // FC16
             Assert.Equal(1, pdu[1]);        // addrHi (300 >> 8 = 1)
             Assert.Equal(44, pdu[2]);       // addrLo (300 & 0xFF = 44)
@@ -272,6 +272,20 @@ namespace Nexus.Schneider.Tests
             Assert.Equal(4, pdu[5]);        // byteCount
             Assert.Equal(0x00, pdu[6]);
             Assert.Equal(0x64, pdu[7]);
+        }
+
+        [Fact]
+        public void BuildWriteMultipleRegistersPdu_WithEightBytes_WritesFourRegisters()
+        {
+            byte[] data = new byte[] { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+            byte[] pdu = SchneiderModiconClient.BuildWriteMultipleRegistersPdu(100, data);
+
+            Assert.Equal(14, pdu.Length);
+            Assert.Equal(0x10, pdu[0]);
+            Assert.Equal(0, pdu[3]);
+            Assert.Equal(4, pdu[4]);
+            Assert.Equal(8, pdu[5]);
+            Assert.Equal(data, pdu[6..14]);
         }
     }
 }

@@ -50,7 +50,7 @@ namespace Nexus.AllenBradley.Tests
         [Fact]
         public void EnipCommand_Values()
         {
-            Assert.Equal(0x0001, (ushort)EnipCommand.Nop);
+            Assert.Equal(0x0000, (ushort)EnipCommand.Nop);
             Assert.Equal(0x0063, (ushort)EnipCommand.ListIdentity);
             Assert.Equal(0x006F, (ushort)EnipCommand.SendRRData);
             Assert.Equal(0x0070, (ushort)EnipCommand.SendUnitData);

@@ -317,7 +317,7 @@ namespace Nexus.Bacnet
     public struct BacnetValue
     {
         public BacnetApplicationTag Tag;
-        public object Data;
+        public object? Data;
 
         public BacnetValue(BacnetApplicationTag tag, object data)
         {

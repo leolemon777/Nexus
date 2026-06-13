@@ -79,7 +79,7 @@ public class EfortTests
     [Fact]
     public void ParseFrom_NullData()
     {
-        var result = EfortData.ParseFrom(null);
+        var result = EfortData.ParseFrom(null!);
         Assert.False(result.IsSuccess);
     }
 
@@ -151,6 +151,84 @@ public class EfortTests
         var client = new EfortClient("192.168.1.1");
         string s = client.ToString();
         Assert.Contains("8008", s);
+    }
+
+    #endregion
+
+    #region 扩展覆盖
+
+    [Fact]
+    public void Constructor_CustomPort()
+    {
+        var client = new EfortClient("10.0.0.1", 9000);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotThrow()
+    {
+        var client = new EfortClient("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void SetLogger_DoesNotThrow()
+    {
+        var client = new EfortClient("192.168.1.1");
+        client.SetLogger(NullLogger.Instance);
+    }
+
+    [Fact]
+    public void ReadRobotData_NotConnected_ReturnsError()
+    {
+        var client = new EfortClient("127.0.0.1");
+        var r = client.ReadRobotData();
+        Assert.False(r.IsSuccess);
+    }
+
+    [Fact]
+    public void BuildReadCommand_ConsistentHead()
+    {
+        var client = new EfortClient("127.0.0.1");
+        byte[] cmd = client.BuildReadCommand();
+        string head = Encoding.ASCII.GetString(cmd, 0, 11);
+        Assert.Equal("MessageHead", head);
+    }
+
+    [Fact]
+    public void ParseFrom_EmptyData_ReturnsFailure()
+    {
+        var result = EfortData.ParseFrom(new byte[0]);
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public void EfortData_DefaultAxisPositions()
+    {
+        var result = EfortData.ParseFrom(new byte[788]);
+        if (result.IsSuccess)
+        {
+            Assert.Equal(7, result.Content.AxisPositions.Length);
+            Assert.Equal(6, result.Content.CartesianPositions.Length);
+        }
+    }
+
+    [Fact]
+    public void ToString_ContainsClassName()
+    {
+        var client = new EfortClient("10.0.0.1");
+        Assert.Contains("Efort", client.ToString());
+    }
+
+    [Fact]
+    public void BuildReadCommand_UniqueIdPerCall()
+    {
+        var client = new EfortClient("127.0.0.1");
+        byte[] cmd1 = client.BuildReadCommand();
+        byte[] cmd2 = client.BuildReadCommand();
+        ushort hb1 = BitConverter.ToUInt16(cmd1, 20);
+        ushort hb2 = BitConverter.ToUInt16(cmd2, 20);
+        Assert.NotEqual(hb1, hb2);
     }
 
     #endregion

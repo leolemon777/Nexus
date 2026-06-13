@@ -34,6 +34,64 @@ namespace Nexus
         /// <summary>采集错误事件。</summary>
         public event EventHandler<DataErrorEventArgs>? OnError;
 
+        // ── 当前值查询 ────────────────────────────
+
+        /// <summary>获取所有设备所有采集点的当前值。</summary>
+        public Dictionary<string, string> GetCurrentValues()
+        {
+            var result = new Dictionary<string, string>();
+            foreach (var kvp in _pollers)
+            {
+                var values = kvp.Value.GetCurrentValues();
+                foreach (var v in values)
+                    result[v.Key] = v.Value;
+            }
+            return result;
+        }
+
+        // ── CSV 导出 ──────────────────────────────
+
+        /// <summary>将内存接收器中的数据导出为 CSV 文件。</summary>
+        public void ExportToCsv(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
+
+            var dir = System.IO.Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+
+            lock (_sinkLock)
+            {
+                using (var writer = new System.IO.StreamWriter(filePath, false, System.Text.Encoding.UTF8))
+                {
+                    writer.WriteLine("Timestamp,DeviceName,Address,DataType,Tag,Quality,Value");
+                    foreach (var sink in _sinks)
+                    {
+                        if (sink is MemoryDataSink memSink)
+                        {
+                            foreach (var sample in memSink.GetAll())
+                            {
+                                writer.WriteLine($"{sample.Timestamp:yyyy-MM-dd HH:mm:ss.fff}," +
+                                    $"{EscapeCsv(sample.DeviceName)}," +
+                                    $"{EscapeCsv(sample.Address)}," +
+                                    $"{EscapeCsv(sample.DataType)}," +
+                                    $"{EscapeCsv(sample.Tag ?? "")}," +
+                                    $"{EscapeCsv(sample.Quality)}," +
+                                    $"{EscapeCsv(sample.Value)}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            if (value.Contains(",") || value.Contains("\"") || value.Contains("\n"))
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            return value;
+        }
+
         // ── 数据接收器管理 ─────────────────────────
 
         /// <summary>添加数据接收器（如控制台、文件、数据库、MQTT 等）。</summary>
@@ -275,6 +333,60 @@ namespace Nexus
         public void Dispose() { }
     }
 
+    /// <summary>
+    /// CSV 文件数据接收器 — 将采集数据追加写入 CSV 文件。
+    /// 线程安全，自动创建目录和文件头。
+    /// </summary>
+    public sealed class CsvDataSink : IDataSink
+    {
+        private readonly string _filePath;
+        private readonly object _sync = new object();
+        private bool _headerWritten;
+
+        /// <param name="filePath">CSV 文件路径。目录不存在时自动创建。</param>
+        public CsvDataSink(string filePath)
+        {
+            _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
+            var dir = System.IO.Path.GetDirectoryName(_filePath);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+        }
+
+        public void Write(DataSample sample)
+        {
+            lock (_sync)
+            {
+                bool writeHeader = !_headerWritten;
+                using (var writer = new System.IO.StreamWriter(_filePath, append: true, System.Text.Encoding.UTF8))
+                {
+                    if (writeHeader)
+                    {
+                        writer.WriteLine("Timestamp,DeviceName,Address,DataType,Tag,Quality,Value");
+                        _headerWritten = true;
+                    }
+
+                    string line = $"{sample.Timestamp:yyyy-MM-dd HH:mm:ss.fff}," +
+                                  $"{EscapeCsv(sample.DeviceName)}," +
+                                  $"{EscapeCsv(sample.Address)}," +
+                                  $"{EscapeCsv(sample.DataType)}," +
+                                  $"{EscapeCsv(sample.Tag ?? "")}," +
+                                  $"{EscapeCsv(sample.Quality)}," +
+                                  $"{EscapeCsv(sample.Value)}";
+                    writer.WriteLine(line);
+                }
+            }
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            return value;
+        }
+
+        public void Dispose() { }
+    }
+
     // ── 内部设备轮询器 ───────────────────────────
 
     internal sealed class DevicePoller : IDisposable
@@ -418,6 +530,19 @@ namespace Nexus
         public void Dispose()
         {
             Stop();
+        }
+
+        public Dictionary<string, string> GetCurrentValues()
+        {
+            var result = new Dictionary<string, string>();
+            PollPoint[] snapshot;
+            lock (_pointsLock) { snapshot = _points.ToArray(); }
+            foreach (var point in snapshot)
+            {
+                var key = $"{_name}/{point.Address}";
+                result[key] = point.LastValue ?? "";
+            }
+            return result;
         }
 
         private class PollPoint

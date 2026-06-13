@@ -59,7 +59,7 @@ namespace Nexus.Fuji
                     _stream.Write(Encoding.ASCII.GetBytes(frame), 0, frame.Length);
 
                     // Read response
-                    string response = ReadFrame();
+                    string? response = ReadFrame();
                     if (response == null)
                         return OperateResult<string>.Failed("读取响应超时");
 
@@ -216,27 +216,27 @@ namespace Nexus.Fuji
             return OperateResult<short>.Success((short)Convert.ToUInt16(r.Content.Trim(), 16));
         }
 
-        public OperateResult<ushort> ReadUInt16(string address) { var r = ReadInt16(address); return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message); }
-        public OperateResult<int> ReadInt32(string address) { var (a, o) = ParseAddress(address); var r = ReadRegs(a, o, 2); if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message); return OperateResult<int>.Success((int)Convert.ToUInt32(r.Content.Trim(), 16)); }
-        public OperateResult<uint> ReadUInt32(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message); }
-        public OperateResult<long> ReadInt64(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<long>.Success((long)r.Content) : OperateResult<long>.Failed(r.Message); }
-        public OperateResult<ulong> ReadUInt64(string address) { var r = ReadInt64(address); return r.IsSuccess ? OperateResult<ulong>.Success((ulong)r.Content) : OperateResult<ulong>.Failed(r.Message); }
-        public unsafe OperateResult<float> ReadFloat(string address) { var r = ReadInt32(address); if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message); int v = r.Content; return OperateResult<float>.Success(*(float*)&v); }
-        public OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("Fuji SPH 不支持 Double");
+        public OperateResult<ushort> ReadUInt16(string address) { var r = ReadInt16(address); return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message, r.ErrorCode); }
+        public OperateResult<int> ReadInt32(string address) { var (a, o) = ParseAddress(address); var r = ReadRegs(a, o, 2); if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message, r.ErrorCode); return OperateResult<int>.Success((int)Convert.ToUInt32(r.Content.Trim(), 16)); }
+        public OperateResult<uint> ReadUInt32(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message, r.ErrorCode); }
+        public OperateResult<long> ReadInt64(string address) { var r = ReadUInt64(address); return r.IsSuccess ? OperateResult<long>.Success(unchecked((long)r.Content)) : OperateResult<long>.Failed(r.Message, r.ErrorCode); }
+        public OperateResult<ulong> ReadUInt64(string address) { var (a, o) = ParseAddress(address); var r = ReadRegs(a, o, 4); if (!r.IsSuccess) return OperateResult<ulong>.Failed(r.Message, r.ErrorCode); return OperateResult<ulong>.Success(Convert.ToUInt64(r.Content.Trim(), 16)); }
+        public unsafe OperateResult<float> ReadFloat(string address) { var r = ReadInt32(address); if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message, r.ErrorCode); int v = r.Content; return OperateResult<float>.Success(*(float*)&v); }
+        public unsafe OperateResult<double> ReadDouble(string address) { var r = ReadUInt64(address); if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message, r.ErrorCode); ulong v = r.Content; return OperateResult<double>.Success(*(double*)&v); }
         public OperateResult<string> ReadString(string address, ushort length) { var r = ReadBytes(address, length); if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message); return OperateResult<string>.Success(Encoding.ASCII.GetString(r.Content).TrimEnd('\0')); }
-        public OperateResult<byte[]> ReadBytes(string address, ushort length) { var (a, o) = ParseAddress(address); int cnt = (length + 1) / 2; var r = ReadRegs(a, o, cnt); if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message); byte[] data = new byte[length]; byte[] raw = HexToBytes(r.Content); Array.Copy(raw, data, Math.Min(length, raw.Length)); return OperateResult<byte[]>.Success(data); }
+        public OperateResult<byte[]> ReadBytes(string address, ushort length) { var (a, o) = ParseAddress(address); int cnt = (length + 1) / 2; var r = ReadRegs(a, o, cnt); if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode); byte[] raw = HexToBytes(r.Content); if (raw.Length < length) return OperateResult<byte[]>.Failed("S-BUS 响应数据不足"); byte[] data = new byte[length]; Array.Copy(raw, data, length); return OperateResult<byte[]>.Success(data); }
 
         public OperateResult Write(string address, bool value) { var (a, o) = ParseAddress(address); return WriteRegs(a, o, value ? "0001" : "0000"); }
         public OperateResult Write(string address, short value) { var (a, o) = ParseAddress(address); return WriteRegs(a, o, ((ushort)value).ToString("X4")); }
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public OperateResult Write(string address, int value) { var (a, o) = ParseAddress(address); return WriteRegs(a, o, ((uint)value).ToString("X8")); }
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value) => Write(address, unchecked((ulong)value));
+        public OperateResult Write(string address, ulong value) { var (a, o) = ParseAddress(address); return WriteRegs(a, o, value.ToString("X16")); }
         public unsafe OperateResult Write(string address, float value) => Write(address, *(int*)&value);
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public unsafe OperateResult Write(string address, double value) => Write(address, *(ulong*)&value);
         public OperateResult Write(string address, string value) { var (a, o) = ParseAddress(address); byte[] bytes = Encoding.ASCII.GetBytes(value ?? ""); if (bytes.Length % 2 != 0) Array.Resize(ref bytes, bytes.Length + 1); return WriteRegs(a, o, BytesToHex(bytes)); }
-        public OperateResult Write(string address, byte[] data) { var (a, o) = ParseAddress(address); if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1); return WriteRegs(a, o, BytesToHex(data)); }
+        public OperateResult Write(string address, byte[] data) { if (data == null) return OperateResult.Failed("写入数据不能为空"); var (a, o) = ParseAddress(address); if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1); return WriteRegs(a, o, BytesToHex(data)); }
 
         private static byte[] HexToBytes(string hex) { byte[] r = new byte[hex.Length / 2]; for (int i = 0; i < r.Length; i++) r[i] = (byte)(HexV(hex[i * 2]) << 4 | HexV(hex[i * 2 + 1])); return r; }
         private static string BytesToHex(byte[] d) { var sb = new StringBuilder(d.Length * 2); foreach (byte b in d) sb.Append(b.ToString("X2")); return sb.ToString(); }

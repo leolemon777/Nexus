@@ -1,0 +1,448 @@
+using System;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Nexus.Siemens
+{
+    public class SiemensMPIClient : SerialDeviceBase, IBatchReadWrite, ISubscribeDevice
+    {
+        public byte MasterAddress { get; set; } = 2;
+        public byte SlaveAddress { get; set; } = 0;
+
+        public SiemensMPIClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
+
+        protected override int ResponseHeaderLength => 8;
+        protected override int GetResponsePayloadLength(byte[] header)
+        {
+            if (header.Length < 8 || header[0] != 0x68 || header[3] != 0x68) return 0;
+            int len = header[1];
+            int remaining = len - 2;
+            return remaining > 0 ? remaining : 0;
+        }
+
+        private byte[] BuildMpiFrame(byte control, byte functionCode, byte[] data)
+        {
+            int dataLen = data?.Length ?? 0;
+            int lenField = 4 + dataLen;
+            byte[] frame = new byte[4 + lenField + 2];
+            frame[0] = 0x68; frame[1] = (byte)lenField; frame[2] = (byte)lenField; frame[3] = 0x68;
+            frame[4] = control; frame[5] = SlaveAddress; frame[6] = MasterAddress; frame[7] = functionCode;
+            if (dataLen > 0) Buffer.BlockCopy(data, 0, frame, 8, dataLen);
+            byte bcc = 0;
+            for (int i = 4; i < 8 + dataLen; i++) bcc ^= frame[i];
+            frame[8 + dataLen] = bcc;
+            frame[9 + dataLen] = 0x16;
+            return frame;
+        }
+
+        private bool VerifyMpiFrame(byte[] response, out byte functionCode, out byte[] data)
+        {
+            functionCode = 0; data = Array.Empty<byte>();
+            if (response.Length < 9 || response[0] != 0x68 || response[3] != 0x68 || response[response.Length - 1] != 0x16) return false;
+            int lenField = response[1];
+            if (response[2] != response[1]) return false;
+            if (response.Length != 4 + lenField + 2) return false;
+            byte bcc = 0;
+            for (int i = 4; i < response.Length - 2; i++) bcc ^= response[i];
+            if (bcc != response[response.Length - 2]) return false;
+            functionCode = response[7];
+            int dataLen = lenField - 4;
+            if (dataLen < 0) return false;
+            if (dataLen > 0) { data = new byte[dataLen]; Buffer.BlockCopy(response, 8, data, 0, dataLen); }
+            return true;
+        }
+
+        protected async Task<OperateResult<byte[]>> SendMpiAsync(byte control, byte functionCode, byte[] data, CancellationToken ct)
+        {
+            byte[] request = BuildMpiFrame(control, functionCode, data);
+            var result = await base.SendAndReceiveAsync(request, ct).ConfigureAwait(false);
+            if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
+            if (!VerifyMpiFrame(result.Content, out byte respFc, out byte[] respData))
+                return OperateResult<byte[]>.Failed("MPI 响应帧格式或 BCC 校验失败");
+            if (respFc == 0x01 || respFc == 0x03) return OperateResult<byte[]>.Failed($"MPI 设备返回错误码: 0x{respFc:X2}");
+            return OperateResult<byte[]>.Success(respData);
+        }
+
+        protected OperateResult<byte[]> SendMpi(byte control, byte functionCode, byte[] data)
+            => SendMpiAsync(control, functionCode, data, CancellationToken.None).GetAwaiter().GetResult();
+
+        // ── Read implementations ──────────────────
+
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var addr = MpiAddress.Parse(address);
+            if (!addr.IsBit) throw new ArgumentException("读取 Bool 需要位地址 (如 M10.0)");
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x01, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, (byte)addr.BitOffset };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length > 1 && result.Content[0] == 0xFF
+                ? OperateResult<bool>.Success((result.Content[1] & (1 << addr.BitOffset)) != 0)
+                : OperateResult<bool>.Failed("MPI 读取位响应异常");
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x02, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length >= 3 && result.Content[0] == 0xFF
+                ? OperateResult<short>.Success((short)((result.Content[1] << 8) | result.Content[2]))
+                : OperateResult<short>.Failed("MPI 读取字响应异常");
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x04, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<int>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length >= 5 && result.Content[0] == 0xFF
+                ? OperateResult<int>.Success((result.Content[1] << 24) | (result.Content[2] << 16) | (result.Content[3] << 8) | result.Content[4])
+                : OperateResult<int>.Failed("MPI 读取双字响应异常");
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<float>.Success(BitConverter.ToSingle(BitConverter.GetBytes(r.Content), 0)) : OperateResult<float>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            if (length > byte.MaxValue) return OperateResult<string>.Failed("MPI 单次读取长度不能超过 255 字节");
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<string>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 1 + length || result.Content[0] != 0xFF) return OperateResult<string>.Failed("MPI 读取字符串响应异常");
+            byte[] data = new byte[length];
+            Buffer.BlockCopy(result.Content, 1, data, 0, length);
+            return OperateResult<string>.Success(Encoding.ASCII.GetString(data).TrimEnd('\0'));
+        }
+
+        public override OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            if (length > byte.MaxValue) return OperateResult<byte[]>.Failed("MPI 单次读取长度不能超过 255 字节");
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 1 + length || result.Content[0] != 0xFF) return OperateResult<byte[]>.Failed("MPI 读取字节响应异常");
+            byte[] data = new byte[length];
+            Buffer.BlockCopy(result.Content, 1, data, 0, length);
+            return OperateResult<byte[]>.Success(data);
+        }
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadInt16(address);
+            return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadInt32(address);
+            return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x08, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
+            var result = SendMpi(0x00, 0x01, cmd);
+            if (!result.IsSuccess) return OperateResult<long>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 9 || result.Content[0] != 0xFF)
+                return OperateResult<long>.Failed("MPI 读取长整型响应异常");
+            return OperateResult<long>.Success(
+                ((long)result.Content[1] << 56) | ((long)result.Content[2] << 48) |
+                ((long)result.Content[3] << 40) | ((long)result.Content[4] << 32) |
+                ((long)result.Content[5] << 24) | ((long)result.Content[6] << 16) |
+                ((long)result.Content[7] << 8)  | (long)result.Content[8]);
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadInt64(address);
+            return r.IsSuccess ? OperateResult<ulong>.Success((ulong)r.Content) : OperateResult<ulong>.Failed(r.Message, r.ErrorCode);
+        }
+
+        public override OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadInt64(address);
+            return r.IsSuccess
+                ? OperateResult<double>.Success(BitConverter.ToDouble(BitConverter.GetBytes(r.Content), 0))
+                : OperateResult<double>.Failed(r.Message, r.ErrorCode);
+        }
+
+        // ── Write implementations ──────────────────
+
+        public override OperateResult Write(string address, bool value)
+        {
+            var addr = MpiAddress.Parse(address);
+            if (!addr.IsBit) throw new ArgumentException("写入 Bool 需要位地址 (如 M10.0)");
+            byte val = value ? (byte)(1 << addr.BitOffset) : (byte)0;
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x01, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, (byte)addr.BitOffset, val };
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, short value)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x02, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00, (byte)(value >> 8), (byte)(value & 0xFF) };
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, int value)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[] { 0x01, 0x00, 0x04, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00, (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)(value & 0xFF) };
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, float value) => Write(address, BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
+
+        public override OperateResult Write(string address, string value)
+        {
+            if (value == null) return OperateResult.Failed("写入字符串不能为空");
+            var addr = MpiAddress.Parse(address);
+            byte[] data = Encoding.ASCII.GetBytes(value);
+            if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            if (data.Length > byte.MaxValue) return OperateResult.Failed("MPI 单次写入长度不能超过 255 字节");
+            byte[] cmd = new byte[7 + data.Length];
+            cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
+            cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
+            Buffer.BlockCopy(data, 0, cmd, 7, data.Length);
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, byte[] data)
+        {
+            if (data == null) return OperateResult.Failed("写入数据不能为空");
+            var addr = MpiAddress.Parse(address);
+            if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            if (data.Length > byte.MaxValue) return OperateResult.Failed("MPI 单次写入长度不能超过 255 字节");
+            byte[] cmd = new byte[7 + data.Length];
+            cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
+            cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
+            Buffer.BlockCopy(data, 0, cmd, 7, data.Length);
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
+        public override OperateResult Write(string address, uint value) => Write(address, (int)value);
+
+        public override OperateResult Write(string address, long value)
+        {
+            var addr = MpiAddress.Parse(address);
+            byte[] cmd = new byte[]
+            {
+                0x01, 0x00, 0x08, addr.AreaCode,
+                (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00,
+                (byte)(value >> 56), (byte)(value >> 48), (byte)(value >> 40), (byte)(value >> 32),
+                (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8),  (byte)(value & 0xFF)
+            };
+            var result = SendMpi(0x00, 0x02, cmd);
+            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        public override OperateResult Write(string address, ulong value) => Write(address, unchecked((long)value));
+        public override OperateResult Write(string address, double value) => Write(address, BitConverter.ToInt64(BitConverter.GetBytes(value), 0));
+
+        // ── Async overrides ──────────────────
+
+        public override Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
+        public override Task<OperateResult<short>> ReadInt16Async(string address) => Task.Run(() => ReadInt16(address));
+        public override Task<OperateResult<int>> ReadInt32Async(string address) => Task.Run(() => ReadInt32(address));
+        public override Task<OperateResult<float>> ReadFloatAsync(string address) => Task.Run(() => ReadFloat(address));
+        public override Task<OperateResult<string>> ReadStringAsync(string address, ushort length) => Task.Run(() => ReadString(address, length));
+        public override Task<OperateResult<byte[]>> ReadBytesAsync(string address, ushort length) => Task.Run(() => ReadBytes(address, length));
+        public override Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
+
+        // ═══════════════════════════════════════════
+        //  IBatchReadWrite
+        // ═══════════════════════════════════════════
+
+        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+            var result = new Dictionary<string, object?>();
+            foreach (var addr in addrList)
+            {
+                var r = ReadInt16(addr);
+                if (!r.IsSuccess)
+                    return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+                result[addr] = r.Content;
+            }
+            return OperateResult<Dictionary<string, object?>>.Success(result);
+        }
+
+        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchRead(addresses));
+
+        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
+        {
+            var addrList = addresses.ToList();
+            if (addrList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+            var result = new Dictionary<string, byte[]>();
+            foreach (var addr in addrList)
+            {
+                var r = ReadBytes(addr, 1);
+                if (!r.IsSuccess)
+                    return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
+                result[addr] = r.Content;
+            }
+            return OperateResult<Dictionary<string, byte[]>>.Success(result);
+        }
+
+        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(
+            IEnumerable<string> addresses, CancellationToken cancellationToken = default)
+            => Task.FromResult(RandomRead(addresses));
+
+        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
+        {
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+            foreach (var kv in itemList)
+            {
+                OperateResult r = kv.Value switch
+                {
+                    bool b => Write(kv.Key, b),
+                    short s => Write(kv.Key, s),
+                    ushort us => Write(kv.Key, us),
+                    int i => Write(kv.Key, i),
+                    uint ui => Write(kv.Key, ui),
+                    float f => Write(kv.Key, f),
+                    string s => Write(kv.Key, s),
+                    byte[] b => Write(kv.Key, b),
+                    _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")
+                };
+                if (!r.IsSuccess) return r;
+            }
+            return OperateResult.Success();
+        }
+
+        public Task<OperateResult> BatchWriteAsync(
+            IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
+            => Task.FromResult(BatchWrite(items));
+
+        // ═══════════════════════════════════════════
+        //  ISubscribeDevice
+        // ═══════════════════════════════════════════
+
+        private readonly object _monitorLock = new object();
+        private readonly Dictionary<string, MonitorEntry> _monitors = new Dictionary<string, MonitorEntry>();
+        private bool _monitoring;
+        private Timer? _monitorTimer;
+
+        private class MonitorEntry
+        {
+            public string Address = "";
+            public string DataType = "Int16";
+            public int IntervalMs = 1000;
+            public object? LastValue;
+        }
+
+        public event EventHandler<DataChangeEventArgs>? OnDataChanged;
+
+        public void Subscribe(string address, int intervalMs = 1000, string dataType = "Int16")
+        {
+            lock (_monitorLock)
+            {
+                _monitors[address] = new MonitorEntry
+                {
+                    Address = address,
+                    DataType = dataType,
+                    IntervalMs = intervalMs,
+                    LastValue = null
+                };
+            }
+        }
+
+        public void Unsubscribe(string address)
+        {
+            lock (_monitorLock) { _monitors.Remove(address); }
+        }
+
+        public void StartSubscriptions(int globalIntervalMs = 500)
+        {
+            if (_monitoring) return;
+            _monitoring = true;
+            _monitorTimer = new Timer(PollMonitors, null, globalIntervalMs, globalIntervalMs);
+        }
+
+        public void StopSubscriptions()
+        {
+            _monitoring = false;
+            _monitorTimer?.Dispose();
+            _monitorTimer = null;
+        }
+
+        private void PollMonitors(object? state)
+        {
+            if (!_monitoring) return;
+            try
+            {
+                List<MonitorEntry> entries;
+                lock (_monitorLock) { entries = new List<MonitorEntry>(_monitors.Values); }
+
+                foreach (var entry in entries)
+                {
+                    try
+                    {
+                        object? current = entry.DataType switch
+                        {
+                            "Int16" => ReadInt16(entry.Address).Content,
+                            "UInt16" => ReadUInt16(entry.Address).Content,
+                            "Int32" => ReadInt32(entry.Address).Content,
+                            "Float" => ReadFloat(entry.Address).Content,
+                            "Bool" => ReadBool(entry.Address).Content,
+                            "String" => ReadString(entry.Address, 10).Content,
+                            _ => null
+                        };
+
+                        if (current != null && !Equals(current, entry.LastValue))
+                        {
+                            if (entry.LastValue == null) { entry.LastValue = current; continue; }
+                            var args = new DataChangeEventArgs
+                            {
+                                Address = entry.Address,
+                                OldValue = entry.LastValue,
+                                NewValue = current,
+                                Timestamp = DateTime.Now,
+                                Quality = "Good"
+                            };
+                            entry.LastValue = current;
+                            OnDataChanged?.Invoke(this, args);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+    }
+}

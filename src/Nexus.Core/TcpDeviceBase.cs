@@ -28,6 +28,11 @@ namespace Nexus
         protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
 
         protected volatile bool _persistentMode;
+        private AutoReconnectGuard? _autoReconnectGuard;
+        private HeartbeatGuard? _heartbeatGuard;
+        private Func<Task<OperateResult>>? _heartbeatCallback;
+        private bool _autoReconnect;
+        private bool _heartbeatEnabled;
 
         // ── 事件 ──────────────────────────────────
 
@@ -39,6 +44,15 @@ namespace Nexus
 
         /// <summary>通讯错误事件。</summary>
         public event EventHandler<string>? OnError;
+
+        /// <summary>正在尝试自动重连。</summary>
+        public event Action<int>? OnReconnecting;
+
+        /// <summary>自动重连成功。</summary>
+        public event Action? OnReconnected;
+
+        /// <summary>自动重连最终失败。</summary>
+        public event Action<string>? OnReconnectFailed;
 
         /// <summary>原始报文发送事件（十六进制字符串）。</summary>
         public event EventHandler<string>? OnMessageSent;
@@ -72,6 +86,70 @@ namespace Nexus
 
         /// <summary>启用长连接模式（不会在每次操作后断开）。</summary>
         public void SetPersistentConnection() => _persistentMode = true;
+
+        /// <summary>
+        /// 启用自动重连守护。自动重连只在长连接模式下响应断开事件，
+        /// 避免短连接请求完成后的正常断开触发重连。
+        /// </summary>
+        public bool AutoReconnect
+        {
+            get => _autoReconnect;
+            set
+            {
+                if (_autoReconnect == value) return;
+                _autoReconnect = value;
+                if (value) StartAutoReconnectGuard();
+                else StopAutoReconnectGuard();
+            }
+        }
+
+        /// <summary>自动重连基础间隔（毫秒，默认 1000ms）。</summary>
+        public int ReconnectInterval { get; set; } = 1000;
+
+        /// <summary>自动重连最大间隔（毫秒，默认 30000ms）。</summary>
+        public int MaxReconnectInterval { get; set; } = 30000;
+
+        /// <summary>最大重连次数（默认 10 次，0 = 无限重试）。</summary>
+        public int MaxReconnectAttempts { get; set; } = 10;
+
+        /// <summary>重连退避倍数（默认 2.0）。</summary>
+        public double ReconnectBackoffMultiplier { get; set; } = 2.0;
+
+        /// <summary>启用心跳守护。默认心跳使用 <see cref="BuildHeartbeat"/> 构造原始报文。</summary>
+        public bool HeartbeatEnabled
+        {
+            get => _heartbeatEnabled;
+            set
+            {
+                if (_heartbeatEnabled == value) return;
+                _heartbeatEnabled = value;
+                if (value) StartHeartbeatGuard();
+                else StopHeartbeatGuard();
+            }
+        }
+
+        /// <summary>心跳间隔（毫秒，默认 30000ms）。</summary>
+        public int HeartbeatInterval { get; set; } = 30000;
+
+        /// <summary>单次心跳超时（毫秒，默认 5000ms）。</summary>
+        public int HeartbeatTimeout { get; set; } = 5000;
+
+        /// <summary>最大连续心跳失败次数（默认 3 次）。</summary>
+        public int MaxHeartbeatFailures { get; set; } = 3;
+
+        /// <summary>设置自定义心跳回调，适用于不方便用原始报文表达的协议。</summary>
+        public void SetHeartbeatCallback(Func<Task<OperateResult>> heartbeatCallback)
+        {
+            _heartbeatCallback = heartbeatCallback ?? throw new ArgumentNullException(nameof(heartbeatCallback));
+            if (_heartbeatEnabled)
+            {
+                StopHeartbeatGuard();
+                StartHeartbeatGuard();
+            }
+        }
+
+        /// <summary>构造心跳原始报文。子类可重写；默认表示未配置心跳。</summary>
+        protected virtual byte[]? BuildHeartbeat() => null;
 
         // ── 连接管理 ──────────────────────────────
 
@@ -169,18 +247,100 @@ namespace Nexus
         /// <summary>重试间隔（毫秒，默认 1000ms）。</summary>
         public int RetryInterval { get; set; } = 1000;
 
-        protected void DisconnectCore()  // accessible to subclasses (Siemens S7 needs to call it under lock from its own SendAndReceive override)
+        protected void DisconnectCore(bool forceDisconnectedEvent = false)  // accessible to subclasses (Siemens S7 needs to call it under lock from its own SendAndReceive override)
         {
             bool wasConnected = _client?.Connected == true;
             _stream?.Close();
             _stream = null;
             _client?.Close();
             _client = null;
-            if (wasConnected)
+            if (wasConnected || forceDisconnectedEvent)
             {
                 Log.Info($"已断开 {Ip}:{Port}");
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private void StartAutoReconnectGuard()
+        {
+            StopAutoReconnectGuard();
+            var guard = new AutoReconnectGuard(this, Log, () => _autoReconnect && _persistentMode)
+            {
+                MaxRetries = MaxReconnectAttempts,
+                BaseDelayMs = ReconnectInterval,
+                MaxDelayMs = MaxReconnectInterval,
+                BackoffMultiplier = ReconnectBackoffMultiplier
+            };
+            guard.OnReconnecting += HandleReconnecting;
+            guard.OnReconnected += HandleReconnected;
+            guard.OnReconnectFailed += HandleReconnectFailed;
+            guard.Start();
+            _autoReconnectGuard = guard;
+        }
+
+        private void StopAutoReconnectGuard()
+        {
+            if (_autoReconnectGuard != null)
+            {
+                _autoReconnectGuard.OnReconnecting -= HandleReconnecting;
+                _autoReconnectGuard.OnReconnected -= HandleReconnected;
+                _autoReconnectGuard.OnReconnectFailed -= HandleReconnectFailed;
+                _autoReconnectGuard.Dispose();
+            }
+            _autoReconnectGuard = null;
+        }
+
+        private void HandleReconnecting(int attempt) => OnReconnecting?.Invoke(attempt);
+        private void HandleReconnected() => OnReconnected?.Invoke();
+        private void HandleReconnectFailed(string message) => OnReconnectFailed?.Invoke(message);
+
+        private void StartHeartbeatGuard()
+        {
+            StopHeartbeatGuard();
+            var guard = new HeartbeatGuard(this, SendHeartbeatAsync, Log)
+            {
+                IntervalMs = HeartbeatInterval,
+                TimeoutMs = HeartbeatTimeout,
+                MaxConsecutiveFailures = MaxHeartbeatFailures
+            };
+            guard.OnHeartbeatFailed += OnHeartbeatFailed;
+            guard.Start();
+            _heartbeatGuard = guard;
+        }
+
+        private void StopHeartbeatGuard()
+        {
+            if (_heartbeatGuard != null)
+            {
+                _heartbeatGuard.OnHeartbeatFailed -= OnHeartbeatFailed;
+                _heartbeatGuard.Dispose();
+                _heartbeatGuard = null;
+            }
+        }
+
+        private async Task<OperateResult> SendHeartbeatAsync()
+        {
+            if (_heartbeatCallback != null)
+                return await _heartbeatCallback().ConfigureAwait(false);
+
+            byte[]? request = BuildHeartbeat();
+            if (request == null || request.Length == 0)
+                return OperateResult.Failed("未配置心跳报文");
+
+            var result = await SendAndReceiveAsync(request).ConfigureAwait(false);
+            return result.IsSuccess
+                ? OperateResult.Success()
+                : OperateResult.Failed(result.Message, result.ErrorCode);
+        }
+
+        private void OnHeartbeatFailed(int failureCount, string message)
+        {
+            string error = $"心跳连续失败 {failureCount} 次: {message}";
+            Log.Error(error);
+            RaiseError(error);
+            _asyncLock.Wait();
+            try { DisconnectCore(forceDisconnectedEvent: true); }
+            finally { _asyncLock.Release(); }
         }
 
         // ── 事件触发器（供派生类 override SendAndReceive 时调用）──
@@ -319,7 +479,7 @@ namespace Nexus
             {
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    await _asyncLock.WaitAsync().ConfigureAwait(false);
                     try { DisconnectCore(); }
                     finally { _asyncLock.Release(); }
                 }
@@ -331,7 +491,7 @@ namespace Nexus
                 OnError?.Invoke(this, ex.Message);
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    await _asyncLock.WaitAsync().ConfigureAwait(false);
                     try { DisconnectCore(); }
                     finally { _asyncLock.Release(); }
                 }
@@ -525,9 +685,13 @@ namespace Nexus
         {
             if (disposing)
             {
+                StopHeartbeatGuard();
+                StopAutoReconnectGuard();
                 Disconnect();
                 _asyncLock.Dispose();
             }
         }
+
+        public override string ToString() => $"{Ip}:{Port}";
     }
 }

@@ -148,7 +148,7 @@ namespace Nexus.Fatek
 
                         if (buf.Count < 5) continue;
 
-                        byte[] response = ProcessFrame(buf.ToArray());
+                        byte[]? response = ProcessFrame(buf.ToArray());
                         if (response != null)
                             stream.Write(response, 0, response.Length);
                     }

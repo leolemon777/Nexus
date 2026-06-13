@@ -81,8 +81,8 @@ namespace Nexus.Mqtt.Tests
         [Fact]
         public void IsMatch_Null_ThrowsArgumentNull()
         {
-            Assert.Throws<System.ArgumentNullException>(() => MqttTopicFilter.IsMatch(null, "a"));
-            Assert.Throws<System.ArgumentNullException>(() => MqttTopicFilter.IsMatch("a", null));
+            Assert.Throws<System.ArgumentNullException>(() => MqttTopicFilter.IsMatch(null!, "a"));
+            Assert.Throws<System.ArgumentNullException>(() => MqttTopicFilter.IsMatch("a", null!));
         }
     }
 }

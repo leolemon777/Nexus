@@ -56,6 +56,8 @@ namespace Nexus.Siemens
                 Slot = 1;
             else if (plcType == SiemensPLCS.S7_300 || plcType == SiemensPLCS.S7_400)
                 Slot = 2;
+
+            SetHeartbeatCallback(SendS7HeartbeatAsync);
         }
 
         // ── S7 协议层 ──────────────────────────────
@@ -86,34 +88,38 @@ namespace Nexus.Siemens
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                System.Net.Sockets.NetworkStream? ns;
-                lock (_lock) { ns = _stream; }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
+                lock (_lock)
+                {
+                    System.Net.Sockets.NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                RaiseMessageSent(DataConverter.ToHexString(request));
+                    string requestHex = DataConverter.ToHexString(request);
+                    Log.Debug($"TX → {requestHex}");
+                    RaiseMessageSent(requestHex);
 
-                ns.Write(request, 0, request.Length);
+                    ns.Write(request, 0, request.Length);
 
-                byte[]? tpktHeader = ReadExactNs(ns, 4);
-                if (tpktHeader == null) return OperateResult<byte[]>.Failed("读取TPKT头失败");
+                    byte[]? tpktHeader = ReadExactNs(ns, 4);
+                    if (tpktHeader == null) return OperateResult<byte[]>.Failed("读取TPKT头失败");
 
-                int totalLen = (tpktHeader[2] << 8) | tpktHeader[3];
-                int payloadLen = totalLen - 4;
-                if (payloadLen < 0 || payloadLen > 65535) return OperateResult<byte[]>.Failed("TPKT长度异常");
+                    int totalLen = (tpktHeader[2] << 8) | tpktHeader[3];
+                    int payloadLen = totalLen - 4;
+                    if (payloadLen < 0 || payloadLen > 65535) return OperateResult<byte[]>.Failed("TPKT长度异常");
 
-                byte[] payload = payloadLen > 0 ? ReadExactNs(ns, payloadLen) ?? new byte[0] : new byte[0];
+                    byte[] payload = payloadLen > 0 ? ReadExactNs(ns, payloadLen) ?? new byte[0] : new byte[0];
 
-                byte[] full = new byte[totalLen];
-                Buffer.BlockCopy(tpktHeader, 0, full, 0, 4);
-                if (payload.Length > 0) Buffer.BlockCopy(payload, 0, full, 4, payload.Length);
+                    byte[] full = new byte[totalLen];
+                    Buffer.BlockCopy(tpktHeader, 0, full, 0, 4);
+                    if (payload.Length > 0) Buffer.BlockCopy(payload, 0, full, 4, payload.Length);
 
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                RaiseMessageReceived(DataConverter.ToHexString(full));
+                    string responseHex = DataConverter.ToHexString(full);
+                    Log.Debug($"RX ← {responseHex}");
+                    RaiseMessageReceived(responseHex);
 
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                    if (!_persistentMode) DisconnectCore();
 
-                return OperateResult<byte[]>.Success(full);
+                    return OperateResult<byte[]>.Success(full);
+                }
             }
             catch (Exception ex)
             {
@@ -135,6 +141,17 @@ namespace Nexus.Siemens
                 offset += read;
             }
             return buf;
+        }
+
+        private Task<OperateResult> SendS7HeartbeatAsync()
+        {
+            return Task.Run(() =>
+            {
+                var result = ReadS7Raw("M0", 1, S7DataType.Byte);
+                return result.IsSuccess
+                    ? OperateResult.Success()
+                    : OperateResult.Failed(result.Message, result.ErrorCode);
+            });
         }
 
         // ── TPKT + COTP + S7 报文构建 ─────────────
@@ -298,7 +315,7 @@ namespace Nexus.Siemens
 
         // ── S7 数据类型 ────────────────────────────
 
-        private enum S7DataType { Bit, Byte, Word, Int, DInt, Real, String }
+        private enum S7DataType { Bit, Byte, Word, Int, DInt, Real, String, Timer, Counter }
 
         // ── 字节序处理 ─────────────────────────────
 
@@ -1360,6 +1377,121 @@ namespace Nexus.Siemens
             }
         }
 
+        // ── PLC 时钟 ────────────────────────────────
+
+        /// <summary>
+        /// 读取 PLC 系统时钟。
+        /// 使用 S7 ReadClock 功能码 (SZL 0x0220 / 0x0001)，返回 PLC 当前时间。
+        /// </summary>
+        public OperateResult<DateTime> ReadPlcClock()
+        {
+            // SZL 请求: 读取时钟 (SZL ID=0x0220, Index=0x0001)
+            byte[] readClockReq =
+            {
+                0x03, 0x00, 0x00, 0x21, 0x02, 0xF0, 0x80, 0x32,
+                0x07, 0x00, 0x00, 0x10, 0x00, 0x00, 0x08, 0x00,
+                0x00, 0x0C, 0x00, 0x00, 0x01, 0x12, 0x04, 0x11,
+                0x44, 0x01, 0x00, 0xFF, 0x09, 0x00, 0x22, 0x00,
+                0x01
+            };
+
+            var resp = SendAndReceive(readClockReq);
+            if (!resp.IsSuccess) return OperateResult<DateTime>.Failed(resp.Message, resp.ErrorCode);
+
+            byte[] raw = resp.Content;
+            if (raw == null || raw.Length < 50)
+                return OperateResult<DateTime>.Failed($"ReadClock 响应长度不足: {raw?.Length ?? 0}");
+
+            try
+            {
+                // S7 时钟数据在 SZL 响应尾部，格式为：
+                // Year(2) Month(1) Day(1) Hour(1) Minute(1) Second(1) DayOfWeek(1) Milliseconds(2) ?
+                // 跳过 SZL 头部 (通常到偏移 42 附近开始时钟数据)
+                int clockStart = raw.Length - 14;
+                if (clockStart < 30) return OperateResult<DateTime>.Failed("时钟数据偏移异常");
+
+                int year = (raw[clockStart] << 8) | raw[clockStart + 1];
+                int month = raw[clockStart + 2];
+                int day = raw[clockStart + 3];
+                int hour = raw[clockStart + 5];
+                int minute = raw[clockStart + 6];
+                int second = raw[clockStart + 7];
+
+                if (year < 2000 || month < 1 || month > 12 || day < 1 || day > 31)
+                    return OperateResult<DateTime>.Failed($"时钟数据不合法: {year}-{month:D2}-{day:D2} {hour:D2}:{minute:D2}:{second:D2}");
+
+                return OperateResult<DateTime>.Success(new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc));
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<DateTime>.Failed($"解析 PLC 时钟失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>异步读取 PLC 系统时钟。</summary>
+        public Task<OperateResult<DateTime>> ReadPlcClockAsync(CancellationToken ct = default)
+            => Task.Run(() => ReadPlcClock(), ct);
+
+        // ── 定时器/计数器读写 ────────────────────
+
+        /// <summary>
+        /// 读取定时器当前值（BCD 格式，2 字节）。
+        /// 地址示例: timerNumber=0 表示 T0。
+        /// </summary>
+        public OperateResult<short> ReadTimer(int timerNumber)
+        {
+            string address = $"T{timerNumber}";
+            var r = ReadS7Raw(address, 2, S7DataType.Timer);
+            if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message, r.ErrorCode);
+            return OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0));
+        }
+
+        /// <summary>异步读取定时器当前值。</summary>
+        public Task<OperateResult<short>> ReadTimerAsync(int timerNumber, CancellationToken ct = default)
+            => Task.Run(() => ReadTimer(timerNumber), ct);
+
+        /// <summary>
+        /// 读取计数器当前值（BCD 格式，2 字节）。
+        /// 地址示例: counterNumber=0 表示 C0。
+        /// </summary>
+        public OperateResult<short> ReadCounter(int counterNumber)
+        {
+            string address = $"C{counterNumber}";
+            var r = ReadS7Raw(address, 2, S7DataType.Counter);
+            if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message, r.ErrorCode);
+            return OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0));
+        }
+
+        /// <summary>异步读取计数器当前值。</summary>
+        public Task<OperateResult<short>> ReadCounterAsync(int counterNumber, CancellationToken ct = default)
+            => Task.Run(() => ReadCounter(counterNumber), ct);
+
+        /// <summary>
+        /// 写入定时器预设值。
+        /// </summary>
+        public OperateResult WriteTimer(int timerNumber, short value)
+        {
+            string address = $"T{timerNumber}";
+            return WriteS7Raw(address, DataConverter.GetBytes(value), S7DataType.Timer);
+        }
+
+        /// <summary>异步写入定时器预设值。</summary>
+        public Task<OperateResult> WriteTimerAsync(int timerNumber, short value, CancellationToken ct = default)
+            => Task.Run(() => WriteTimer(timerNumber, value), ct);
+
+        /// <summary>
+        /// 写入计数器预设值。
+        /// </summary>
+        public OperateResult WriteCounter(int counterNumber, short value)
+        {
+            string address = $"C{counterNumber}";
+            return WriteS7Raw(address, DataConverter.GetBytes(value), S7DataType.Counter);
+        }
+
+        /// <summary>异步写入计数器预设值。</summary>
+        public Task<OperateResult> WriteCounterAsync(int counterNumber, short value, CancellationToken ct = default)
+            => Task.Run(() => WriteCounter(counterNumber, value), ct);
+
         // ── 辅助方法 ──────────────────────────────
 
         /// <summary>
@@ -1373,6 +1505,9 @@ namespace Nexus.Siemens
                 case S7Area.PA: return "Q";
                 case S7Area.MK: return "M";
                 case S7Area.DB: return "DB";
+                case S7Area.V: return "V";
+                case S7Area.TM: return "T";
+                case S7Area.CT: return "C";
                 default: return "";
             }
         }
@@ -1476,6 +1611,13 @@ namespace Nexus.Siemens
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildS7SetupCommunication(); }
+            catch { return null; }
         }
     }
 }

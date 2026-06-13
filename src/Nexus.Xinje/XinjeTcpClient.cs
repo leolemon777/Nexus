@@ -54,8 +54,9 @@ namespace Nexus.Xinje
         /// <param name="ip">PLC IP 地址。</param>
         /// <param name="port">端口号（默认 502）。</param>
         /// <param name="station">站号（默认 1）。</param>
-        public XinjeTcpClient(string ip, int port = 502, byte station = 1)
-            : base(ip, port)
+        /// <param name="timeout">超时时间（毫秒）。</param>
+        public XinjeTcpClient(string ip, int port = 502, byte station = 1, int timeout = 5000)
+            : base(ip, port, timeout)
         {
             Station = station;
         }
@@ -91,7 +92,7 @@ namespace Nexus.Xinje
         {
             ushort wordCount = (ushort)(data.Length / 2);
             byte byteCount = (byte)data.Length;
-            byte[] pdu = new byte[6 + 1 + data.Length];
+            byte[] pdu = new byte[6 + data.Length];
             pdu[0] = 0x10;
             pdu[1] = (byte)(startAddr >> 8);
             pdu[2] = (byte)startAddr;
@@ -142,6 +143,9 @@ namespace Nexus.Xinje
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var addrResult = XinjeAddress.TryParse(address);
             if (addrResult == null)
                 return OperateResult.Failed($"无法解析信捷地址: {address}");
@@ -170,41 +174,68 @@ namespace Nexus.Xinje
         public override OperateResult<bool> ReadBool(string address)
         {
             var result = ReadBytes(address, 1);
-            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message);
+            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
             return OperateResult<bool>.Success((result.Content[0] & 0x01) != 0);
         }
 
         public override OperateResult<short> ReadInt16(string address)
         {
             var result = ReadBytes(address, 1);
-            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message);
-            return OperateResult<short>.Success((short)((result.Content[0] << 8) | result.Content[1]));
+            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
+            return OperateResult<short>.Success(DataConverter.ToInt16(result.Content, 0));
         }
 
-        public override OperateResult Write(string address, bool value) => Write(address, new byte[] { (byte)(value ? 0xFF : 0x00), 0x00 });
-        public override OperateResult Write(string address, short value) => Write(address, new byte[] { (byte)(value >> 8), (byte)value });
+        public override OperateResult Write(string address, bool value)
+        {
+            var addrResult = XinjeAddress.TryParse(address);
+            if (addrResult == null)
+                return OperateResult.Failed($"无法解析信捷地址: {address}");
+            if (addrResult.WriteFunctionCode == 0)
+                return OperateResult.Failed($"地址 {address} 为只读区域");
+
+            byte[] pdu =
+            {
+                0x05,
+                (byte)(addrResult.Address >> 8), (byte)addrResult.Address,
+                (byte)(value ? 0xFF : 0x00), 0x00
+            };
+            var result = SendAndReceive(BuildMbapFrame(pdu));
+            if (!result.IsSuccess) return result;
+
+            byte[] resp = result.Content;
+            if (resp == null || resp.Length < 12)
+                return OperateResult.Failed("写入响应长度不足");
+            if ((resp[7] & 0x80) != 0)
+            {
+                byte errCode = resp.Length > 8 ? resp[8] : (byte)0;
+                return OperateResult.Failed($"Modbus异常: 0x{errCode:X2}", errCode);
+            }
+
+            return OperateResult.Success();
+        }
+        public override OperateResult Write(string address, short value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public override OperateResult Write(string address, int value) => Write(address, new byte[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
+        public override OperateResult Write(string address, int value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public override OperateResult Write(string address, long value) => Write(address, (int)value);
-        public override OperateResult Write(string address, ulong value) => Write(address, (int)value);
-        public override OperateResult Write(string address, float value) => Write(address, BitConverter.GetBytes(value));
-        public override OperateResult Write(string address, double value) => Write(address, BitConverter.GetBytes(value));
+        public override OperateResult Write(string address, long value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, ulong value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, float value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, double value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
 
         public override OperateResult<ushort> ReadUInt16(string address) { var r = ReadInt16(address); return r.IsSuccess ? OperateResult<ushort>.Success((ushort)r.Content) : OperateResult<ushort>.Failed(r.Message); }
-        public override OperateResult<int> ReadInt32(string address) => ReadValueSafe<int>(address, 2, d => (d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]);
-        public override OperateResult<uint> ReadUInt32(string address) => ReadValueSafe<uint>(address, 2, d => (uint)((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]));
-        public override OperateResult<long> ReadInt64(string address) => ReadValueSafe<long>(address, 4, d => BitConverter.ToInt64(d, 0));
-        public override OperateResult<ulong> ReadUInt64(string address) => ReadValueSafe<ulong>(address, 4, d => BitConverter.ToUInt64(d, 0));
-        public override OperateResult<float> ReadFloat(string address) => ReadValueSafe<float>(address, 2, d => BitConverter.ToSingle(d, 0));
-        public override OperateResult<double> ReadDouble(string address) => ReadValueSafe<double>(address, 4, d => BitConverter.ToDouble(d, 0));
+        public override OperateResult<int> ReadInt32(string address) => ReadValueSafe<int>(address, 2, d => DataConverter.ToInt32(d, 0));
+        public override OperateResult<uint> ReadUInt32(string address) => ReadValueSafe<uint>(address, 2, d => DataConverter.ToUInt32(d, 0));
+        public override OperateResult<long> ReadInt64(string address) => ReadValueSafe<long>(address, 4, d => DataConverter.ToInt64(d, 0));
+        public override OperateResult<ulong> ReadUInt64(string address) => ReadValueSafe<ulong>(address, 4, d => DataConverter.ToUInt64(d, 0));
+        public override OperateResult<float> ReadFloat(string address) => ReadValueSafe<float>(address, 2, d => DataConverter.ToFloat(d, 0));
+        public override OperateResult<double> ReadDouble(string address) => ReadValueSafe<double>(address, 4, d => DataConverter.ToDouble(d, 0));
         public override OperateResult<string> ReadString(string address, ushort length) => ReadValueSafe<string>(address, length, d => Encoding.ASCII.GetString(d).TrimEnd('\0'));
 
         private OperateResult<T> ReadValueSafe<T>(string address, ushort length, Func<byte[], T> converter)
         {
             var result = ReadBytes(address, length);
-            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message);
+            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message, result.ErrorCode);
             try { return OperateResult<T>.Success(converter(result.Content)); }
             catch (Exception ex) { return OperateResult<T>.Failed(ex.Message); }
         }
@@ -272,7 +303,10 @@ namespace Nexus.Xinje
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")
@@ -286,5 +320,17 @@ namespace Nexus.Xinje
         public Task<OperateResult> BatchWriteAsync(
             IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
             => Task.FromResult(BatchWrite(items));
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try
+            {
+                ushort addr = 0;
+                byte fc = 0x03;
+                return BuildReadPdu(addr, fc, 1);
+            }
+            catch { return null; }
+        }
     }
 }

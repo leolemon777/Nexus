@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Nexus.Schneider;
 
@@ -104,6 +106,49 @@ namespace Nexus.Schneider.Tests
         }
 
         [Fact]
+        public void WriteUInt64_WritesFourHoldingRegisters()
+        {
+            var (server, client) = StartServerAndConnect();
+
+            var result = client.Write("%MW100", 0x1122334455667788UL);
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x1122, server.GetHoldingRegister(100));
+            Assert.Equal(0x3344, server.GetHoldingRegister(101));
+            Assert.Equal(0x5566, server.GetHoldingRegister(102));
+            Assert.Equal(0x7788, server.GetHoldingRegister(103));
+        }
+
+        [Fact]
+        public void WriteDouble_WritesFourHoldingRegisters()
+        {
+            var (server, client) = StartServerAndConnect();
+
+            var result = client.Write("%MW120", 1.5d);
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x3FF8, server.GetHoldingRegister(120));
+            Assert.Equal(0x0000, server.GetHoldingRegister(121));
+            Assert.Equal(0x0000, server.GetHoldingRegister(122));
+            Assert.Equal(0x0000, server.GetHoldingRegister(123));
+        }
+
+        [Fact]
+        public void ReadUInt64_ReadsFourHoldingRegisters()
+        {
+            var (server, client) = StartServerAndConnect();
+            server.SetHoldingRegister(140, 0x1122);
+            server.SetHoldingRegister(141, 0x3344);
+            server.SetHoldingRegister(142, 0x5566);
+            server.SetHoldingRegister(143, 0x7788);
+
+            var result = client.ReadUInt64("%MW140");
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x1122334455667788UL, result.Content);
+        }
+
+        [Fact]
         public void BatchWrite_UnsupportedType_ReturnsError()
         {
             var (server, client) = StartServerAndConnect();
@@ -119,16 +164,81 @@ namespace Nexus.Schneider.Tests
         }
 
         [Fact]
-        public void BatchReadAsync_SameResultAsSync()
+        public async Task BatchReadAsync_SameResultAsSync()
         {
             var (server, client) = StartServerAndConnect();
             server.SetHoldingRegister(200, 1111);
             server.SetHoldingRegister(201, 2222);
 
             var syncResult = client.BatchRead(new[] { "%MW200", "%MW201" });
-            var asyncResult = client.BatchReadAsync(new[] { "%MW200", "%MW201" }).Result;
+            var asyncResult = await client.BatchReadAsync(new[] { "%MW200", "%MW201" });
 
             Assert.Equal(syncResult.IsSuccess, asyncResult.IsSuccess);
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+        {
+            using var server = new SchneiderVirtualServer(0);
+            server.Start();
+
+            using var pool = new SchneiderConnectionPool("127.0.0.1", server.Port, maxPoolSize: 1);
+
+            var write = pool.Write("%MW100", (short)1234);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("%MW100");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)1234, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsPacketEvents()
+        {
+            using var server = new SchneiderVirtualServer(0);
+            server.SetHoldingRegister(110, 0x1234);
+            server.Start();
+
+            using var pool = new SchneiderConnectionPool("127.0.0.1", server.Port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, _) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, _) => Interlocked.Increment(ref received);
+
+            var read = pool.ReadUInt16("%MW110");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((ushort)0x1234, read.Content);
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+
+        [Fact]
+        public void ConnectionPool_BatchReadWrite()
+        {
+            using var server = new SchneiderVirtualServer(0);
+            server.Start();
+
+            using var pool = new SchneiderConnectionPool("127.0.0.1", server.Port);
+            var items = new[]
+            {
+                new KeyValuePair<string, object>("%MW120", (short)111),
+                new KeyValuePair<string, object>("%MW121", (short)222),
+                new KeyValuePair<string, object>("%M60", true),
+            };
+
+            var write = pool.BatchWrite(items);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var wordRead = pool.BatchRead(new[] { "%MW120", "%MW121" });
+            Assert.True(wordRead.IsSuccess, wordRead.Message);
+            Assert.Equal((short)111, wordRead.Content["%MW120"]);
+            Assert.Equal((short)222, wordRead.Content["%MW121"]);
+
+            var boolRead = pool.ReadBool("%M60");
+            Assert.True(boolRead.IsSuccess, boolRead.Message);
+            Assert.True(boolRead.Content);
         }
     }
 }

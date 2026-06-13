@@ -6,7 +6,7 @@ namespace Nexus.Modbus
     /// <summary>
     /// Adapts a TCP socket to the serial-port abstraction used by ASCII-style protocols.
     /// </summary>
-    internal sealed class TcpStreamSerialPortAdapter : ISerialPort
+    public sealed class TcpStreamSerialPortAdapter : ISerialPort
     {
         private readonly string _host;
         private readonly int _port;

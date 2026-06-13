@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Nexus.GeSrtp;
 
@@ -110,15 +114,95 @@ namespace Nexus.GeSrtp.Tests
         }
 
         [Fact]
-        public void BatchReadAsync_SameResultAsSync()
+        public async Task BatchReadAsync_SameResultAsSync()
         {
             var (server, client) = StartServerAndConnect();
             server.SetRWord(300, 1111);
             server.SetRWord(301, 2222);
 
             var syncResult = client.BatchRead(new[] { "R300", "R301" });
-            var asyncResult = client.BatchReadAsync(new[] { "R300", "R301" }).Result;
+            var asyncResult = await client.BatchReadAsync(new[] { "R300", "R301" });
             Assert.Equal(syncResult.IsSuccess, asyncResult.IsSuccess);
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+        {
+            int port = GetFreeTcpPort();
+            using var server = new GeSrtpVirtualServer(port);
+            server.Start();
+
+            using var pool = new GeSrtpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+            var write = pool.Write("R100", (short)1234);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("R100");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)1234, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsPacketEvents()
+        {
+            int port = GetFreeTcpPort();
+            using var server = new GeSrtpVirtualServer(port);
+            server.SetRWord(10, 0x1234);
+            server.Start();
+
+            using var pool = new GeSrtpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, message) =>
+            {
+                if (!string.IsNullOrWhiteSpace(message)) Interlocked.Increment(ref sent);
+            };
+            pool.OnMessageReceived += (_, message) =>
+            {
+                if (!string.IsNullOrWhiteSpace(message)) Interlocked.Increment(ref received);
+            };
+
+            var read = pool.ReadUInt16("R10");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((ushort)0x1234, read.Content);
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+
+        [Fact]
+        public void ConnectionPool_BatchReadWrite()
+        {
+            int port = GetFreeTcpPort();
+            using var server = new GeSrtpVirtualServer(port);
+            server.Start();
+
+            using var pool = new GeSrtpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+            var write = pool.BatchWrite(new[]
+            {
+                new KeyValuePair<string, object>("R20", (short)111),
+                new KeyValuePair<string, object>("R21", (short)222)
+            });
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.BatchRead(new[] { "R20", "R21" });
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)111, read.Content["R20"]);
+            Assert.Equal((short)222, read.Content["R21"]);
+        }
+
+        private static int GetFreeTcpPort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                return ((IPEndPoint)listener.LocalEndpoint).Port;
+            }
+            finally
+            {
+                listener.Stop();
+            }
         }
     }
 }

@@ -123,12 +123,12 @@ namespace Nexus.Mitsubishi
             if (!expectedSum.Equals(actualSum, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            // 提取数据 (跳过 STX, Command, Address)
-            // Data 长度 = (etxIndex - stxIndex - 1) - 1(Command) - 4(Address)
-            int dataLen = etxIndex - stxIndex - 6;
+            // 提取数据 (跳过 STX, Command, Device, Address)
+            // Data 长度 = (etxIndex - stxIndex - 1) - 1(Command) - 1(Device) - 4(Address)
+            int dataLen = etxIndex - stxIndex - 7;
             if (dataLen > 0)
             {
-                string hexData = Encoding.ASCII.GetString(response, stxIndex + 6, dataLen);
+                string hexData = Encoding.ASCII.GetString(response, stxIndex + 7, dataLen);
                 data = HexStringToByteArray(hexData);
             }
 

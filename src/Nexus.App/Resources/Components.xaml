@@ -237,11 +237,23 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="28"/>
                                 </Grid.ColumnDefinitions>
-                                <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                <ContentPresenter x:Name="contentPresenter" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
                                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                   Content="{TemplateBinding SelectionBoxItem}"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                                   ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
+                                <TextBox x:Name="PART_EditableTextBox"
+                                         Margin="{TemplateBinding Padding}"
+                                         VerticalAlignment="Center"
+                                         HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                         Foreground="{TemplateBinding Foreground}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         CaretBrush="{DynamicResource Brush.Accent}"
+                                         FontFamily="{TemplateBinding FontFamily}"
+                                         FontSize="{TemplateBinding FontSize}"
+                                         IsReadOnly="{TemplateBinding IsReadOnly}"
+                                         Visibility="Collapsed"/>
                                 <Path Grid.Column="1" Width="8" Height="5" Stretch="Fill"
                                       Fill="{DynamicResource Brush.Text2}"
                                       Data="M 0,0 L 8,0 L 4,5 Z"
@@ -266,6 +278,10 @@
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="contentPresenter" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="chrome" Property="BorderBrush" Value="{DynamicResource Brush.AccentLine}"/>
                         </Trigger>

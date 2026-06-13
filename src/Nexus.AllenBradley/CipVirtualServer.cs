@@ -59,6 +59,7 @@ namespace Nexus.AllenBradley
         private const ushort CipTypeUsint = 0x00C6;
         private const ushort CipTypeUint = 0x00C7;
         private const ushort CipTypeUdint = 0x00C8;
+        private const ushort CipTypeUlint = 0x00C9;
         private const ushort CipTypeReal = 0x00CA;
         private const ushort CipTypeLreal = 0x00CB;
         private const ushort CipTypeString = 0x00D0;
@@ -274,7 +275,7 @@ namespace Nexus.AllenBradley
 
         // ── Unregister Session 响应 ──────────────
 
-        private byte[] BuildUnregisterSessionResponse(byte[] requestHeader)
+        private byte[]? BuildUnregisterSessionResponse(byte[] requestHeader)
         {
             uint sessionId = (uint)(requestHeader[4] | (requestHeader[5] << 8) | (requestHeader[6] << 16) | (requestHeader[7] << 24));
             _sessions.TryRemove(sessionId, out _);
@@ -351,7 +352,7 @@ namespace Nexus.AllenBradley
                 return BuildCipError(CipReadService, 0x14); // Tag 不存在
 
             // 编码 Tag 值为 CIP 响应数据
-            byte[] tagData = EncodeTagValue(tag, elements);
+            byte[]? tagData = EncodeTagValue(tag, elements);
             if (tagData == null) return BuildCipError(CipReadService, 0x15); // 类型不匹配
 
             // CIP Read 响应: Service(1) + Reserved(1) + Status(1) + ExtStatusSize(1) + Data(n)
@@ -525,6 +526,14 @@ namespace Nexus.AllenBradley
                 uint v = val is uint ui ? ui : Convert.ToUInt32(val);
                 return new byte[] { (byte)(v & 0xFF), (byte)((v >> 8) & 0xFF), (byte)((v >> 16) & 0xFF), (byte)((v >> 24) & 0xFF) };
             }
+            else if (tag.DataType == CipTypeUlint)
+            {
+                ulong v = val is ulong ul ? ul : Convert.ToUInt64(val);
+                return new byte[] {
+                    (byte)(v & 0xFF), (byte)((v >> 8) & 0xFF), (byte)((v >> 16) & 0xFF), (byte)((v >> 24) & 0xFF),
+                    (byte)((v >> 32) & 0xFF), (byte)((v >> 40) & 0xFF), (byte)((v >> 48) & 0xFF), (byte)((v >> 56) & 0xFF)
+                };
+            }
             else if (tag.DataType == CipTypeReal)
             {
                 float v = val is float f ? f : Convert.ToSingle(val);
@@ -607,6 +616,13 @@ namespace Nexus.AllenBradley
                     if (data.Length < 4) return 0u;
                     return (uint)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
                 }
+                else if (dataType == CipTypeUlint)
+                {
+                    if (data.Length < 8) return 0UL;
+                    uint lo = (uint)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+                    uint hi = (uint)(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24));
+                    return ((ulong)hi << 32) | lo;
+                }
                 else if (dataType == CipTypeReal)
                 {
                     if (data.Length < 4) return 0f;
@@ -651,6 +667,7 @@ namespace Nexus.AllenBradley
                 int => CipTypeDint,
                 uint => CipTypeUdint,
                 long => CipTypeLint,
+                ulong => CipTypeUlint,
                 float => CipTypeReal,
                 double => CipTypeLreal,
                 string => CipTypeString,

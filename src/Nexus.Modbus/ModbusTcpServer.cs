@@ -26,6 +26,13 @@ namespace Nexus.Modbus
         /// <summary>请求接收事件（用于调试和日志）。</summary>
         public event EventHandler<ModbusRequestEventArgs>? OnRequestReceived;
 
+        /// <summary>
+        /// 自定义请求处理器（用于网关转发）。
+        /// 设置后，所有请求将通过此委托处理，而非内置的 PDU 处理器。
+        /// 参数: (unitId, pdu) → 响应 PDU（null 表示不响应）。
+        /// </summary>
+        public Func<byte, byte[], byte[]?>? RequestProcessor { get; set; }
+
         // 四区内存模型
         private readonly bool[] _coils = new bool[65536];           // 0xxxx 线圈
         private readonly bool[] _discreteInputs = new bool[65536];  // 1xxxx 离散输入
@@ -206,6 +213,10 @@ namespace Nexus.Modbus
                 RawData = pdu,
                 Timestamp = DateTime.Now
             });
+
+            // 自定义处理器（网关模式）
+            if (RequestProcessor != null)
+                return RequestProcessor(unitId, pdu);
 
             return ProcessPdu(pdu);
         }

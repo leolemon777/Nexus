@@ -604,14 +604,14 @@ namespace Nexus.Bacnet
                     EncodeCharacterString(buffer, Convert.ToString(value.Data) ?? "");
                     break;
                 case BacnetApplicationTag.OctetString:
-                    EncodeOctetString(buffer, (byte[])value.Data);
+                    EncodeOctetString(buffer, value.Data is byte[] bytes ? bytes : Array.Empty<byte>());
                     break;
                 case BacnetApplicationTag.Enumerated:
                     EncodeEnumerated(buffer, Convert.ToUInt32(value.Data));
                     break;
                 case BacnetApplicationTag.ObjectId:
                     buffer.Add((byte)((int)BacnetApplicationTag.ObjectId << 4 | 4));
-                    EncodeObjectId(buffer, (BacnetObjectId)value.Data);
+                    EncodeObjectId(buffer, value.Data is BacnetObjectId objectId ? objectId : default);
                     break;
             }
         }
@@ -756,7 +756,7 @@ namespace Nexus.Bacnet
                 {
                     var tag = (BacnetApplicationTag)tagNumber;
                     offset++;
-                    object data2;
+                    object? data2;
 
                     switch (tag)
                     {

@@ -20,6 +20,12 @@ namespace Nexus.LsElectric
         /// <summary>源 CPU 编号。</summary>
         public byte CpuFrom { get; set; } = 0;
 
+        /// <summary>默认心跳：读 D0000 的 1 个 word（XGT Word 类型=0x01）。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            return BuildReadRequest(0x01, "D0000", 1);
+        }
+
         /// <inheritdoc/>
         protected override int ResponseHeaderLength => 20; // XGT 响应头固定 20 字节
 
@@ -104,7 +110,7 @@ namespace Nexus.LsElectric
                 byte[] req = BuildReadRequest(dataType, address, length);
 
                 var result = SendAndReceive(req);
-                if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message);
+                if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
 
                 byte[] resp = result.Content;
                 if (resp == null || resp.Length < 20)
@@ -132,6 +138,9 @@ namespace Nexus.LsElectric
         {
             try
             {
+                if (data == null)
+                    return OperateResult.Failed("写入数据不能为空");
+
                 var parsed = LsXgtAddress.Parse(address);
                 byte dataType = parsed.AreaCode;
                 byte[] req = BuildWriteRequest(dataType, address, data);
@@ -157,32 +166,32 @@ namespace Nexus.LsElectric
 
         // ── 高层方法 ──
 
-        public override OperateResult<bool> ReadBool(string address) { var r = ReadBytes(address, 1); if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message); return OperateResult<bool>.Success((r.Content[0] & 0x01) != 0); }
-        public override OperateResult<short> ReadInt16(string address) => ReadValueSafe<short>(address, 1, d => (short)((d[0] << 8) | d[1]));
-        public override OperateResult<ushort> ReadUInt16(string address) => ReadValueSafe<ushort>(address, 1, d => (ushort)((d[0] << 8) | d[1]));
-        public override OperateResult<int> ReadInt32(string address) => ReadValueSafe<int>(address, 2, d => (d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]);
-        public override OperateResult<uint> ReadUInt32(string address) => ReadValueSafe<uint>(address, 2, d => (uint)((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]));
-        public override OperateResult<long> ReadInt64(string address) => ReadValueSafe<long>(address, 4, d => BitConverter.ToInt64(d, 0));
-        public override OperateResult<ulong> ReadUInt64(string address) => ReadValueSafe<ulong>(address, 4, d => BitConverter.ToUInt64(d, 0));
-        public override OperateResult<float> ReadFloat(string address) => ReadValueSafe<float>(address, 2, d => BitConverter.ToSingle(d, 0));
-        public override OperateResult<double> ReadDouble(string address) => ReadValueSafe<double>(address, 4, d => BitConverter.ToDouble(d, 0));
+        public override OperateResult<bool> ReadBool(string address) { var r = ReadBytes(address, 1); if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode); return OperateResult<bool>.Success((r.Content[0] & 0x01) != 0); }
+        public override OperateResult<short> ReadInt16(string address) => ReadValueSafe<short>(address, 1, d => DataConverter.ToInt16(d, 0));
+        public override OperateResult<ushort> ReadUInt16(string address) => ReadValueSafe<ushort>(address, 1, d => DataConverter.ToUInt16(d, 0));
+        public override OperateResult<int> ReadInt32(string address) => ReadValueSafe<int>(address, 2, d => DataConverter.ToInt32(d, 0));
+        public override OperateResult<uint> ReadUInt32(string address) => ReadValueSafe<uint>(address, 2, d => DataConverter.ToUInt32(d, 0));
+        public override OperateResult<long> ReadInt64(string address) => ReadValueSafe<long>(address, 4, d => DataConverter.ToInt64(d, 0));
+        public override OperateResult<ulong> ReadUInt64(string address) => ReadValueSafe<ulong>(address, 4, d => DataConverter.ToUInt64(d, 0));
+        public override OperateResult<float> ReadFloat(string address) => ReadValueSafe<float>(address, 2, d => DataConverter.ToFloat(d, 0));
+        public override OperateResult<double> ReadDouble(string address) => ReadValueSafe<double>(address, 4, d => DataConverter.ToDouble(d, 0));
         public override OperateResult<string> ReadString(string address, ushort length) => ReadValueSafe<string>(address, length, d => Encoding.ASCII.GetString(d).TrimEnd('\0'));
 
         public override OperateResult Write(string address, bool value) => Write(address, new byte[] { (byte)(value ? 0x01 : 0x00) });
-        public override OperateResult Write(string address, short value) => Write(address, new byte[] { (byte)(value >> 8), (byte)value });
+        public override OperateResult Write(string address, short value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public override OperateResult Write(string address, int value) => Write(address, new byte[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
+        public override OperateResult Write(string address, int value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public override OperateResult Write(string address, long value) => Write(address, (int)value);
-        public override OperateResult Write(string address, ulong value) => Write(address, (int)value);
-        public override OperateResult Write(string address, float value) => Write(address, BitConverter.GetBytes(value));
-        public override OperateResult Write(string address, double value) => Write(address, BitConverter.GetBytes(value));
+        public override OperateResult Write(string address, long value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, ulong value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, float value) => Write(address, DataConverter.GetBytes(value));
+        public override OperateResult Write(string address, double value) => Write(address, DataConverter.GetBytes(value));
         public override OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
 
         private OperateResult<T> ReadValueSafe<T>(string address, ushort length, Func<byte[], T> converter)
         {
             var result = ReadBytes(address, length);
-            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message);
+            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message, result.ErrorCode);
             try { return OperateResult<T>.Success(converter(result.Content)); }
             catch (Exception ex) { return OperateResult<T>.Failed(ex.Message); }
         }
@@ -250,7 +259,10 @@ namespace Nexus.LsElectric
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")

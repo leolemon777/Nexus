@@ -117,10 +117,16 @@ namespace Nexus.Dnp3
         BinaryInputWithTime = 0x02,
         /// <summary>双位输入 — 打包格式。</summary>
         DoubleBitBinaryPacked = 0x01,
+        /// <summary>二进制输出 — 打包格式。</summary>
+        BinaryOutputPacked = 0x01,
+        /// <summary>二进制输出 — 带时间戳。</summary>
+        BinaryOutputWithTime = 0x02,
         /// <summary>计数器 — 32 位。</summary>
         Counter32 = 0x01,
         /// <summary>计数器 — 16 位。</summary>
         Counter16 = 0x02,
+        /// <summary>计数器 — 32 位带标志。</summary>
+        Counter32WithFlag = 0x05,
         /// <summary>模拟输入 — 32 位浮点。</summary>
         AnalogInputFloat32 = 0x04,
         /// <summary>模拟输入 — 16 位整型。</summary>
@@ -129,6 +135,12 @@ namespace Nexus.Dnp3
         AnalogInputInt32 = 0x02,
         /// <summary>模拟输入 — 双精度浮点。</summary>
         AnalogInputFloat64 = 0x05,
+        /// <summary>模拟输出 — 32 位浮点。</summary>
+        AnalogOutputFloat32 = 0x04,
+        /// <summary>模拟输出 — 16 位整型。</summary>
+        AnalogOutputInt16 = 0x01,
+        /// <summary>模拟输出 — 32 位整型。</summary>
+        AnalogOutputInt32 = 0x02,
     }
 
     /// <summary>DNP3 传输层常量。</summary>

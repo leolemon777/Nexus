@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using Nexus;
 using Xunit;
 
@@ -163,6 +165,264 @@ namespace Nexus.Core.Tests
             _engine.Stop();
 
             Assert.True(sink.Count > 0, "Sink should have received samples");
+        }
+
+        // ── CsvDataSink Tests ─────────────────────
+
+        [Fact]
+        public void CsvDataSink_CreatesFile()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"csv_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                using var sink = new CsvDataSink(path);
+                sink.Write(new DataSample
+                {
+                    DeviceName = "plc1",
+                    Address = "D100",
+                    DataType = "Int16",
+                    Value = "42",
+                    Quality = "Good",
+                    Timestamp = new DateTime(2026, 1, 1, 12, 0, 0)
+                });
+
+                Assert.True(File.Exists(path));
+                var lines = File.ReadAllLines(path);
+                Assert.Equal(2, lines.Length); // header + 1 data row
+                Assert.Equal("Timestamp,DeviceName,Address,DataType,Tag,Quality,Value", lines[0]);
+                Assert.Contains("plc1", lines[1]);
+                Assert.Contains("D100", lines[1]);
+                Assert.Contains("42", lines[1]);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void CsvDataSink_AppendsMultipleRows()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"csv_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                using var sink = new CsvDataSink(path);
+                for (int i = 0; i < 5; i++)
+                {
+                    sink.Write(new DataSample
+                    {
+                        DeviceName = "plc1",
+                        Address = "D100",
+                        Value = i.ToString(),
+                        Timestamp = DateTime.Now
+                    });
+                }
+
+                var lines = File.ReadAllLines(path);
+                Assert.Equal(6, lines.Length); // 1 header + 5 data rows
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void CsvDataSink_EscapesCommasAndQuotes()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"csv_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                using var sink = new CsvDataSink(path);
+                sink.Write(new DataSample
+                {
+                    DeviceName = "plc,1",   // comma
+                    Address = "D\"100",       // quote
+                    Value = "hello world",    // safe value, no newline
+                    Timestamp = DateTime.Now
+                });
+
+                var lines = File.ReadAllLines(path);
+                Assert.Equal(2, lines.Length); // header + 1 data row
+                // Escaped fields should be quoted
+                Assert.Contains("\"plc,1\"", lines[1]);
+                Assert.Contains("\"D\"\"100\"", lines[1]);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void CsvDataSink_EscapesNewlineInValue()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"csv_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                using var sink = new CsvDataSink(path);
+                sink.Write(new DataSample
+                {
+                    DeviceName = "plc1",
+                    Address = "D100",
+                    Value = "hello\nworld",  // newline in value
+                    Timestamp = DateTime.Now
+                });
+
+                // The value with newline is CSV-escaped (quoted), so it spans multiple lines in the file
+                var content = File.ReadAllText(path);
+                Assert.Contains("hello\nworld", content); // raw content has the newline inside quotes
+                Assert.Contains("\"hello\nworld\"", content);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void CsvDataSink_CreatesDirectory()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), $"csv_dir_{Guid.NewGuid():N}");
+            var path = Path.Combine(dir, "data.csv");
+            try
+            {
+                Assert.False(Directory.Exists(dir));
+                using var sink = new CsvDataSink(path);
+                sink.Write(new DataSample
+                {
+                    DeviceName = "plc1",
+                    Address = "D100",
+                    Value = "1",
+                    Timestamp = DateTime.Now
+                });
+
+                Assert.True(Directory.Exists(dir));
+                Assert.True(File.Exists(path));
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void CsvDataSink_NullPath_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => new CsvDataSink(null!));
+        }
+
+        [Fact]
+        public void CsvDataSink_WritesTag()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"csv_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                using var sink = new CsvDataSink(path);
+                sink.Write(new DataSample
+                {
+                    DeviceName = "plc1",
+                    Address = "D100",
+                    Tag = "temperature",
+                    Value = "25.3",
+                    Timestamp = DateTime.Now
+                });
+
+                var lines = File.ReadAllLines(path);
+                Assert.Equal(2, lines.Length);
+                Assert.Contains("temperature", lines[1]);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void GetCurrentValues_ReturnsLastValues()
+        {
+            var device = new FakeDevice();
+            device.NextValue = 42;
+            _engine.RegisterDevice("plc1", device, new PollConfig
+            {
+                IntervalMs = 50,
+                OnlyOnChange = false
+            });
+            _engine.AddPoint("plc1", "D100", "Int16");
+            _engine.AddPoint("plc1", "D200", "Int16");
+
+            _engine.Start();
+            Thread.Sleep(300);
+            _engine.Stop();
+
+            var values = _engine.GetCurrentValues();
+            Assert.True(values.ContainsKey("plc1/D100"));
+            Assert.True(values.ContainsKey("plc1/D200"));
+        }
+
+        [Fact]
+        public void GetCurrentValues_Empty_WhenNoPoints()
+        {
+            var device = new FakeDevice();
+            _engine.RegisterDevice("plc1", device, new PollConfig());
+            var values = _engine.GetCurrentValues();
+            Assert.Empty(values);
+        }
+
+        [Fact]
+        public void ExportToCsv_CreatesFile()
+        {
+            var device = new FakeDevice();
+            device.NextValue = 99;
+            var sink = new MemoryDataSink(100);
+            _engine.RegisterDevice("plc1", device, new PollConfig
+            {
+                IntervalMs = 50,
+                OnlyOnChange = false
+            });
+            _engine.AddPoint("plc1", "D100", "Int16");
+            _engine.AddSink(sink);
+
+            _engine.Start();
+            Thread.Sleep(300);
+            _engine.Stop();
+
+            var path = Path.Combine(Path.GetTempPath(), $"export_test_{Guid.NewGuid():N}.csv");
+            try
+            {
+                _engine.ExportToCsv(path);
+                Assert.True(File.Exists(path));
+                var lines = File.ReadAllLines(path);
+                Assert.True(lines.Length >= 2, $"Expected header + data, got {lines.Length} lines");
+                Assert.Equal("Timestamp,DeviceName,Address,DataType,Tag,Quality,Value", lines[0]);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ExportToCsv_CreatesDirectory()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), $"export_dir_{Guid.NewGuid():N}");
+            var path = Path.Combine(dir, "export.csv");
+            try
+            {
+                _engine.ExportToCsv(path);
+                Assert.True(Directory.Exists(dir));
+                Assert.True(File.Exists(path));
+            }
+            finally
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public void ExportToCsv_NullPath_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => _engine.ExportToCsv(null!));
         }
 
         // ── Fake Device for Testing ────────────────

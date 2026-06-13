@@ -1,10 +1,10 @@
 # Connection Pool
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-11
 
 ## Overview
 
-`ConnectionPool<T>` provides thread-safe, keyed connection pooling for `IReadWriteDevice` instances. It supports per-key pooling, idle timeout cleanup, and concurrency limits.
+`ConnectionPool<T>` provides thread-safe, keyed connection pooling for `IReadWriteDevice` instances. It supports per-key pooling, idle timeout cleanup, optional health checks, and concurrency limits.
 
 ## Quick Start
 
@@ -13,24 +13,25 @@ using Nexus;
 using Nexus.Modbus;
 
 var pool = new ConnectionPool<ModbusTcpClient>(
-    deviceFactory: () => new ModbusTcpClient("192.168.1.100", 502, station: 1),
+    deviceFactory: () =>
+    {
+        var client = new ModbusTcpClient("192.168.1.100", 502, station: 1);
+        client.SetPersistentConnection();
+        return client;
+    },
     maxPoolSize: 5,
     idleTimeout: TimeSpan.FromMinutes(5));
 
-// Rent a connection
-OperateResult<ModbusTcpClient> rent = pool.Rent("plc-1");
-if (rent.IsSuccess)
+// Acquire a connection
+var client = pool.Acquire("plc-1");
+try
 {
-    var client = rent.Content;
-    try
-    {
-        var value = client.ReadInt16("40001");
-        Console.WriteLine(value.Content);
-    }
-    finally
-    {
-        pool.Return("plc-1", client);
-    }
+    var value = client.ReadInt16("40001");
+    Console.WriteLine(value.Content);
+}
+finally
+{
+    pool.Release("plc-1", client);
 }
 ```
 
@@ -42,86 +43,139 @@ if (rent.IsSuccess)
 | `maxPoolSize` | 5 | Maximum connections per key. |
 | `idleTimeout` | 5 minutes | Time before idle connections are cleaned up. |
 | `cleanupInterval` | same as idleTimeout | How often the cleanup timer runs. |
+| `healthCheck` | null | Optional `Func<T, bool>` delegate for connection health verification. |
 
 ## API Reference
 
-### Rent
+### Acquire / AcquireAsync
 
 ```csharp
-OperateResult<T> Rent(string key)
+T Acquire(string key)
+Task<T> AcquireAsync(string key, CancellationToken ct = default)
 ```
 
-Gets or creates a connection for the given key. If an idle connection exists, it's reused. If not, a new one is created via the factory. Returns `OperateResult<T>` — check `IsSuccess` before using.
+Gets or creates a connection for the given key. If an idle connection exists and passes the health check, it's reused. If not, a new one is created via the factory. Respects `maxPoolSize` concurrency limit via `SemaphoreSlim`.
 
-### Return
+### Release / ReleaseAsync
 
 ```csharp
-void Return(string key, T device)
+void Release(string key, T device)
+Task ReleaseAsync(string key, T device)
 ```
 
-Returns a connection to the pool for reuse. The connection should still be in a usable state.
+Returns a connection to the pool for reuse. If the pool is full or the device is disconnected, the device is disposed.
 
-### Dispose
+### Remove / Clear / Dispose
 
 ```csharp
-void Dispose()
+void Remove(string key)   // Remove all connections for a specific key
+void Clear()              // Remove all connections from all keys
+void Dispose()            // Stop cleanup timer and dispose all connections
 ```
 
-Disposes all pooled connections and stops the cleanup timer.
+## Health Check
 
-## Lifecycle
-
-```
-Rent("plc-1")  →  Factory creates client  →  Connect()  →  Use  →  Return("plc-1", client)
-Rent("plc-1")  →  Reuses existing client  →  Use  →  Return("plc-1", client)
-  ... idle timeout expires ...
-Cleanup         →  Disconnect + Dispose idle client
-```
-
-## Thread Safety
-
-- `Rent` and `Return` are thread-safe (uses `ConcurrentDictionary` + `ConcurrentStack`).
-- `SemaphoreSlim` limits concurrent access to `maxPoolSize` per key.
-- If `maxPoolSize` connections are active, `Rent` blocks until one is returned.
-
-## Important Notes
-
-1. The factory function is called on-demand — connections are **lazy-created**, not pre-created.
-2. The pool does **not** call `Connect()` automatically — the factory should return a connected client, or the caller should connect after renting.
-3. Idle cleanup calls `Disconnect()` and `Dispose()` on expired connections.
-4. Connections are not health-checked on rent — use `HeartbeatGuard` if health verification is needed.
-
-## Example: Multi-PLC Pool
+When a `healthCheck` delegate is provided, `Acquire`/`AcquireAsync` will execute it on idle connections before returning them. Connections that fail the health check are **disposed immediately** and not returned to the caller.
 
 ```csharp
 var pool = new ConnectionPool<ModbusTcpClient>(
     deviceFactory: () =>
     {
-        var client = new ModbusTcpClient("192.168.1.100", 502, station: 1);
-        client.Connect();
+        var client = new ModbusTcpClient("192.168.1.100", 502);
+        client.SetPersistentConnection();
         return client;
     },
-    maxPoolSize: 3);
-
-// Multiple threads can share the pool
-OperateResult<ModbusTcpClient> rent = pool.Rent("main-plc");
-if (rent.IsSuccess)
-{
-    try
+    maxPoolSize: 5,
+    healthCheck: device =>
     {
-        rent.Content.ReadInt16("40001");
-    }
-    finally
-    {
-        pool.Return("main-plc", rent.Content);
-    }
-}
-
-pool.Dispose(); // Clean up all connections
+        // Simple health check: read a known register
+        var result = device.ReadInt16("40001");
+        return result.IsSuccess;
+    });
 ```
 
-## Limitations
+**Important**: The health check delegate should be fast and non-blocking. Exceptions in the health check are caught and treated as "unhealthy" (returns false).
 
-- Currently exists in Nexus.Core but is **not yet consumed** by any protocol client internally.
-- No built-in health check on rent — wrap with `HeartbeatGuard` if needed.
-- No automatic reconnect of pooled connections — use `AutoReconnectGuard` per connection if needed.
+## Protocol-Specific Pool Wrappers
+
+36 protocol-specific pool wrappers are provided. Each wraps the generic `ConnectionPool<T>` with protocol-appropriate defaults:
+
+### Usage
+
+```csharp
+var pool = new ModbusTcpConnectionPool(
+    ip: "192.168.1.100",
+    port: 502,
+    station: 1,
+    maxPoolSize: 3);
+
+// Read via pool
+var result = pool.ReadInt16("40001");
+Console.WriteLine(result.Content);
+
+pool.Dispose();
+```
+
+### Available Wrappers
+
+| Protocol | Wrapper Class |
+|----------|---------------|
+| Modbus TCP | `ModbusTcpConnectionPool` |
+| Modbus RTU over TCP | `ModbusRtuOverTcpConnectionPool` |
+| Modbus ASCII over TCP | `ModbusAsciiOverTcpConnectionPool` |
+| Siemens S7 | `SiemensS7ConnectionPool` |
+| Siemens FetchWrite | `SiemensFetchWriteConnectionPool` |
+| Mitsubishi MC3E Binary | `Mc3EBinaryConnectionPool` |
+| Mitsubishi A1E | `MelsecA1EConnectionPool` |
+| Omron FINS TCP | `FinsTcpConnectionPool` |
+| Omron HostLink | `OmronHostLinkConnectionPool` |
+| AllenBradley CIP | `AllenBradleyCipConnectionPool` |
+| AllenBradley PCCC | `PcccConnectionPool` |
+| Beckhoff ADS | `BeckhoffAdsConnectionPool` |
+| Keyence KV | `KeyenceKvConnectionPool` |
+| LS Electric XGT | `LsXgtTcpConnectionPool` |
+| Panasonic Mewtocol | — (not yet) |
+| Delta DVP | `DeltaDvpConnectionPool` |
+| Inovance Easy | `InovanceEasyConnectionPool` |
+| Fatek FBs | `FatekConnectionPool` |
+| Fuji SPH | `FujiSphConnectionPool` |
+| GeSrtp | `GeSrtpConnectionPool` |
+| Schneider | `SchneiderConnectionPool` |
+| Yaskawa Memobus | `MemobusConnectionPool` |
+| Yokogawa | `YokogawaConnectionPool` |
+| Xinje | `XinjeConnectionPool` |
+| Dnp3 | `Dnp3ConnectionPool` |
+| IEC 61850 | `Iec61850ConnectionPool` |
+| SECS/HSMS | `SecsHsmsConnectionPool` |
+| Kuka EKI | `KukaEkiConnectionPool` |
+| RKC Temperature | `RkcTemperatureConnectionPool` |
+| Toledo | `ToledoConnectionPool` |
+| Robot Efort | `EfortConnectionPool` |
+| Robot Fanuc | `FanucRobotConnectionPool` |
+| Robot Kuka | `KukaTcpConnectionPool` |
+| Robot Yamaha | `YamahaRcxConnectionPool` |
+| Robot Yaskawa | `Yrc1000ConnectionPool` |
+
+## Lifecycle
+
+```
+Acquire("plc-1")  →  Factory creates client  →  Connect()  →  Use  →  Release("plc-1", client)
+Acquire("plc-1")  →  Pop idle client  →  Health check ✓  →  Use  →  Release("plc-1", client)
+Acquire("plc-1")  →  Pop idle client  →  Health check ✗  →  Dispose  →  Factory creates new
+  ... idle timeout expires ...
+Cleanup            →  Disconnect + Dispose idle client
+```
+
+## Thread Safety
+
+- `Acquire` and `Release` are thread-safe (uses `ConcurrentDictionary` + `ConcurrentStack`).
+- `SemaphoreSlim` limits concurrent access to `maxPoolSize` per key.
+- If `maxPoolSize` connections are active, `Acquire` blocks until one is returned.
+
+## Important Notes
+
+1. The factory function is called on-demand — connections are **lazy-created**, not pre-created.
+2. The pool calls `Connect()` on the factory-created device before returning it.
+3. Idle cleanup calls `Dispose()` on expired connections.
+4. Health check (if configured) runs on idle connections during `Acquire`.
+5. Unhealthy connections are **disposed and replaced**, never returned to the caller.

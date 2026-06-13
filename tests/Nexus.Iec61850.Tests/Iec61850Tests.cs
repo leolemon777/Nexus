@@ -122,7 +122,7 @@ namespace Nexus.Iec61850.Tests
         public void BuildSetDataValuesRequest_Format()
         {
             byte[] value = new byte[] { 0x01 };
-            byte[] req = Iec61850BuildSetDataValuesRequest("LD0", "GGIO1", "Ind1", FunctionalConstraint.SP, value);
+            byte[] req = Iec61850Client.BuildSetDataValuesRequest("LD0", "GGIO1", "Ind1", FunctionalConstraint.SP, value);
             Assert.True(req.Length > 102);
             Assert.Equal(0x04, req[0]); // SetDataValues service
             Assert.Equal((byte)FunctionalConstraint.SP, req[101]);
@@ -141,6 +141,67 @@ namespace Nexus.Iec61850.Tests
         {
             var client = new Iec61850Client("127.0.0.1");
             client.Dispose();
+        }
+
+        [Fact]
+        public void Client_LogicalDevice_DefaultIsLD0()
+        {
+            var client = new Iec61850Client("10.0.0.1");
+            Assert.Equal("LD0", client.LogicalDevice);
+        }
+
+        [Fact]
+        public void BuildObjectReference_EmptyDa_ReturnsNoSuffix()
+        {
+            string ref_ = Iec61850Client.BuildObjectReference("LD1", "MMXU1", "TotW");
+            Assert.Equal("LD1/MMXU1.TotW", ref_);
+        }
+
+        [Fact]
+        public void ParseObjectReference_ThreeSegments()
+        {
+            var (ld, ln, data, da) = Iec61850Client.ParseObjectReference("IED1/LPHD1.PhyNam");
+            Assert.Equal("IED1", ld);
+            Assert.Equal("LPHD1", ln);
+            Assert.Equal("PhyNam", data);
+            Assert.Null(da);
+        }
+
+        [Fact]
+        public void BuildGetDataValuesRequest_DifferentFC()
+        {
+            byte[] req = Iec61850Client.BuildGetDataValuesRequest("LD0", "MMXU1", "TotW", FunctionalConstraint.MX);
+            Assert.Equal((byte)FunctionalConstraint.MX, req[101]);
+        }
+
+        [Fact]
+        public void FunctionalConstraint_AllDefined()
+        {
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.ST));
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.MX));
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.SP));
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.CF));
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.DC));
+            Assert.True(Enum.IsDefined(typeof(FunctionalConstraint), FunctionalConstraint.CO));
+        }
+
+        [Fact]
+        public void Iec61850Constants_DefaultMmsPort_Is102()
+        {
+            Assert.Equal(102, Iec61850Constants.DefaultMmsPort);
+        }
+
+        [Fact]
+        public void ReportTriggerOptions_CombinedFlags()
+        {
+            ushort combined = (ushort)(ReportTriggerOptions.DataChanged | ReportTriggerOptions.QualityChanged);
+            Assert.Equal(0x0003, combined);
+        }
+
+        [Fact]
+        public void IecControlModel_AllFourValues()
+        {
+            Assert.Equal(4, Enum.GetValues(typeof(IecControlModel)).Length);
         }
     }
 }

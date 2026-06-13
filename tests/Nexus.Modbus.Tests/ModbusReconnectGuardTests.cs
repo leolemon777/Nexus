@@ -169,4 +169,35 @@ public sealed class ModbusReconnectGuardTests
         Assert.True(Volatile.Read(ref okCount) >= 3, $"Expected at least 3 heartbeats, got {okCount}");
         Assert.True(heartbeat.IsRunning);
     }
+
+    [Fact]
+    public void ModbusTcpClient_DefaultHeartbeat_SendsFc03Read()
+    {
+        int port = GetAvailablePort();
+
+        using var server = new ModbusTcpServer(port);
+        server.SetHoldingRegister(0, 0x1234);
+        server.Start();
+
+        using var client = new ModbusTcpClient("127.0.0.1", port, station: 1, timeout: 1000)
+        {
+            HeartbeatInterval = 100,
+            HeartbeatTimeout = 500,
+            MaxHeartbeatFailures = 2
+        };
+        client.SetPersistentConnection();
+
+        int heartbeatCount = 0;
+        client.OnMessageSent += (_, hex) =>
+        {
+            if (hex.Contains("03 00 00 00 01"))
+                Interlocked.Increment(ref heartbeatCount);
+        };
+
+        client.HeartbeatEnabled = true;
+        Thread.Sleep(450);
+        client.HeartbeatEnabled = false;
+
+        Assert.True(Volatile.Read(ref heartbeatCount) >= 2, $"Expected default heartbeat frames, got {heartbeatCount}");
+    }
 }

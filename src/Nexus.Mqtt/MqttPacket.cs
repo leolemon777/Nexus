@@ -51,10 +51,10 @@ namespace Nexus.Mqtt
         public bool HasUsername { get; set; }
         public ushort KeepAlive { get; set; }
         public string ClientId { get; set; } = "";
-        public string WillTopic { get; set; }
-        public byte[] WillMessage { get; set; }
-        public string Username { get; set; }
-        public string Password { get; set; }
+        public string? WillTopic { get; set; }
+        public byte[]? WillMessage { get; set; }
+        public string? Username { get; set; }
+        public string? Password { get; set; }
     }
 
     public class MqttConnAckPacket

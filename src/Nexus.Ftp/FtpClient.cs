@@ -111,6 +111,7 @@ namespace Nexus.Ftp
                 {
                     DisconnectCore();
                     Log.Error($"FTP 连接失败: {ex.Message}");
+                    OnError?.Invoke(this, ex.Message);
                     return OperateResult.Failed($"FTP 连接失败: {ex.Message}");
                 }
             }
@@ -234,6 +235,7 @@ namespace Nexus.Ftp
                 }
                 catch (Exception ex)
                 {
+                    OnError?.Invoke(this, ex.Message);
                     return OperateResult.Failed($"FTP 下载异常: {ex.Message}");
                 }
             }
@@ -273,6 +275,7 @@ namespace Nexus.Ftp
                 }
                 catch (Exception ex)
                 {
+                    OnError?.Invoke(this, ex.Message);
                     return OperateResult.Failed($"FTP 上传异常: {ex.Message}");
                 }
             }
@@ -308,6 +311,7 @@ namespace Nexus.Ftp
                 }
                 catch (Exception ex)
                 {
+                    OnError?.Invoke(this, ex.Message);
                     return OperateResult<byte[]>.Failed($"FTP 下载异常: {ex.Message}");
                 }
             }
@@ -339,6 +343,7 @@ namespace Nexus.Ftp
                 }
                 catch (Exception ex)
                 {
+                    OnError?.Invoke(this, ex.Message);
                     return OperateResult.Failed($"FTP 上传异常: {ex.Message}");
                 }
             }
@@ -474,6 +479,7 @@ namespace Nexus.Ftp
             }
             catch (Exception ex)
             {
+                OnError?.Invoke(this, ex.Message);
                 return OperateResult<TcpClient>.Failed($"FTP 数据连接失败: {ex.Message}");
             }
         }

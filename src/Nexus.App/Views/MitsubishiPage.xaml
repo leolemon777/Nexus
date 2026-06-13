@@ -2,7 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource Brush.Bg}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
 
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
@@ -17,30 +17,26 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <WrapPanel Margin="0,0,0,8">
-                                <TextBlock Text="协议" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox Width="160" ItemsSource="{Binding TransportPresets}" SelectedItem="{Binding SelectedTransport, Mode=TwoWay}" Margin="0,0,16,0"/>
-                                <TextBlock Text="型号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox Width="150" ItemsSource="{Binding ModelPresets}" SelectedItem="{Binding SelectedModel, Mode=TwoWay}" Margin="0,0,16,0"/>
                                 <TextBlock Text="IP" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="140" Margin="0,0,16,0" Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="190" Margin="0,0,16,0" Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="端口" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0" Text="{Binding Port, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="110" Margin="0,0,16,0" Text="{Binding Port, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="超时" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="80" Text="{Binding Timeout, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="110" Text="{Binding Timeout, UpdateSourceTrigger=LostFocus}"/>
                             </WrapPanel>
                             <WrapPanel>
                                 <TextBlock Text="网络号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding NetworkNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0" Text="{Binding NetworkNo, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="PC号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding PcNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0" Text="{Binding PcNo, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="目标站" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="64" Margin="0,0,16,0" Text="{Binding DestinationStationNo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="90" Margin="0,0,16,0" Text="{Binding DestinationStationNo, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="等待单位" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="64" Margin="0,0,16,0" Text="{Binding WaitTimeUnit, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="110" Margin="0,0,16,0" Text="{Binding WaitTimeUnit, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="PLC号" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Style="{DynamicResource Input}" Width="56" Margin="0,0,16,0" Text="{Binding PlcNumber, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{DynamicResource Input}" Width="80" Margin="0,0,16,0" Text="{Binding PlcNumber, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="字节序" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <ComboBox Width="150" ItemsSource="{Binding ByteOrderPresets}" SelectedItem="{Binding SelectedByteOrder, Mode=TwoWay}"/>
+                                <ComboBox Width="160" ItemsSource="{Binding ByteOrderPresets}" SelectedItem="{Binding SelectedByteOrder, Mode=TwoWay}"/>
                             </WrapPanel>
                         </StackPanel>
                         <Button Grid.Column="1" Content="连接" Style="{DynamicResource Button.Primary}" Margin="12,0,0,0" Command="{Binding ConnectCommand}"/>
@@ -77,7 +73,7 @@
                         <TextBlock Text="地址" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Grid.Column="1" Style="{DynamicResource Input}" Text="{Binding Address, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding AddressHint}"/>
                         <TextBlock Grid.Column="2" Text="类型" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                        <ComboBox Grid.Column="3" MinWidth="110" ItemsSource="{Binding DataTypes}" SelectedItem="{Binding DataType, Mode=TwoWay}"/>
+                        <ComboBox Grid.Column="3" MinWidth="200" ItemsSource="{Binding DataTypes}" SelectedItem="{Binding DataType, Mode=TwoWay}"/>
                     </Grid>
 
                     <Grid Margin="0,0,0,6">
@@ -88,7 +84,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="读取" FontWeight="Bold" Foreground="{DynamicResource Brush.Accent}" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                        <Button Grid.Column="1" Content="读取" Style="{DynamicResource Button.Primary}" MinWidth="100" Command="{Binding ReadCommand}"/>
+                        <Button Grid.Column="1" Content="读取" Style="{DynamicResource Button.Primary}" MinWidth="140" Command="{Binding ReadCommand}"/>
                         <TextBlock Grid.Column="2" Text="结果" Style="{DynamicResource Body}" VerticalAlignment="Center" Margin="24,0,8,0"/>
                         <Border Grid.Column="3" Background="{DynamicResource Brush.Bg}" CornerRadius="{DynamicResource Radius.Md}" Padding="10,4" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" MinHeight="32">
                             <TextBlock Text="{Binding LastResult}" Style="{DynamicResource Readout}" FontSize="16" VerticalAlignment="Center"/>
@@ -103,7 +99,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="写入" FontWeight="Bold" Foreground="{DynamicResource Brush.Warn}" VerticalAlignment="Center" Margin="0,0,16,0"/>
                         <TextBox Grid.Column="1" Style="{DynamicResource Input}" Text="{Binding WriteValue, UpdateSourceTrigger=LostFocus}"/>
-                        <Button Grid.Column="2" Content="写入" Style="{DynamicResource Button.Danger}" MinWidth="100" Margin="24,0,0,0" Command="{Binding WriteCommand}"/>
+                        <Button Grid.Column="2" Content="写入" Style="{DynamicResource Button.Danger}" MinWidth="140" Margin="24,0,0,0" Command="{Binding WriteCommand}"/>
                     </Grid>
                 </StackPanel>
             </Border>

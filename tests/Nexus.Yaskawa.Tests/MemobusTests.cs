@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using Xunit;
 using Nexus.Yaskawa;
 
@@ -313,7 +317,7 @@ public class MemobusTests
     {
         bool[] values = { true, false, true, true, false, false, false, false };
         byte[] bytes = MemobusClient.BoolArrayToBytes(values);
-        Assert.Equal(1, bytes.Length);
+        Assert.Single(bytes);
         Assert.Equal(0x0D, bytes[0]); // bits: 1101 = 0x0D
     }
 
@@ -849,6 +853,115 @@ public class MemobusTests
             server.Stop();
             server.Dispose();
         }
+    }
+
+    #endregion
+
+    #region 批量接口契约
+
+    [Fact]
+    public void BatchOperations_EmptyInput_ReturnsError()
+    {
+        var client = new MemobusClient("127.0.0.1");
+
+        Assert.False(client.BatchRead(new string[0]).IsSuccess);
+        Assert.False(client.RandomRead(new string[0]).IsSuccess);
+        Assert.False(client.BatchWrite(System.Array.Empty<System.Collections.Generic.KeyValuePair<string, object>>()).IsSuccess);
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new MemobusVirtualServer(port);
+        server.Start();
+
+        using var pool = new MemobusConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+        var writeResult = pool.Write("100", (short)1234);
+        Assert.True(writeResult.IsSuccess, writeResult.Message);
+
+        var readResult = pool.ReadInt16("100");
+        Assert.True(readResult.IsSuccess, readResult.Message);
+        Assert.Equal((short)1234, readResult.Content);
+        Assert.Equal(0, pool.ActiveCount);
+        Assert.Equal(1, pool.IdleCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsPacketEvents()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new MemobusVirtualServer(port);
+        server.SetHolding(10, 0x1234);
+        server.Start();
+
+        using var pool = new MemobusConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+        int sentCount = 0;
+        int receivedCount = 0;
+        pool.OnMessageSent += (_, _) => Interlocked.Increment(ref sentCount);
+        pool.OnMessageReceived += (_, _) => Interlocked.Increment(ref receivedCount);
+
+        var result = pool.ReadUInt16("10");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)0x1234, result.Content);
+        Assert.True(sentCount > 0);
+        Assert.True(receivedCount > 0);
+    }
+
+    [Fact]
+    public void ConnectionPool_BatchReadWrite()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new MemobusVirtualServer(port);
+        server.Start();
+
+        using var pool = new MemobusConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+        var items = new[]
+        {
+            new KeyValuePair<string, object>("20", (short)111),
+            new KeyValuePair<string, object>("21", (ushort)222)
+        };
+
+        var writeResult = pool.BatchWrite(items);
+        Assert.True(writeResult.IsSuccess, writeResult.Message);
+
+        var readResult = pool.BatchRead(new[] { "20", "21" });
+
+        Assert.True(readResult.IsSuccess, readResult.Message);
+        Assert.Equal((short)111, readResult.Content["20"]);
+        Assert.Equal((short)222, readResult.Content["21"]);
+    }
+
+    [Fact]
+    public void ConnectionPool_UsesCustomCpuToFrom()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new MemobusVirtualServer(port)
+        {
+            CpuTo = 3,
+            CpuFrom = 2
+        };
+        server.Start();
+
+        using var pool = new MemobusConnectionPool("127.0.0.1", port, cpuTo: 3, cpuFrom: 2, maxPoolSize: 1);
+
+        var writeResult = pool.Write("30", unchecked((short)0x9999));
+        Assert.True(writeResult.IsSuccess, writeResult.Message);
+
+        var readResult = pool.ReadInt16("30");
+        Assert.True(readResult.IsSuccess, readResult.Message);
+        Assert.Equal(unchecked((short)0x9999), readResult.Content);
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     #endregion

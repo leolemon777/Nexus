@@ -568,5 +568,12 @@ namespace Nexus.Mitsubishi
         public Task<OperateResult> BatchWriteAsync(
             IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
             => Task.Run(() => BatchWrite(items), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand("D0", 1, false, PLCNumber).Content; }
+            catch { return null; }
+        }
     }
 }

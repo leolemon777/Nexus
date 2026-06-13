@@ -118,21 +118,16 @@ namespace Nexus
 
             try
             {
-                using var cts = new CancellationTokenSource(TimeoutMs);
-
-                // 使用 Task.Run + WhenAny 实现超时控制
+                // 使用 WhenAny 实现超时控制
                 // （netstandard2.0 无法使用 Task.WhenAsync 等高版本 API）
                 var heartbeatTask = _heartbeatCallback();
                 var completed = await Task.WhenAny(
                     heartbeatTask,
-                    Task.Delay(TimeoutMs, cts.Token)).ConfigureAwait(false);
+                    Task.Delay(TimeoutMs)).ConfigureAwait(false);
 
                 if (completed == heartbeatTask)
                 {
-                    var result = heartbeatTask.IsCompletedSuccessfully()
-                        ? heartbeatTask.Result
-                        : OperateResult.Failed("心跳任务异常");
-
+                    var result = await heartbeatTask.ConfigureAwait(false);
                     if (result.IsSuccess)
                     {
                         success = true;

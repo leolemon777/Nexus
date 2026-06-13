@@ -166,7 +166,7 @@ namespace Nexus.Yaskawa
                     while (_running && client.Connected)
                     {
                         // 读取外层帧头 (12 字节)
-                        byte[] outerHeader = ReadExact(stream, OuterHeader);
+                        byte[]? outerHeader = ReadExact(stream, OuterHeader);
                         if (outerHeader == null) break;
 
                         // 验证帧标记
@@ -178,7 +178,7 @@ namespace Nexus.Yaskawa
                         if (remaining <= 0) break;
 
                         // 读取内层命令
-                        byte[] innerCmd = ReadExact(stream, remaining);
+                        byte[]? innerCmd = ReadExact(stream, remaining);
                         if (innerCmd == null) break;
 
                         // 处理并返回响应

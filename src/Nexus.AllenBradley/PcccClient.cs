@@ -807,6 +807,16 @@ namespace Nexus.AllenBradley
         //  连接管理辅助
         // ═══════════════════════════════════════════
 
+        /// <summary>默认心跳：读取 N7:0 的 1 个 word（最常用的测试地址）。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            try
+            {
+                return BuildPcccReadCommand(new PcccAddress { FileNumber = 7, DataCode = 0x89, Element = 0 }, 2);
+            }
+            catch { return null; }
+        }
+
         protected override int ResponseHeaderLength => 24;
 
         protected override int GetResponsePayloadLength(byte[] header)

@@ -355,4 +355,159 @@ public class Iec104AsduTests
         Assert.Contains("42", s);
         Assert.Contains("M_ME_NC_1", s);
     }
+
+    // ── Client 构造器 ─────────────────────────────
+
+    [Fact]
+    public void Iec104Client_Constructor_SetsDefaults()
+    {
+        var client = new Iec104Client("192.168.1.1");
+        Assert.Equal(1, client.CommonAddress);
+        Assert.Equal(30000, client.T0);
+        Assert.Equal(15000, client.T1);
+        Assert.Equal(10000, client.T2);
+        Assert.Equal(20000, client.T3);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Iec104Client_Constructor_CustomPort()
+    {
+        var client = new Iec104Client("192.168.1.1", 2404, 5000);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Iec104Client_CommonAddress_CanBeSet()
+    {
+        var client = new Iec104Client("192.168.1.1") { CommonAddress = 5 };
+        Assert.Equal(5, client.CommonAddress);
+    }
+
+    [Fact]
+    public void Iec104Client_Timers_CanBeSet()
+    {
+        var client = new Iec104Client("192.168.1.1");
+        client.T0 = 60000;
+        client.T1 = 30000;
+        client.T2 = 20000;
+        client.T3 = 40000;
+        Assert.Equal(60000, client.T0);
+        Assert.Equal(30000, client.T1);
+    }
+
+    [Fact]
+    public void Iec104Client_Dispose_WithoutConnect()
+    {
+        var client = new Iec104Client("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void Iec104Client_Disconnect_WithoutConnect_DoesNotThrow()
+    {
+        var client = new Iec104Client("192.168.1.1");
+        client.Disconnect();
+    }
+
+    // ── More enum coverage ─────────────────────────
+
+    [Theory]
+    [InlineData(TypeId.M_SP_NA_1, 1)]
+    [InlineData(TypeId.M_DP_NA_1, 3)]
+    [InlineData(TypeId.M_ME_NA_1, 9)]
+    [InlineData(TypeId.M_ME_NC_1, 13)]
+    [InlineData(TypeId.C_SC_NA_1, 45)]
+    [InlineData(TypeId.C_DC_NA_1, 46)]
+    [InlineData(TypeId.C_SE_NA_1, 48)]
+    [InlineData(TypeId.C_IC_NA_1, 100)]
+    [InlineData(TypeId.C_RD_NA_1, 102)]
+    public void TypeId_Values_Correct(TypeId typeId, byte expected)
+    {
+        Assert.Equal(expected, (byte)typeId);
+    }
+
+    [Theory]
+    [InlineData(CauseOfTransmission.Periodic, 1)]
+    [InlineData(CauseOfTransmission.Background, 2)]
+    [InlineData(CauseOfTransmission.Spontaneous, 3)]
+    [InlineData(CauseOfTransmission.Initialized, 4)]
+    [InlineData(CauseOfTransmission.Request, 5)]
+    [InlineData(CauseOfTransmission.Activation, 6)]
+    [InlineData(CauseOfTransmission.ActivationCon, 7)]
+    [InlineData(CauseOfTransmission.Deactivation, 8)]
+    [InlineData(CauseOfTransmission.DeactivationCon, 9)]
+    [InlineData(CauseOfTransmission.ActivationTerm, 10)]
+    public void Cot_Values_Correct(CauseOfTransmission cot, byte expected)
+    {
+        Assert.Equal(expected, (byte)cot);
+    }
+
+    // ── InformationObject ──────────────────────────
+
+    [Fact]
+    public void InformationObject_Defaults()
+    {
+        var obj = new Iec104InformationObject();
+        Assert.Equal(0, obj.Address);
+        Assert.Empty(obj.Data);
+    }
+
+    [Fact]
+    public void InformationObject_ToString()
+    {
+        var obj = new Iec104InformationObject { Address = 42, Data = new byte[] { 0x01, 0x02 } };
+        Assert.Contains("42", obj.ToString());
+    }
+
+    // ── MeasuredValueInfo ───────────────────────────
+
+    [Fact]
+    public void MeasuredValueInfo_ToString()
+    {
+        var mv = new MeasuredValueInfo { Address = 100, Value = 99.5f, Quality = QualityFlags.None };
+        Assert.Contains("100", mv.ToString());
+        Assert.Contains("99", mv.ToString());
+    }
+
+    // ── DoublePointInfo edge cases ─────────────────
+
+    [Fact]
+    public void DoublePointInfo_Value3_IsIndeterminate()
+    {
+        var dp = new DoublePointInfo { Value = 3 };
+        Assert.True(dp.IsIndeterminate);
+        Assert.False(dp.IsOn);
+        Assert.False(dp.IsOff);
+    }
+
+    // ── QualityFlags combinations ──────────────────
+
+    [Fact]
+    public void QualityFlags_AllSet()
+    {
+        var q = QualityFlags.Overflow | QualityFlags.Blocked | QualityFlags.Substituted |
+                QualityFlags.NotTopical | QualityFlags.Invalid;
+        Assert.Equal((QualityFlags)0x1F, q);
+    }
+
+    [Fact]
+    public void QualityFlags_None_IsZero()
+    {
+        Assert.Equal((QualityFlags)0, QualityFlags.None);
+    }
+
+    // ── PointType enum ─────────────────────────────
+
+    [Fact]
+    public void PointType_Values_Exist()
+    {
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.SinglePoint));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.DoublePoint));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.MeasuredNormalized));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.MeasuredFloat));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.SingleCommand));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.DoubleCommand));
+        Assert.True(Enum.IsDefined(typeof(PointType), PointType.SetpointNormalized));
+    }
 }

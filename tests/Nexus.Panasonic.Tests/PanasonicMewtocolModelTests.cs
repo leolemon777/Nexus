@@ -71,5 +71,65 @@ namespace Nexus.Panasonic.Tests
         {
             Assert.True(Enum.IsDefined(typeof(PanasonicFpModel), model));
         }
+
+        [Fact]
+        public void Area_DataRegister_HasCorrectValue()
+        {
+            Assert.Equal(PanasonicArea.DataRegister, PanasonicArea.DataRegister);
+        }
+
+        [Fact]
+        public void Area_OutputCoil_HasCorrectValue()
+        {
+            Assert.True(Enum.IsDefined(typeof(PanasonicArea), PanasonicArea.OutputCoil));
+        }
+
+        [Fact]
+        public void ErrorCodes_EmptyString_ReturnsNormal()
+        {
+            Assert.Equal("正常完成", PanasonicErrorCodes.ToDescription(""));
+        }
+
+        [Fact]
+        public void ErrorCodes_Exclamation_ReturnsUndefined()
+        {
+            Assert.Contains("未定义", PanasonicErrorCodes.ToDescription("!"));
+        }
+
+        [Fact]
+        public void Constants_STX_Is0x02()
+        {
+            Assert.Equal(0x02, PanasonicMewtocolConstants.STX);
+        }
+
+        [Fact]
+        public void Constants_ETX_Is0x03()
+        {
+            Assert.Equal(0x03, PanasonicMewtocolConstants.ETX);
+        }
+
+        [Fact]
+        public void Constants_ENQ_Is0x05()
+        {
+            Assert.Equal(0x05, PanasonicMewtocolConstants.ENQ);
+        }
+
+        [Fact]
+        public void Constants_ACK_Is0x06()
+        {
+            Assert.Equal(0x06, PanasonicMewtocolConstants.ACK);
+        }
+
+        [Fact]
+        public void Constants_NAK_Is0x15()
+        {
+            Assert.Equal(0x15, PanasonicMewtocolConstants.NAK);
+        }
+
+        [Fact]
+        public void Constants_EOT_Is0x04()
+        {
+            Assert.Equal(0x04, PanasonicMewtocolConstants.EOT);
+        }
     }
 }

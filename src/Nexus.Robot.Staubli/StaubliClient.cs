@@ -209,10 +209,10 @@ namespace Nexus.Robot.Staubli
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public OperateResult Write(string address, int value) => SendCommand($"set(dio[0], {value})").IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败");
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value) => SendCommand($"set(dio[0], {value})").IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败");
+        public OperateResult Write(string address, ulong value) => SendCommand($"set(dio[0], {value})").IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败");
         public OperateResult Write(string address, float value) => SendCommand(address).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败");
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public OperateResult Write(string address, double value) => SendCommand(address).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败");
         public OperateResult Write(string address, string value) => CheckResponse(SendCommand(value));
 
         public Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.FromResult(ReadBool(address));
@@ -316,7 +316,10 @@ namespace Nexus.Robot.Staubli
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")

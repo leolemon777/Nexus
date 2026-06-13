@@ -15,6 +15,7 @@ namespace Nexus
         private readonly object _stateLock = new object();
         private Timer? _retryTimer;
         private CancellationTokenSource? _cts;
+        private readonly Func<bool> _shouldReconnect;
         private int _attempt;
         private bool _started;
         private bool _disposed;
@@ -55,10 +56,11 @@ namespace Nexus
 
         /// <param name="device">要守护的 TCP 设备。</param>
         /// <param name="log">日志记录器（可选，默认 NullLogger）。</param>
-        public AutoReconnectGuard(TcpDeviceBase device, ILogger? log = null)
+        public AutoReconnectGuard(TcpDeviceBase device, ILogger? log = null, Func<bool>? shouldReconnect = null)
         {
             _device = device ?? throw new ArgumentNullException(nameof(device));
             _log = log ?? NullLogger.Instance;
+            _shouldReconnect = shouldReconnect ?? (() => true);
         }
 
         /// <summary>启动自动重连守护（订阅断开事件）。</summary>
@@ -120,6 +122,7 @@ namespace Nexus
             lock (_stateLock)
             {
                 if (!_started || _disposed) return;
+                if (!_shouldReconnect()) return;
 
                 // 如果已在重连中，不重复触发
                 if (_retryTimer != null) return;

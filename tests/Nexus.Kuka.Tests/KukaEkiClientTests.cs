@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using Xunit;
 using Nexus.Kuka;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nexus.Kuka.Tests
 {
@@ -101,6 +104,16 @@ namespace Nexus.Kuka.Tests
         }
 
         [Fact]
+        public void KukaCartesianPosition_FullRotation_ToString()
+        {
+            var pos = new KukaCartesianPosition { A = 90.0, B = 180.0, C = 270.0 };
+            var s = pos.ToString();
+            Assert.Contains("90", s);
+            Assert.Contains("180", s);
+            Assert.Contains("270", s);
+        }
+
+        [Fact]
         public void KukaProgramState_Default_IsNotRunning()
         {
             var state = new KukaProgramState();
@@ -121,6 +134,157 @@ namespace Nexus.Kuka.Tests
         {
             var state = new KukaProgramState { IsPaused = true };
             Assert.Equal("PAUSED", state.ToString());
+        }
+
+        [Fact]
+        public void KukaProgramState_ToString_WhenIdle()
+        {
+            var state = new KukaProgramState { State = "IDLE" };
+            Assert.Equal("IDLE", state.ToString());
+        }
+
+        // ── 未连接操作 ────────────────────────────
+
+        [Fact]
+        public void ReadOperations_NotConnected_ReturnError()
+        {
+            using var client = new KukaEkiClient("127.0.0.1");
+            Assert.False(client.ReadInt16("COUNT").IsSuccess);
+            Assert.False(client.ReadInt32("POS_X").IsSuccess);
+            Assert.False(client.ReadFloat("TEMP").IsSuccess);
+            Assert.False(client.ReadBool("DI01").IsSuccess);
+            Assert.False(client.ReadString("NAME", 10).IsSuccess);
+        }
+
+        [Fact]
+        public void WriteOperations_NotConnected_ReturnError()
+        {
+            using var client = new KukaEkiClient("127.0.0.1");
+            Assert.False(client.Write("COUNT", (short)42).IsSuccess);
+            Assert.False(client.Write("DI01", true).IsSuccess);
+        }
+
+        [Fact]
+        public void BatchOperations_EmptyInput_ReturnsError()
+        {
+            using var client = new KukaEkiClient("127.0.0.1");
+            Assert.False(client.BatchRead(new string[0]).IsSuccess);
+            Assert.False(client.RandomRead(new string[0]).IsSuccess);
+            Assert.False(client.BatchWrite(Array.Empty<KeyValuePair<string, object>>()).IsSuccess);
+        }
+
+        [Fact]
+        public void Subscribe_Unsubscribe_DoesNotThrow()
+        {
+            using var client = new KukaEkiClient("127.0.0.1");
+            client.Subscribe("COUNT", 1000, "Int16");
+            client.Unsubscribe("COUNT");
+            client.StartSubscriptions();
+            client.StopSubscriptions();
+        }
+
+        // ── ConnectionPool 基础 ──────────────────────
+
+        [Fact]
+        public void ReadInt16_WithVirtualServer_ReturnsValue()
+        {
+            using var server = new KukaEkiVirtualServer(0);
+            server.SetVariable("COUNT", "42");
+            server.Start();
+            Thread.Sleep(100);
+
+            using var client = new KukaEkiClient("127.0.0.1", server.Port);
+            var connect = client.Connect();
+            Assert.True(connect.IsSuccess, connect.Message ?? "Connect failed");
+
+            var result = client.ReadInt16("COUNT");
+
+            Assert.True(result.IsSuccess, result.Message ?? "Read failed");
+            Assert.Equal((short)42, result.Content);
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadInt16_ReusesPersistentConnection()
+        {
+            using var server = new KukaEkiVirtualServer(0);
+            server.SetVariable("COUNT", "42");
+            server.Start();
+            Thread.Sleep(100);
+            using var pool = new KukaEkiConnectionPool("127.0.0.1", server.Port, maxPoolSize: 1);
+
+            for (int i = 0; i < 3; i++)
+            {
+                var result = pool.ReadInt16("COUNT");
+                Assert.True(result.IsSuccess, result.Message ?? "Pool read failed");
+                Assert.Equal((short)42, result.Content);
+            }
+
+            WaitForConnections(server, 1);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+            Assert.Equal(1, server.ConnectionCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_WriteAndReadString_RoundTrip()
+        {
+            using var server = new KukaEkiVirtualServer(0);
+            server.Start();
+            Thread.Sleep(100);
+            using var pool = new KukaEkiConnectionPool("127.0.0.1", server.Port, maxPoolSize: 1);
+
+            var write = pool.Write("PROGRAM", "MAIN");
+            Assert.True(write.IsSuccess, write.Message ?? "Pool write failed");
+
+            var read = pool.ReadString("PROGRAM", 10);
+            Assert.True(read.IsSuccess, read.Message ?? "Pool read after write failed");
+            Assert.Equal("MAIN", read.Content);
+
+            WaitForConnections(server, 1);
+            Assert.Equal(1, server.ConnectionCount);
+        }
+
+        [Fact]
+        public async Task ConnectionPool_ExecuteAsync_ReadInt16_ReusesPersistentConnection()
+        {
+            using var server = new KukaEkiVirtualServer(0);
+            server.SetVariable("COUNT", "77");
+            server.Start();
+            Thread.Sleep(100);
+            using var pool = new KukaEkiConnectionPool("127.0.0.1", server.Port, maxPoolSize: 1);
+
+            var result = await pool.ExecuteAsync(c => c.ReadInt16Async("COUNT"));
+
+            Assert.True(result.IsSuccess, result.Message ?? "Pool async read failed");
+            Assert.Equal((short)77, result.Content);
+            WaitForConnections(server, 1);
+            Assert.Equal(1, server.ConnectionCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsMessageEvents()
+        {
+            using var server = new KukaEkiVirtualServer(0);
+            server.SetVariable("COUNT", "42");
+            server.Start();
+            Thread.Sleep(100);
+            using var pool = new KukaEkiConnectionPool("127.0.0.1", server.Port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, __) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, __) => Interlocked.Increment(ref received);
+
+            var result = pool.ReadInt16("COUNT");
+
+            Assert.True(result.IsSuccess, result.Message ?? "Pool read failed");
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+
+        private static void WaitForConnections(KukaEkiVirtualServer server, int expected)
+        {
+            for (int i = 0; i < 20 && server.ConnectionCount < expected; i++)
+                Thread.Sleep(25);
         }
     }
 }

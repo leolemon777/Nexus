@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
 using Xunit;
 using Nexus.Delta;
 
@@ -47,6 +51,7 @@ namespace Nexus.Delta.Tests
         {
             var parsed = DeltaDvpAddress.Parse(addr);
             Assert.Equal(isBit, parsed.IsBitArea);
+            Assert.Equal(isReg, parsed.IsRegisterArea);
         }
 
         [Fact]
@@ -142,6 +147,104 @@ namespace Nexus.Delta.Tests
         {
             _server?.Stop();
             _server?.Dispose();
+        }
+    }
+
+    public class DeltaDvpConnectionPoolTests : IDisposable
+    {
+        private DeltaDvpVirtualServer? _server;
+
+        public void Dispose()
+        {
+            _server?.Stop();
+            _server?.Dispose();
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+        {
+            int port = GetFreeTcpPort();
+            _server = new DeltaDvpVirtualServer(port);
+            _server.Start();
+
+            using var pool = new DeltaDvpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+            var write = pool.Write("D100", (short)1234);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("D100");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)1234, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsPacketEvents()
+        {
+            int port = GetFreeTcpPort();
+            _server = new DeltaDvpVirtualServer(port);
+            _server.SetHoldingRegister(0x1000 + 10, 0x1234);
+            _server.Start();
+
+            using var pool = new DeltaDvpConnectionPool("127.0.0.1", port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, _) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, _) => Interlocked.Increment(ref received);
+
+            var read = pool.ReadUInt16("D10");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((ushort)0x1234, read.Content);
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+
+        [Fact]
+        public void ConnectionPool_BatchReadWrite()
+        {
+            int port = GetFreeTcpPort();
+            _server = new DeltaDvpVirtualServer(port);
+            _server.Start();
+
+            using var pool = new DeltaDvpConnectionPool("127.0.0.1", port);
+            var write = pool.BatchWrite(new[]
+            {
+                new KeyValuePair<string, object>("D20", (short)111),
+                new KeyValuePair<string, object>("D21", (short)222),
+            });
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.BatchRead(new[] { "D20", "D21" });
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)111, read.Content["D20"]);
+            Assert.Equal((short)222, read.Content["D21"]);
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWriteBools()
+        {
+            int port = GetFreeTcpPort();
+            _server = new DeltaDvpVirtualServer(port);
+            _server.Start();
+
+            using var pool = new DeltaDvpConnectionPool("127.0.0.1", port);
+
+            var write = pool.WriteBools("Y10", new[] { true, false, true });
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadBools("Y10", 3);
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal(new[] { true, false, true }, read.Content);
+        }
+
+        private static int GetFreeTcpPort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
         }
     }
 }

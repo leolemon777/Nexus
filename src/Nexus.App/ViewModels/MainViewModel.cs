@@ -118,11 +118,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🌐", "Modbus ASCII Over TCP", "modbus-ascii-over-tcp", typeof(Views.ModbusAsciiOverTcpPage)),
 
         new NavGroup("🏭", "西门子 Siemens", BrandLogos.TryLoad("siemens.png"))
-            .Add("🏭", "S7-1200/1500",  "siemens",       typeof(Views.SiemensPage)),
+            .Add("🏭", "S7 Ethernet",     "siemens-s7",        typeof(Views.SiemensPage))
+            .Add("📡", "Fetch/Write",     "siemens-fw",        typeof(Views.FetchWritePage))
+            .Add("🔌", "PPI 串口 (S7-200)", "siemens-ppi",     typeof(Views.SiemensPpiPage)),
 
         new NavGroup("🗼", "三菱 Mitsubishi", BrandLogos.TryLoad("mitsubishi_electric.png"))
-            .Add("🗼", "MC 协议 (Q/L/FX5U)", "mitsubishi",   typeof(Views.MitsubishiPage))
-            .Add("🔧", "FX 串口协议",    "mitsubishi-fx", typeof(Views.MitsubishiFxPage)),
+            .Add("🗼", "MC 3E Binary TCP",  "mc3e-binary-tcp", typeof(Views.MitsubishiPage))
+            .Add("🗼", "MC 3E ASCII TCP",   "mc3e-ascii-tcp",  typeof(Views.MitsubishiPage))
+            .Add("🗼", "MC 3E Binary UDP",  "mc3e-binary-udp", typeof(Views.MitsubishiPage))
+            .Add("🗼", "MC 3E ASCII UDP",   "mc3e-ascii-udp",  typeof(Views.MitsubishiPage))
+            .Add("🗼", "A1E Binary TCP",    "a1e-binary-tcp",  typeof(Views.MitsubishiPage))
+            .Add("🔧", "FX 串口协议",        "mitsubishi-fx",   typeof(Views.MitsubishiFxPage)),
 
         new NavGroup("🟠", "欧姆龙 Omron", BrandLogos.TryLoad("omron.png"))
             .Add("🟠", "FINS-TCP",      "omron",         typeof(Views.OmronPage)),
@@ -182,8 +188,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         //  更多厂商 — 图标已就绪，协议开发中
         // ═══════════════════════════════════════════
 
-        new NavGroup("⚡", "施耐德 Schneider", BrandLogos.TryLoad("schneider_electric.png")),
-
         new NavGroup("🔴", "ABB", BrandLogos.TryLoad("abb.png")),
 
         new NavGroup("🔵", "博世力士乐 Bosch Rexroth", BrandLogos.TryLoad("bosch_rexroth.png")),
@@ -204,6 +208,38 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         new NavGroup("🔵", "东芝 Toshiba", BrandLogos.TryLoad("toshiba.png")),
 
+
+        // ═══════════════════════════════════════════
+        //  新增协议页面
+        // ═══════════════════════════════════════════
+
+        new NavGroup("⚡", "施耐德 Schneider", BrandLogos.TryLoad("schneider_electric.png"))
+            .Add("⚡", "Modicon", "schneider", typeof(Views.SchneiderPage)),
+
+        new NavGroup("⚡", "电力协议")
+            .Add("⚡", "DNP3", "dnp3", typeof(Views.Dnp3Page))
+            .Add("⚡", "IEC 104", "iec104", typeof(Views.Iec104Page))
+            .Add("⚡", "IEC 61850", "iec61850", typeof(Views.Iec61850Page)),
+
+        new NavGroup("🏢", "楼宇自动化")
+            .Add("🏢", "BACnet/IP", "bacnet", typeof(Views.BacnetPage)),
+
+        new NavGroup("🔬", "半导体")
+            .Add("🔬", "SECS HSMS", "secs", typeof(Views.SecsPage)),
+
+        new NavGroup("🌡", "仪表")
+            .Add("🌡", "RKC 温控", "rkc", typeof(Views.RkcPage))
+            .Add("⚖", "Toledo 称重", "toledo", typeof(Views.ToledoPage)),
+
+
+        new NavGroup("🤖", "机器人")
+            .Add("🤖", "埃夫特 Efort", "robot-efort", typeof(Views.RobotEfortPage))
+            .Add("🤖", "FANUC", "robot-fanuc", typeof(Views.RobotFanucPage))
+            .Add("🤖", "KUKA", "robot-kuka", typeof(Views.RobotKukaPage))
+            .Add("🤖", "UR", "robot-ur", typeof(Views.RobotUrPage))
+            .Add("🤖", "安川 Yaskawa", "robot-yaskawa", typeof(Views.RobotYaskawaPage))
+            .Add("🤖", "雅马哈 Yamaha", "robot-yamaha", typeof(Views.RobotYamahaPage))
+            .Add("🤖", "史陶比尔 Staubli", "robot-staubli", typeof(Views.RobotStaubliPage)),
         // ═══════════════════════════════════════════
         //  工具
         // ═══════════════════════════════════════════

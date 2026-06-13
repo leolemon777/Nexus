@@ -29,8 +29,8 @@ namespace Nexus.Schneider
             return totalLen - 3; // 去掉 UnitId + FC + ByteCount (在 payload 部分)
         }
 
-        public SchneiderModiconClient(string ip, int port = 502)
-            : base(ip, port)
+        public SchneiderModiconClient(string ip, int port = 502, int timeout = 5000)
+            : base(ip, port, timeout)
         {
         }
 
@@ -91,7 +91,7 @@ namespace Nexus.Schneider
         {
             ushort wordCount = (ushort)(data.Length / 2);
             byte byteCount = (byte)data.Length;
-            byte[] pdu = new byte[6 + 1 + data.Length];
+            byte[] pdu = new byte[6 + data.Length];
             pdu[0] = 0x10; // FC16
             pdu[1] = (byte)(address >> 8);
             pdu[2] = (byte)address;
@@ -141,6 +141,9 @@ namespace Nexus.Schneider
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var addrResult = SchneiderAddress.TryParse(address);
             if (addrResult == null)
                 return OperateResult.Failed($"无法解析施耐德地址: {address}");
@@ -169,13 +172,13 @@ namespace Nexus.Schneider
         public override OperateResult<short> ReadInt16(string address)
         {
             var result = ReadBytes(address, 1);
-            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message);
-            return OperateResult<short>.Success((short)((result.Content[0] << 8) | result.Content[1]));
+            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
+            return OperateResult<short>.Success(DataConverter.ToInt16(result.Content, 0, ByteOrder));
         }
 
         public override OperateResult Write(string address, short value)
         {
-            return Write(address, new byte[] { (byte)(value >> 8), (byte)value });
+            return Write(address, DataConverter.GetBytes(value, ByteOrder));
         }
 
         public override OperateResult<bool> ReadBool(string address)
@@ -228,18 +231,60 @@ namespace Nexus.Schneider
         public override OperateResult<ushort> ReadUInt16(string address)
         {
             var r = ReadInt16(address);
-            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message);
+            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
             return OperateResult<ushort>.Success((ushort)r.Content);
         }
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public override OperateResult Write(string address, int value) => Write(address, new byte[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
+        public override OperateResult<int> ReadInt32(string address) => ReadValueSafe(address, 2, d => DataConverter.ToInt32(d, 0, ByteOrder));
+        public override OperateResult<uint> ReadUInt32(string address) => ReadValueSafe(address, 2, d => DataConverter.ToUInt32(d, 0, ByteOrder));
+        public override OperateResult<long> ReadInt64(string address) => ReadValueSafe(address, 4, d => DataConverter.ToInt64(d, 0, ByteOrder));
+        public override OperateResult<ulong> ReadUInt64(string address) => ReadValueSafe(address, 4, d => DataConverter.ToUInt64(d, 0, ByteOrder));
+        public override OperateResult<float> ReadFloat(string address) => ReadValueSafe(address, 2, d => DataConverter.ToFloat(d, 0, ByteOrder));
+        public override OperateResult<double> ReadDouble(string address) => ReadValueSafe(address, 4, d => DataConverter.ToDouble(d, 0, ByteOrder));
+
+        public override OperateResult Write(string address, int value) => Write(address, DataConverter.GetBytes(value, ByteOrder));
         public override OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public override OperateResult Write(string address, long value) => Write(address, (int)value);
-        public override OperateResult Write(string address, ulong value) => Write(address, (int)value);
-        public override OperateResult Write(string address, float value) { unsafe { int bits = *(int*)&value; return Write(address, bits); } }
-        public override OperateResult Write(string address, double value) => Write(address, (float)value);
+        public override OperateResult Write(string address, long value) => Write(address, DataConverter.GetBytes(value, ByteOrder));
+        public override OperateResult Write(string address, ulong value) => Write(address, DataConverter.GetBytes(value, ByteOrder));
+        public override OperateResult Write(string address, float value) => Write(address, DataConverter.GetBytes(value, ByteOrder));
+        public override OperateResult Write(string address, double value) => Write(address, DataConverter.GetBytes(value, ByteOrder));
         public override OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
+
+        /// <summary>读取字符串（从 Modicon 寄存器）。</summary>
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            ushort wordCount = (ushort)((length + 1) / 2);
+            var result = ReadBytes(address, wordCount);
+            if (!result.IsSuccess) return OperateResult<string>.Failed(result.Message, result.ErrorCode);
+            int charCount = Math.Min(length, result.Content.Length);
+            return OperateResult<string>.Success(Encoding.ASCII.GetString(result.Content, 0, charCount));
+        }
+
+        /// <summary>写入字符串（到 Modicon 寄存器，自动补齐偶数字节）。</summary>
+        public OperateResult WriteString(string address, string value, ushort maxRegisters)
+        {
+            if (value == null) return OperateResult.Failed("字符串不能为空");
+            byte[] bytes = Encoding.ASCII.GetBytes(value);
+            int maxBytes = maxRegisters * 2;
+            if (bytes.Length > maxBytes)
+                return OperateResult.Failed($"字符串长度 {bytes.Length} 超出最大字节数 {maxBytes}");
+            if (bytes.Length % 2 != 0)
+            {
+                byte[] padded = new byte[bytes.Length + 1];
+                Buffer.BlockCopy(bytes, 0, padded, 0, bytes.Length);
+                bytes = padded;
+            }
+            return Write(address, bytes);
+        }
+
+        private OperateResult<T> ReadValueSafe<T>(string address, ushort length, Func<byte[], T> converter)
+        {
+            var result = ReadBytes(address, length);
+            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message, result.ErrorCode);
+            try { return OperateResult<T>.Success(converter(result.Content)); }
+            catch (Exception ex) { return OperateResult<T>.Failed(ex.Message); }
+        }
 
         // ═══════════════════════════════════════════
         //  IBatchReadWrite — 批量读写接口
@@ -357,7 +402,10 @@ namespace Nexus.Schneider
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")
@@ -471,6 +519,119 @@ namespace Nexus.Schneider
                 }
             }
             catch { }
+        }
+
+
+        // ═══════════════════════════════════════════
+        //  PLC 诊断与识别
+        // ═══════════════════════════════════════════
+
+        /// <summary>读取 PLC 识别信息（系统字区域 %SW0-%SW9）。</summary>
+        public OperateResult<SchneiderPlcInfo> ReadPlcInfo()
+        {
+            var info = new SchneiderPlcInfo();
+            var sw0 = ReadUInt16("%SW0");
+            if (!sw0.IsSuccess) return OperateResult<SchneiderPlcInfo>.Failed(sw0.Message, sw0.ErrorCode);
+            info.DeviceType = sw0.Content;
+
+            var sw1 = ReadUInt16("%SW1");
+            if (sw1.IsSuccess) info.FirmwareVersion = sw1.Content;
+
+            var sw2 = ReadUInt16("%SW2");
+            if (sw2.IsSuccess) info.HardwareVersion = sw2.Content;
+
+            var sw3 = ReadUInt16("%SW3");
+            if (sw3.IsSuccess) info.StatusWord = sw3.Content;
+
+            return OperateResult<SchneiderPlcInfo>.Success(info);
+        }
+
+        /// <summary>读取系统状态字（%SW 指定偏移）。</summary>
+        public OperateResult<ushort> ReadSystemWord(ushort offset)
+        {
+            return ReadUInt16($"%SW{offset}");
+        }
+
+        /// <summary>读取系统状态位（%S 指定编号）。</summary>
+        public OperateResult<bool> ReadSystemBit(ushort index)
+        {
+            return ReadBool($"%S{index}");
+        }
+
+        /// <summary>读取诊断寄存器（%SW100-%SW109: 错误计数器、通信统计）。</summary>
+        public OperateResult<SchneiderDiagnostics> ReadDiagnostics()
+        {
+            var diag = new SchneiderDiagnostics();
+            var sw100 = ReadUInt16("%SW100");
+            if (!sw100.IsSuccess) return OperateResult<SchneiderDiagnostics>.Failed(sw100.Message, sw100.ErrorCode);
+            diag.CommErrorCount = sw100.Content;
+
+            var sw101 = ReadUInt16("%SW101");
+            if (sw101.IsSuccess) diag.CrcErrorCount = sw101.Content;
+
+            var sw102 = ReadUInt16("%SW102");
+            if (sw102.IsSuccess) diag.TimeoutCount = sw102.Content;
+
+            var sw103 = ReadUInt16("%SW103");
+            if (sw103.IsSuccess) diag.ExceptionCount = sw103.Content;
+
+            var sw104 = ReadUInt16("%SW104");
+            if (sw104.IsSuccess) diag.LastErrorCode = sw104.Content;
+
+            var sw105 = ReadUInt16("%SW105");
+            if (sw105.IsSuccess) diag.RunMode = sw105.Content;
+
+            return OperateResult<SchneiderDiagnostics>.Success(diag);
+        }
+
+        // ═══════════════════════════════════════════
+        //  批量优化 — 按区域分组合并连续地址
+        // ═══════════════════════════════════════════
+
+        /// <summary>将地址列表按区域分组并合并连续范围，返回 (功能码, 起始地址, 数量) 的列表。</summary>
+        public static List<(byte Fc, ushort Start, ushort Count)> GroupAddressesForBatch(IEnumerable<string> addresses)
+        {
+            var parsed = new List<(string Raw, SchneiderAddress Addr)>();
+            foreach (var a in addresses)
+            {
+                var p = SchneiderAddress.TryParse(a);
+                if (p != null) parsed.Add((a, p));
+            }
+
+            var groups = parsed.GroupBy(x => x.Addr.FunctionCode);
+            var result = new List<(byte Fc, ushort Start, ushort Count)>();
+
+            foreach (var group in groups)
+            {
+                var sorted = group.OrderBy(x => x.Addr.AddressValue).ToList();
+                int i = 0;
+                while (i < sorted.Count)
+                {
+                    ushort start = sorted[i].Addr.AddressValue;
+                    ushort end = start;
+                    while (i + 1 < sorted.Count && sorted[i + 1].Addr.AddressValue - end <= 1)
+                    {
+                        i++;
+                        end = sorted[i].Addr.AddressValue;
+                    }
+                    ushort count = (ushort)(end - start + 1);
+                    result.Add((group.Key, start, count));
+                    i++;
+                }
+            }
+            return result;
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try
+            {
+                var addr = SchneiderAddress.TryParse("%MW0");
+                if (addr == null) return null;
+                return BuildReadPdu(addr.FunctionCode, addr.AddressValue, 1);
+            }
+            catch { return null; }
         }
     }
 }

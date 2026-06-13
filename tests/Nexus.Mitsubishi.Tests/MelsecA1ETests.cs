@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Nexus.Mitsubishi;
 
@@ -597,6 +600,200 @@ public class MelsecA1ETests
             server.Stop();
             server.Dispose();
         }
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadInt16_ReusesPersistentConnection()
+    {
+        int port = PortBase + 30;
+        var server = new MelsecA1EVirtualServer(port);
+        server.SetDWord(100, 0x1234);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+
+            var first = pool.ReadInt16("D100");
+            Assert.True(first.IsSuccess, first.Message);
+            Assert.Equal(0x1234, (ushort)first.Content);
+
+            var second = pool.ReadInt16("D100");
+            Assert.True(second.IsSuccess, second.Message);
+            Assert.Equal(0x1234, (ushort)second.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_WriteAndReadWord_RoundTrip()
+    {
+        int port = PortBase + 31;
+        var server = new MelsecA1EVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+
+            var write = pool.Write("D200", unchecked((short)0xABCD));
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("D200");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal(unchecked((short)0xABCD), read.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_WriteAndReadBools_RoundTrip()
+    {
+        int port = PortBase + 32;
+        var server = new MelsecA1EVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+            var values = new[] { true, false, true, true, false };
+
+            var write = pool.WriteBools("M300", values);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadBools("M300", (ushort)values.Length);
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal(values, read.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_BatchReadAndWrite_UsesSingleConnection()
+    {
+        int port = PortBase + 33;
+        var server = new MelsecA1EVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+
+            var write = pool.BatchWrite(new[]
+            {
+                new KeyValuePair<string, object>("D10", (short)123),
+                new KeyValuePair<string, object>("D11", (short)456)
+            });
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.BatchRead(new[] { "D10", "D11" });
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)123, read.Content["D10"]);
+            Assert.Equal((short)456, read.Content["D11"]);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectionPool_ExecuteAsync_ReadInt16_ReusesPersistentConnection()
+    {
+        int port = PortBase + 34;
+        var server = new MelsecA1EVirtualServer(port);
+        server.SetDWord(30, 0x012C);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+
+            var result = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("D30")));
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)300, result.Content);
+
+            var second = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("D30")));
+            Assert.True(second.IsSuccess, second.Message);
+            Assert.Equal((short)300, second.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsMessageEvents()
+    {
+        int port = PortBase + 35;
+        var server = new MelsecA1EVirtualServer(port);
+        server.SetDWord(40, 0x002A);
+        server.Start();
+
+        try
+        {
+            using var pool = new MelsecA1EConnectionPool("127.0.0.1", port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, _) => sent++;
+            pool.OnMessageReceived += (_, _) => received++;
+
+            var result = pool.ReadInt16("D40");
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)42, result.Content);
+
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    private static bool WaitForConnections(MelsecA1EVirtualServer server, int expected, int timeoutMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (server.ConnectionCount >= expected)
+                return true;
+            Thread.Sleep(10);
+        }
+        return server.ConnectionCount >= expected;
     }
 
     #endregion

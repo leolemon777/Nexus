@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Nexus.Modbus;
 using Xunit;
 
@@ -15,9 +16,13 @@ internal sealed class ModbusAsciiOverTcpTestServer : IDisposable
     private readonly ushort[] _holdingRegisters = new ushort[65536];
     private Thread? _thread;
     private volatile bool _running;
+    private int _connectionCount;
+    private int _requestCount;
 
     public int Port { get; }
     public string LastRequestText { get; private set; } = string.Empty;
+    public int ConnectionCount => Volatile.Read(ref _connectionCount);
+    public int RequestCount => Volatile.Read(ref _requestCount);
 
     public ModbusAsciiOverTcpTestServer()
     {
@@ -43,6 +48,7 @@ internal sealed class ModbusAsciiOverTcpTestServer : IDisposable
             try
             {
                 var client = _listener.AcceptTcpClient();
+                Interlocked.Increment(ref _connectionCount);
                 var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                 thread.Start();
             }
@@ -68,6 +74,7 @@ internal sealed class ModbusAsciiOverTcpTestServer : IDisposable
                     string? request = ReadAsciiFrame(stream);
                     if (request == null) break;
                     LastRequestText = request;
+                    Interlocked.Increment(ref _requestCount);
 
                     byte[] raw = DecodeAsciiFrame(request);
                     byte station = raw[0];
@@ -197,6 +204,109 @@ internal sealed class ModbusAsciiOverTcpTestServer : IDisposable
     {
         _running = false;
         try { _listener.Stop(); } catch { }
+    }
+}
+
+public class ModbusAsciiOverTcpConnectionPoolTests
+{
+    [Fact]
+    public void ConnectionPool_ReadUInt16_ReusesPersistentConnection()
+    {
+        using var server = new ModbusAsciiOverTcpTestServer();
+        server.SetHoldingRegister(0, 0x1234);
+        server.Start();
+
+        using var pool = new ModbusAsciiOverTcpConnectionPool("127.0.0.1", server.Port, station: 1, timeout: 2000);
+
+        var first = pool.ReadUInt16("0");
+        Assert.True(first.IsSuccess, first.Message);
+        Assert.Equal((ushort)0x1234, first.Content);
+
+        var second = pool.ReadUInt16("0");
+        Assert.True(second.IsSuccess, second.Message);
+        Assert.Equal((ushort)0x1234, second.Content);
+
+        Assert.True(WaitForConnections(server, 1));
+        Assert.Equal(1, server.ConnectionCount);
+        Assert.Equal(2, server.RequestCount);
+        Assert.Equal(0, pool.ActiveCount);
+        Assert.Equal(1, pool.IdleCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_MaskWriteAndRead_RoundTrip()
+    {
+        using var server = new ModbusAsciiOverTcpTestServer();
+        server.SetHoldingRegister(16, 0x1234);
+        server.Start();
+
+        using var pool = new ModbusAsciiOverTcpConnectionPool("127.0.0.1", server.Port, station: 1, timeout: 2000);
+
+        var write = pool.MaskWriteRegister("16", 0xFF00, 0x00F0);
+        var read = pool.ReadUInt16("16");
+
+        Assert.True(write.IsSuccess, write.Message);
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((ushort)0x12F0, read.Content);
+        Assert.Equal((ushort)0x12F0, server.GetHoldingRegister(16));
+        Assert.True(WaitForConnections(server, 1));
+        Assert.Equal(1, server.ConnectionCount);
+        Assert.Equal(2, server.RequestCount);
+    }
+
+    [Fact]
+    public async Task ConnectionPool_ExecuteAsync_ReadUInt16_ReusesPersistentConnection()
+    {
+        using var server = new ModbusAsciiOverTcpTestServer();
+        server.SetHoldingRegister(0, 0x012C);
+        server.Start();
+
+        using var pool = new ModbusAsciiOverTcpConnectionPool("127.0.0.1", server.Port, station: 1, timeout: 2000);
+
+        var first = await pool.ExecuteAsync(c => Task.FromResult(c.ReadUInt16("0")));
+        Assert.True(first.IsSuccess, first.Message);
+        Assert.Equal((ushort)300, first.Content);
+
+        var second = await pool.ExecuteAsync(c => Task.FromResult(c.ReadUInt16("0")));
+        Assert.True(second.IsSuccess, second.Message);
+        Assert.Equal((ushort)300, second.Content);
+
+        Assert.True(WaitForConnections(server, 1));
+        Assert.Equal(1, server.ConnectionCount);
+        Assert.Equal(2, server.RequestCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsMessageEvents()
+    {
+        using var server = new ModbusAsciiOverTcpTestServer();
+        server.SetHoldingRegister(0, 0x002A);
+        server.Start();
+
+        using var pool = new ModbusAsciiOverTcpConnectionPool("127.0.0.1", server.Port, station: 1, timeout: 2000);
+        int sent = 0;
+        int received = 0;
+        pool.OnMessageSent += (_, _) => sent++;
+        pool.OnMessageReceived += (_, _) => received++;
+
+        var result = pool.ReadUInt16("0");
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)42, result.Content);
+
+        Assert.True(sent > 0);
+        Assert.True(received > 0);
+    }
+
+    private static bool WaitForConnections(ModbusAsciiOverTcpTestServer server, int expected, int timeoutMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (server.ConnectionCount >= expected)
+                return true;
+            Thread.Sleep(10);
+        }
+        return server.ConnectionCount >= expected;
     }
 }
 

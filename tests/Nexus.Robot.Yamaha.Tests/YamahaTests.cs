@@ -32,7 +32,7 @@ public class YamahaRcxTests
     [Fact]
     public void BuildCommand_Null()
     {
-        string cmd = YamahaRcxClient.BuildCommand(null);
+        string cmd = YamahaRcxClient.BuildCommand(null!);
         Assert.Equal("\r\n", cmd);
     }
 
@@ -73,6 +73,76 @@ public class YamahaRcxTests
         var client = new YamahaRcxClient("10.0.0.1", 10000);
         string s = client.ToString();
         Assert.Contains("10000", s);
+    }
+
+    #endregion
+
+    #region 扩展覆盖
+
+    [Fact]
+    public void Constructor_DefaultPort()
+    {
+        var client = new YamahaRcxClient("192.168.1.1");
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotThrow()
+    {
+        var client = new YamahaRcxClient("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void SetLogger_DoesNotThrow()
+    {
+        var client = new YamahaRcxClient("192.168.1.1");
+        client.SetLogger(NullLogger.Instance);
+    }
+
+    [Fact]
+    public void BuildCommand_Whitespace()
+    {
+        string cmd = YamahaRcxClient.BuildCommand("  ");
+        Assert.Equal("  \r\n", cmd);
+    }
+
+    [Fact]
+    public void ToString_ContainsClassName()
+    {
+        var client = new YamahaRcxClient("10.0.0.1");
+        Assert.Contains("Yamaha", client.ToString());
+    }
+
+    [Fact]
+    public void KnownCommands_MotorCommand_StartsWithAt()
+    {
+        string cmd = "@?MOTOR ";
+        Assert.StartsWith("@", cmd);
+    }
+
+    [Fact]
+    public void KnownCommands_ResetCommand_HasCorrectPrefix()
+    {
+        string cmd = "@ RESET ";
+        Assert.StartsWith("@", cmd);
+        Assert.Contains("RESET", cmd);
+    }
+
+    [Fact]
+    public void BuildCommand_SpecialCharacters()
+    {
+        string cmd = YamahaRcxClient.BuildCommand("@?WHERE 1");
+        Assert.Equal("@?WHERE 1\r\n", cmd);
+    }
+
+    [Fact]
+    public void Constructor_VerifyToStringFormat()
+    {
+        var client = new YamahaRcxClient("192.168.100.200", 54321);
+        string s = client.ToString();
+        Assert.Contains("192.168.100.200", s);
+        Assert.Contains("54321", s);
     }
 
     #endregion

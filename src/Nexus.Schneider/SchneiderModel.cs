@@ -128,4 +128,34 @@ namespace Nexus.Schneider
             }
         }
     }
+
+    /// <summary>PLC 识别信息。</summary>
+    public class SchneiderPlcInfo
+    {
+        /// <summary>设备类型编码。</summary>
+        public ushort DeviceType { get; set; }
+        /// <summary>固件版本。</summary>
+        public ushort FirmwareVersion { get; set; }
+        /// <summary>硬件版本。</summary>
+        public ushort HardwareVersion { get; set; }
+        /// <summary>状态字。</summary>
+        public ushort StatusWord { get; set; }
+    }
+
+    /// <summary>PLC 诊断信息。</summary>
+    public class SchneiderDiagnostics
+    {
+        /// <summary>通信错误计数。</summary>
+        public ushort CommErrorCount { get; set; }
+        /// <summary>CRC 错误计数。</summary>
+        public ushort CrcErrorCount { get; set; }
+        /// <summary>超时计数。</summary>
+        public ushort TimeoutCount { get; set; }
+        /// <summary>异常响应计数。</summary>
+        public ushort ExceptionCount { get; set; }
+        /// <summary>最后错误码。</summary>
+        public ushort LastErrorCode { get; set; }
+        /// <summary>运行模式（0=Stop, 1=Run, 2=Debug）。</summary>
+        public ushort RunMode { get; set; }
+    }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 
@@ -76,7 +77,7 @@ namespace Nexus.Panasonic
                     _stream.Write(txBytes, 0, txBytes.Length);
 
                     // 读取响应: %SSCC...BCC\r
-                    string response = ReadFrame();
+                    string? response = ReadFrame();
                     if (response == null)
                         return OperateResult<string>.Failed("读取响应超时");
 
@@ -101,7 +102,7 @@ namespace Nexus.Panasonic
                     }
 
                     // 验证 BCC
-                    string respBody = response.Substring(1, response.Length - 3); // 去掉 % 和 BCC+\r
+                    string respBody = response.Substring(1, response.Length - 4); // 去掉 % 和 BCC+\r
                     byte expectedBcc = ComputeBcc(respBody);
                     string respBcc = response.Substring(response.Length - 3, 2);
                     if (expectedBcc.ToString("X2") != respBcc)
@@ -460,8 +461,11 @@ namespace Nexus.Panasonic
             var r = ReadRegisters(area, addr, regCount);
             if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode);
             byte[] data = HexToBytes(r.Content);
+            if (data.Length < length)
+                return OperateResult<byte[]>.Failed($"响应数据不足: 期望 {length} 字节，实际 {data.Length} 字节");
+
             byte[] result = new byte[length];
-            Array.Copy(data, result, Math.Min(length, data.Length));
+            Array.Copy(data, result, length);
             return OperateResult<byte[]>.Success(result);
         }
 
@@ -491,8 +495,19 @@ namespace Nexus.Panasonic
         }
 
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value)
+        {
+            var (area, addr) = ParseAddress(address);
+            string hex = unchecked((ulong)value).ToString("X16");
+            return WriteRegisters(area, addr, hex);
+        }
+
+        public OperateResult Write(string address, ulong value)
+        {
+            var (area, addr) = ParseAddress(address);
+            string hex = value.ToString("X16");
+            return WriteRegisters(area, addr, hex);
+        }
 
         public unsafe OperateResult Write(string address, float value)
         {
@@ -500,7 +515,11 @@ namespace Nexus.Panasonic
             return Write(address, v);
         }
 
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public unsafe OperateResult Write(string address, double value)
+        {
+            ulong v = *(ulong*)&value;
+            return Write(address, v);
+        }
 
         public OperateResult Write(string address, string value)
         {
@@ -513,6 +532,9 @@ namespace Nexus.Panasonic
 
         public OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var (area, addr) = ParseAddress(address);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
             string hex = BytesToHex(data);
@@ -525,7 +547,7 @@ namespace Nexus.Panasonic
 
         private static short HexToInt16(string hex) => (short)ushort.Parse(hex.Substring(0, 4), System.Globalization.NumberStyles.HexNumber);
         private static uint HexToUInt32(string hex) => uint.Parse(hex.Substring(0, 8), System.Globalization.NumberStyles.HexNumber);
-        private static long HexToInt64(string hex) => long.Parse(hex.Substring(0, 16), System.Globalization.NumberStyles.HexNumber);
+        private static long HexToInt64(string hex) => unchecked((long)ulong.Parse(hex.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
 
         private static byte[] HexToBytes(string hex)
         {
@@ -597,8 +619,12 @@ namespace Nexus.Panasonic
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, object?>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadInt16(addr);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
@@ -615,8 +641,12 @@ namespace Nexus.Panasonic
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, byte[]>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadBytes(addr, 2);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
@@ -633,7 +663,11 @@ namespace Nexus.Panasonic
         /// <inheritdoc/>
         public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
         {
-            foreach (var kv in items)
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
             {
                 OperateResult r = kv.Value switch
                 {

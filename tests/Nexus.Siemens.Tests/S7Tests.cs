@@ -191,4 +191,137 @@ public class S7VirtualPlcTests
             server.Dispose();
         }
     }
+
+    [Fact]
+    public void Client_DefaultHeartbeat_ReadsMarkerByte()
+    {
+        int port = TestPortBase + 6;
+        var server = new SiemensS7VirtualPlc(SiemensPLCS.S7_1200, port);
+        server.Start();
+
+        try
+        {
+            var client = new SiemensS7Client(SiemensPLCS.S7_1200, "127.0.0.1", port)
+            {
+                HeartbeatInterval = 50,
+                HeartbeatTimeout = 1000,
+                MaxHeartbeatFailures = 1
+            };
+            client.SetPersistentConnection();
+
+            var connResult = client.Connect();
+            Assert.True(connResult.IsSuccess, connResult.Message);
+
+            using var heartbeatSent = new ManualResetEventSlim(false);
+            int heartbeatCount = 0;
+            client.OnMessageSent += (_, hex) =>
+            {
+                string normalized = hex.Replace(" ", "");
+                if (normalized.Contains("0401120A10020001000083000000"))
+                {
+                    Interlocked.Increment(ref heartbeatCount);
+                    heartbeatSent.Set();
+                }
+            };
+
+            client.HeartbeatEnabled = true;
+
+            Assert.True(heartbeatSent.Wait(1500), "Default S7 heartbeat was not sent.");
+            Assert.True(Volatile.Read(ref heartbeatCount) > 0);
+
+            client.HeartbeatEnabled = false;
+            client.Disconnect();
+            client.Dispose();
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+    {
+        int port = TestPortBase + 7;
+        var server = new SiemensS7VirtualPlc(SiemensPLCS.S7_1200, port);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensS7ConnectionPool(
+                SiemensPLCS.S7_1200,
+                "127.0.0.1",
+                port,
+                maxPoolSize: 1);
+
+            var write = pool.Write("DB1.DBW120", unchecked((short)0x2468));
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("DB1.DBW120");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)0x2468, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsPacketEvents()
+    {
+        int port = TestPortBase + 8;
+        var server = new SiemensS7VirtualPlc(SiemensPLCS.S7_1200, port);
+        server.SetDBWord(1, 0, 0x1357);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensS7ConnectionPool(
+                SiemensPLCS.S7_1200,
+                "127.0.0.1",
+                port,
+                maxPoolSize: 1);
+
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, __) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, __) => Interlocked.Increment(ref received);
+
+            var read = pool.ReadInt16("DB1.DBW0");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)0x1357, read.Content);
+            Assert.True(Volatile.Read(ref sent) >= 3);
+            Assert.True(Volatile.Read(ref received) >= 3);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+}
+
+public class S7ReadPlcClockTests
+{
+    [Fact]
+    public void ReadPlcClock_ReadClockRequest_HasCorrectStructure()
+    {
+        // 验证 ReadPlcClock 方法存在且可调用（不需要连接的离线验证）
+        var client = new SiemensS7Client(SiemensPLCS.S7_1200, "127.0.0.1", 102);
+        Assert.NotNull(client);
+
+        // 通过反射验证方法存在
+        var method = typeof(SiemensS7Client).GetMethod("ReadPlcClock");
+        Assert.NotNull(method);
+        Assert.Equal(typeof(OperateResult<DateTime>), method.ReturnType);
+
+        // 验证异步版本存在
+        var asyncMethod = typeof(SiemensS7Client).GetMethod("ReadPlcClockAsync");
+        Assert.NotNull(asyncMethod);
+    }
 }

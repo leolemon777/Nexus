@@ -11,10 +11,10 @@ namespace Nexus.Mqtt
     public class MqttClient : IDisposable
     {
         private TcpClient _tcpClient;
-        private NetworkStream _stream;
-        private CancellationTokenSource _cts;
-        private Task _receiveLoop;
-        private Task _keepAliveLoop;
+        private NetworkStream? _stream;
+        private CancellationTokenSource? _cts;
+        private Task? _receiveLoop;
+        private Task? _keepAliveLoop;
         private readonly object _writeLock = new object();
         private volatile bool _isConnected;
         private int _packetIdCounter;
@@ -31,27 +31,27 @@ namespace Nexus.Mqtt
         private readonly ConcurrentDictionary<ushort, MqttPublishPacket> _inflightQoS2
             = new ConcurrentDictionary<ushort, MqttPublishPacket>();
 
-        public string Host { get; private set; }
+        public string Host { get; private set; } = "";
         public int Port { get; private set; }
-        public string ClientId { get; private set; }
+        public string ClientId { get; private set; } = "";
         public bool CleanSession { get; set; } = true;
         public ushort KeepAlivePeriod { get; set; } = 60;
-        public MqttLastWill LastWill { get; set; }
+        public MqttLastWill? LastWill { get; set; }
         public int ReceiveTimeout { get; set; } = 30000;
         public int SendTimeout { get; set; } = 30000;
         public bool IsConnected => _isConnected;
 
-        public event EventHandler<MqttMessageEventArgs> OnMessageReceived;
-        public event EventHandler OnConnected;
-        public event EventHandler OnDisconnected;
+        public event EventHandler<MqttMessageEventArgs>? OnMessageReceived;
+        public event EventHandler? OnConnected;
+        public event EventHandler? OnDisconnected;
 
         public MqttClient()
         {
             _tcpClient = new TcpClient();
         }
 
-        public async Task ConnectAsync(string host, int port = 1883, string clientId = null,
-            string username = null, string password = null)
+        public async Task ConnectAsync(string host, int port = 1883, string? clientId = null,
+            string? username = null, string? password = null)
         {
             if (_isConnected)
                 throw new InvalidOperationException("Already connected");
@@ -92,7 +92,7 @@ namespace Nexus.Mqtt
             byte[] connectBytes = MqttPacket.EncodeConnect(connectPacket);
             await WriteAsync(connectBytes).ConfigureAwait(false);
 
-            byte[] connAckBytes = await ReadPacketAsync(_cts.Token).ConfigureAwait(false);
+            byte[]? connAckBytes = await ReadPacketAsync(_cts.Token).ConfigureAwait(false);
             if (connAckBytes == null || connAckBytes.Length < 4)
                 throw new MqttProtocolException("Did not receive CONNACK");
 
@@ -323,7 +323,7 @@ namespace Nexus.Mqtt
             return Task.CompletedTask;
         }
 
-        private async Task<byte[]> ReadPacketAsync(CancellationToken ct)
+        private async Task<byte[]?> ReadPacketAsync(CancellationToken ct)
         {
             if (_stream == null) return null;
 
@@ -385,7 +385,7 @@ namespace Nexus.Mqtt
             {
                 while (!ct.IsCancellationRequested && _isConnected)
                 {
-                    byte[] packet;
+                    byte[]? packet;
                     try
                     {
                         packet = await ReadPacketAsync(ct).ConfigureAwait(false);

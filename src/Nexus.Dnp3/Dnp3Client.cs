@@ -22,6 +22,7 @@ namespace Nexus.Dnp3
         public int ConfirmTimeout { get; set; } = Dnp3Constants.DefaultConfirmTimeout;
 
         private byte _appSequence;
+        private byte _transportSequence;
 
         /// <inheritdoc/>
         protected override int ResponseHeaderLength => 10;
@@ -35,8 +36,8 @@ namespace Nexus.Dnp3
             return length - 8; // 减去帧头已读的部分
         }
 
-        public Dnp3Client(string ip, int port = 20000)
-            : base(ip, port)
+        public Dnp3Client(string ip, int port = 20000, int timeout = 5000)
+            : base(ip, port, timeout)
         {
         }
 
@@ -60,14 +61,39 @@ namespace Nexus.Dnp3
             frame[6] = (byte)(source & 0xFF);
             frame[7] = (byte)((source >> 8) & 0xFF);
 
-            // CRC 计算简化 — 使用0x0000占位
-            frame[8] = 0x00;
-            frame[9] = 0x00;
+            // CRC-16/DNP3 for header (bytes 0-7)
+            ushort headerCrc = CalculateDnp3Crc(frame, 0, 8);
+            frame[8] = (byte)(headerCrc & 0xFF);
+            frame[9] = (byte)((headerCrc >> 8) & 0xFF);
 
             if (userData != null && userData.Length > 0)
+            {
                 Buffer.BlockCopy(userData, 0, frame, 10, userData.Length);
+                // CRC-16/DNP3 for user data block
+                ushort dataCrc = CalculateDnp3Crc(frame, 10, userData.Length);
+                int crcOffset = 10 + userData.Length;
+                // Reallocate if needed to append data CRC
+                byte[] fullFrame = new byte[crcOffset + 2];
+                Buffer.BlockCopy(frame, 0, fullFrame, 0, crcOffset);
+                fullFrame[crcOffset] = (byte)(dataCrc & 0xFF);
+                fullFrame[crcOffset + 1] = (byte)((dataCrc >> 8) & 0xFF);
+                return fullFrame;
+            }
 
             return frame;
+        }
+
+        /// <summary>计算 CRC-16/DNP3（多项式 0xA6BC，初始值 0x0000，输入反转，输出反转）。</summary>
+        public static ushort CalculateDnp3Crc(byte[] data, int offset, int length)
+        {
+            ushort crc = 0x0000;
+            for (int i = offset; i < offset + length; i++)
+            {
+                crc = (ushort)(crc ^ data[i]);
+                for (int j = 0; j < 8; j++)
+                    crc = (ushort)((crc & 1) != 0 ? (crc >> 1) ^ 0xA6BC : crc >> 1);
+            }
+            return crc;
         }
 
         // ═══════════════════════════════════════════
@@ -109,6 +135,87 @@ namespace Nexus.Dnp3
             return pdu;
         }
 
+        /// <summary>构建 Select（预操作）请求。</summary>
+        public static byte[] BuildSelectRequest(byte sequence, Dnp3Group group, Dnp3Variation variation, ushort index, byte[] data)
+        {
+            byte[] pdu = new byte[8 + data.Length];
+            pdu[0] = (byte)(0xC0 | (sequence & 0x0F));
+            pdu[1] = (byte)Dnp3FunctionCode.Select;
+            pdu[2] = (byte)group;
+            pdu[3] = (byte)variation;
+            pdu[4] = 0x17; // Qualifier: 1-byte index
+            pdu[5] = (byte)(index & 0xFF);
+            pdu[6] = (byte)((index >> 8) & 0xFF);
+            pdu[7] = (byte)data.Length;
+            Buffer.BlockCopy(data, 0, pdu, 8, data.Length);
+            return pdu;
+        }
+
+        /// <summary>构建 Operate（操作）请求。</summary>
+        public static byte[] BuildOperateRequest(byte sequence, Dnp3Group group, Dnp3Variation variation, ushort index, byte[] data)
+        {
+            byte[] pdu = new byte[8 + data.Length];
+            pdu[0] = (byte)(0xC0 | (sequence & 0x0F));
+            pdu[1] = (byte)Dnp3FunctionCode.Operate;
+            pdu[2] = (byte)group;
+            pdu[3] = (byte)variation;
+            pdu[4] = 0x17; // Qualifier: 1-byte index
+            pdu[5] = (byte)(index & 0xFF);
+            pdu[6] = (byte)((index >> 8) & 0xFF);
+            pdu[7] = (byte)data.Length;
+            Buffer.BlockCopy(data, 0, pdu, 8, data.Length);
+            return pdu;
+        }
+
+        /// <summary>构建 Write 请求（带对象头）。</summary>
+        public static byte[] BuildWriteRequest(byte sequence, Dnp3Group group, Dnp3Variation variation, ushort index, byte[] data)
+        {
+            byte[] pdu = new byte[8 + data.Length];
+            pdu[0] = (byte)(0xC0 | (sequence & 0x0F));
+            pdu[1] = (byte)Dnp3FunctionCode.Write;
+            pdu[2] = (byte)group;
+            pdu[3] = (byte)variation;
+            pdu[4] = 0x17; // Qualifier: 1-byte index
+            pdu[5] = (byte)(index & 0xFF);
+            pdu[6] = (byte)((index >> 8) & 0xFF);
+            pdu[7] = (byte)data.Length;
+            Buffer.BlockCopy(data, 0, pdu, 8, data.Length);
+            return pdu;
+        }
+
+        /// <summary>构建 ColdRestart 请求。</summary>
+        public static byte[] BuildColdRestartRequest(byte sequence)
+        {
+            byte[] pdu = new byte[2];
+            pdu[0] = (byte)(0xC0 | (sequence & 0x0F));
+            pdu[1] = (byte)Dnp3FunctionCode.ColdRestart;
+            return pdu;
+        }
+
+        /// <summary>构建 DelayMeasure 请求。</summary>
+        public static byte[] BuildDelayMeasureRequest(byte sequence)
+        {
+            byte[] pdu = new byte[2];
+            pdu[0] = (byte)(0xC0 | (sequence & 0x0F));
+            pdu[1] = (byte)Dnp3FunctionCode.DelayMeasure;
+            return pdu;
+        }
+
+        /// <summary>获取下一个传输层序列号（0-63 循环）。</summary>
+        private byte NextTransportSequence()
+        {
+            return unchecked(++_transportSequence);
+        }
+
+        /// <summary>添加传输层头（FIN=1, FIR=1, 序列号）。</summary>
+        public static byte[] WrapWithTransportHeader(byte transportSeq, byte[] appData)
+        {
+            byte[] result = new byte[1 + appData.Length];
+            result[0] = (byte)(0xC0 | (transportSeq & 0x3F)); // FIR=1, FIN=1
+            Buffer.BlockCopy(appData, 0, result, 1, appData.Length);
+            return result;
+        }
+
         // ═══════════════════════════════════════════
         //  IReadWriteDevice
         // ═══════════════════════════════════════════
@@ -118,7 +225,8 @@ namespace Nexus.Dnp3
             try
             {
                 byte seq = unchecked(++_appSequence);
-                byte[] appPdu = BuildReadRequest(seq, Dnp3Group.AnalogInput, Dnp3Variation.AnalogInputFloat32, 0, length);
+                ushort stop = length > 0 ? (ushort)(length - 1) : (ushort)0;
+                byte[] appPdu = BuildReadRequest(seq, Dnp3Group.AnalogInput, Dnp3Variation.AnalogInputFloat32, 0, stop);
                 byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
 
                 var result = SendAndReceive(linkFrame);
@@ -182,17 +290,16 @@ namespace Nexus.Dnp3
                 if (!result.IsSuccess) return OperateResult<bool[]>.Failed(result.Message);
 
                 byte[] resp = result.Content;
-                if (resp == null || resp.Length < 14)
+                const int dataOffset = 12;
+                int byteCount = (count + 7) / 8;
+                if (resp == null || resp.Length < dataOffset + byteCount)
                     return OperateResult<bool[]>.Failed("响应数据不足");
 
-                // 检查 IIN 标志
                 ushort iin = (ushort)((resp[4] << 8) | resp[5]);
                 if ((iin & (ushort)Dnp3IinFlags.DeviceTrouble) != 0)
                     return OperateResult<bool[]>.Failed("设备故障: " + Dnp3ErrorCodes.GetIinDescription(iin));
 
                 var values = new bool[count];
-                // 解析打包的位数据（简化）
-                int dataOffset = 12;
                 for (int i = 0; i < count && dataOffset < resp.Length; i++)
                 {
                     int byteIdx = i / 8;
@@ -206,6 +313,202 @@ namespace Nexus.Dnp3
             catch (Exception ex)
             {
                 return OperateResult<bool[]>.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>读取计数器（32 位无符号整数）。</summary>
+        public OperateResult<uint[]> ReadCounters(ushort start, ushort count)
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] appPdu = BuildReadRequest(seq, Dnp3Group.Counter, Dnp3Variation.Counter32, start, (ushort)(start + count - 1));
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return OperateResult<uint[]>.Failed(result.Message);
+
+                byte[] resp = result.Content;
+                if (resp == null || resp.Length < 12 + count * 4)
+                    return OperateResult<uint[]>.Failed("响应数据不足");
+
+                ushort iin = (ushort)((resp[4] << 8) | resp[5]);
+                if ((iin & (ushort)Dnp3IinFlags.DeviceTrouble) != 0)
+                    return OperateResult<uint[]>.Failed("设备故障: " + Dnp3ErrorCodes.GetIinDescription(iin));
+
+                var values = new uint[count];
+                for (int i = 0; i < count; i++)
+                    values[i] = BitConverter.ToUInt32(resp, 12 + i * 4);
+
+                return OperateResult<uint[]>.Success(values);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<uint[]>.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>读取模拟输出状态。</summary>
+        public OperateResult<float[]> ReadAnalogOutputs(ushort start, ushort count)
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] appPdu = BuildReadRequest(seq, Dnp3Group.AnalogOutput, Dnp3Variation.AnalogOutputFloat32, start, (ushort)(start + count - 1));
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return OperateResult<float[]>.Failed(result.Message);
+
+                byte[] resp = result.Content;
+                if (resp == null || resp.Length < 12 + count * 4)
+                    return OperateResult<float[]>.Failed("响应数据不足");
+
+                var values = new float[count];
+                for (int i = 0; i < count; i++)
+                    values[i] = BitConverter.ToSingle(resp, 12 + i * 4);
+
+                return OperateResult<float[]>.Success(values);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<float[]>.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>Select-Before-Operate：先 Select 再 Operate（二进制输出）。</summary>
+        public OperateResult SelectBeforeOperateBinary(ushort index, bool value)
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] data = new byte[] { (byte)(value ? 1 : 0) };
+
+                // Select
+                byte[] selectPdu = BuildSelectRequest(seq, Dnp3Group.BinaryOutput, Dnp3Variation.BinaryOutputPacked, index, data);
+                byte[] selectFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, selectPdu);
+                var selectResult = SendAndReceive(selectFrame);
+                if (!selectResult.IsSuccess) return OperateResult.Failed("Select 失败: " + selectResult.Message);
+
+                // Operate
+                byte seq2 = unchecked(++_appSequence);
+                byte[] operatePdu = BuildOperateRequest(seq2, Dnp3Group.BinaryOutput, Dnp3Variation.BinaryOutputPacked, index, data);
+                byte[] operateFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, operatePdu);
+                var operateResult = SendAndReceive(operateFrame);
+                if (!operateResult.IsSuccess) return OperateResult.Failed("Operate 失败: " + operateResult.Message);
+
+                return OperateResult.Success();
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>Select-Before-Operate：先 Select 再 Operate（模拟输出）。</summary>
+        public OperateResult SelectBeforeOperateAnalog(ushort index, float value)
+        {
+            try
+            {
+                byte[] data = BitConverter.GetBytes(value);
+
+                byte seq = unchecked(++_appSequence);
+                byte[] selectPdu = BuildSelectRequest(seq, Dnp3Group.AnalogOutput, Dnp3Variation.AnalogOutputFloat32, index, data);
+                byte[] selectFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, selectPdu);
+                var selectResult = SendAndReceive(selectFrame);
+                if (!selectResult.IsSuccess) return OperateResult.Failed("Select 失败: " + selectResult.Message);
+
+                byte seq2 = unchecked(++_appSequence);
+                byte[] operatePdu = BuildOperateRequest(seq2, Dnp3Group.AnalogOutput, Dnp3Variation.AnalogOutputFloat32, index, data);
+                byte[] operateFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, operatePdu);
+                var operateResult = SendAndReceive(operateFrame);
+                if (!operateResult.IsSuccess) return OperateResult.Failed("Operate 失败: " + operateResult.Message);
+
+                return OperateResult.Success();
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>执行冷重启。</summary>
+        public OperateResult ColdRestart()
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] appPdu = BuildColdRestartRequest(seq);
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return OperateResult.Failed(result.Message);
+                return OperateResult.Success();
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>执行延迟测量（返回延迟毫秒数）。</summary>
+        public OperateResult<ushort> DelayMeasure()
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] appPdu = BuildDelayMeasureRequest(seq);
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return OperateResult<ushort>.Failed(result.Message);
+
+                byte[] resp = result.Content;
+                if (resp == null || resp.Length < 14)
+                    return OperateResult<ushort>.Failed("延迟测量响应不足");
+
+                ushort delayMs = (ushort)((resp[12] << 8) | resp[13]);
+                return OperateResult<ushort>.Success(delayMs);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<ushort>.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>Direct Operate 二进制输出。</summary>
+        public OperateResult DirectOperateBinary(ushort index, bool value)
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] data = new byte[] { (byte)(value ? 1 : 0) };
+                byte[] appPdu = BuildDirectOperateRequest(seq, Dnp3Group.BinaryOutput, Dnp3Variation.BinaryOutputPacked, index, data);
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return result;
+                return OperateResult.Success();
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed(ex.Message);
+            }
+        }
+
+        /// <summary>Direct Operate 模拟输出。</summary>
+        public OperateResult DirectOperateAnalog(ushort index, float value)
+        {
+            try
+            {
+                byte seq = unchecked(++_appSequence);
+                byte[] data = BitConverter.GetBytes(value);
+                byte[] appPdu = BuildDirectOperateRequest(seq, Dnp3Group.AnalogOutput, Dnp3Variation.AnalogOutputFloat32, index, data);
+                byte[] linkFrame = BuildLinkHeader(OutstationAddress, MasterAddress, 0xC4, appPdu);
+                var result = SendAndReceive(linkFrame);
+                if (!result.IsSuccess) return result;
+                return OperateResult.Success();
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed(ex.Message);
             }
         }
 
@@ -443,6 +746,13 @@ namespace Nexus.Dnp3
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadRequest(0, Dnp3Group.AnalogInput, Dnp3Variation.AnalogInputInt16, 0, 1); }
+            catch { return null; }
         }
     }
 }

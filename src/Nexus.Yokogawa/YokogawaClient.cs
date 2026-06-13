@@ -81,8 +81,9 @@ namespace Nexus.Yokogawa
         /// </summary>
         /// <param name="ip">PLC IP 地址。</param>
         /// <param name="port">端口号（默认 8000）。</param>
-        public YokogawaClient(string ip, int port = 8000)
-            : base(ip, port)
+        /// <param name="timeout">超时时间（毫秒）。</param>
+        public YokogawaClient(string ip, int port = 8000, int timeout = 5000)
+            : base(ip, port, timeout)
         {
         }
 
@@ -911,6 +912,13 @@ namespace Nexus.Yokogawa
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand("HR0", 1, false).Content; }
+            catch { return null; }
         }
     }
 }

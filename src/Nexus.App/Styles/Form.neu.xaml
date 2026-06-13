@@ -1,7 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
-  <!-- Form style: neu  (若 .NET 报 mscorlib 错，把上面 assembly=mscorlib 改为 System.Runtime) -->
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <!-- Form style: neu  (若 .NET 报 mscorlib 错，把上面 assembly=System.Runtime 改为 mscorlib) -->
   <CornerRadius x:Key="Radius.Lg">20</CornerRadius>
   <CornerRadius x:Key="Radius.Md">14</CornerRadius>
   <CornerRadius x:Key="Radius.Sm">10</CornerRadius>

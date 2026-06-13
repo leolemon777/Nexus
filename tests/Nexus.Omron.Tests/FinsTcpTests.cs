@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Nexus.Omron;
 
@@ -64,6 +65,48 @@ public class FinsTcpTests
         var result = client.Connect();
         Assert.False(result.IsSuccess);
         client.Dispose();
+    }
+
+    [Fact]
+    public void Client_DefaultHeartbeat_SendsMemoryAreaRead()
+    {
+        int port = TestPortBase + 2;
+        var server = new FinsVirtualServer(port);
+        server.SetDMWord(0, (ushort)0x1234);
+        server.Start();
+
+        try
+        {
+            var client = new FinsTcpClient("127.0.0.1", port, timeout: 1000)
+            {
+                HeartbeatInterval = 100,
+                HeartbeatTimeout = 500,
+                MaxHeartbeatFailures = 2
+            };
+            client.SetPersistentConnection();
+
+            int heartbeatCount = 0;
+            string lastHeartbeat = string.Empty;
+            client.OnMessageSent += (_, hex) =>
+            {
+                lastHeartbeat = hex;
+                Interlocked.Increment(ref heartbeatCount);
+            };
+
+            client.HeartbeatEnabled = true;
+            Thread.Sleep(450);
+            client.HeartbeatEnabled = false;
+
+            Assert.True(Volatile.Read(ref heartbeatCount) >= 2, $"Expected default heartbeat frames, got {heartbeatCount}");
+            Assert.Contains("010182000000000001", lastHeartbeat.Replace(" ", ""));
+            client.Disconnect();
+            client.Dispose();
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
     }
 
     // ── DM 区域读取 ──────────────────────────
@@ -938,7 +981,7 @@ public class FinsTcpTests
     }
 
     [Fact]
-    public void Client_RemoteRunAsync_Succeeds()
+    public async Task Client_RemoteRunAsync_Succeeds()
     {
         int port = TestPortBase + 112;
         var server = new FinsVirtualServer(port);
@@ -951,7 +994,7 @@ public class FinsTcpTests
             client.SetPersistentConnection();
             Assert.True(client.Connect().IsSuccess);
 
-            var result = client.RunAsync().Result;
+            var result = await client.RunAsync();
             Assert.True(result.IsSuccess, result.Message);
             Assert.True(server.IsPlcRunning);
 
@@ -966,7 +1009,7 @@ public class FinsTcpTests
     }
 
     [Fact]
-    public void Client_RemoteStopAsync_Succeeds()
+    public async Task Client_RemoteStopAsync_Succeeds()
     {
         int port = TestPortBase + 113;
         var server = new FinsVirtualServer(port);
@@ -978,7 +1021,7 @@ public class FinsTcpTests
             client.SetPersistentConnection();
             Assert.True(client.Connect().IsSuccess);
 
-            var result = client.StopAsync().Result;
+            var result = await client.StopAsync();
             Assert.True(result.IsSuccess, result.Message);
             Assert.False(server.IsPlcRunning);
 
@@ -1170,7 +1213,7 @@ public class FinsTcpTests
     }
 
     [Fact]
-    public void Client_ReadCpuTimeAsync_Succeeds()
+    public async Task Client_ReadCpuTimeAsync_Succeeds()
     {
         int port = TestPortBase + 132;
         var server = new FinsVirtualServer(port);
@@ -1182,7 +1225,7 @@ public class FinsTcpTests
             client.SetPersistentConnection();
             Assert.True(client.Connect().IsSuccess);
 
-            var result = client.ReadCpuTimeAsync().Result;
+            var result = await client.ReadCpuTimeAsync();
             Assert.True(result.IsSuccess, result.Message);
 
             client.Disconnect();
@@ -1196,7 +1239,7 @@ public class FinsTcpTests
     }
 
     [Fact]
-    public void Client_WriteCpuTimeAsync_Succeeds()
+    public async Task Client_WriteCpuTimeAsync_Succeeds()
     {
         int port = TestPortBase + 133;
         var server = new FinsVirtualServer(port);
@@ -1209,7 +1252,7 @@ public class FinsTcpTests
             Assert.True(client.Connect().IsSuccess);
 
             var time = new DateTime(2025, 12, 25, 8, 0, 0);
-            var result = client.WriteCpuTimeAsync(time).Result;
+            var result = await client.WriteCpuTimeAsync(time);
             Assert.True(result.IsSuccess, result.Message);
 
             client.Disconnect();
@@ -1316,5 +1359,98 @@ public class FinsTcpTests
         var result = server.GetCIOBytes(50, 1);
         Assert.Equal(data, result);
         server.Dispose();
+    }
+
+    // ══════════════════════════════════════════════
+    //  连接池
+    // ══════════════════════════════════════════════
+
+    [Fact]
+    public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+    {
+        int port = TestPortBase + 160;
+        var server = new FinsVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new FinsTcpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+            var write = pool.Write("D700", unchecked((short)0x2468));
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("D700");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)0x2468, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsPacketEvents()
+    {
+        int port = TestPortBase + 161;
+        var server = new FinsVirtualServer(port);
+        server.SetDMWord(800, (ushort)0x1357);
+        server.Start();
+
+        try
+        {
+            using var pool = new FinsTcpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, __) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, __) => Interlocked.Increment(ref received);
+
+            var read = pool.ReadUInt16("D800");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((ushort)0x1357, read.Content);
+            Assert.True(Volatile.Read(ref sent) >= 1);
+            Assert.True(Volatile.Read(ref received) >= 1);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_RunStop_StatusChanges()
+    {
+        int port = TestPortBase + 162;
+        var server = new FinsVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new FinsTcpConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+            var stop = pool.Stop();
+            Assert.True(stop.IsSuccess, stop.Message);
+
+            var stopped = pool.ReadCpuStatus();
+            Assert.True(stopped.IsSuccess, stopped.Message);
+            Assert.Equal((byte)0x01, stopped.Content);
+
+            var run = pool.Run();
+            Assert.True(run.IsSuccess, run.Message);
+
+            var running = pool.ReadCpuStatus();
+            Assert.True(running.IsSuccess, running.Message);
+            Assert.Equal((byte)0x00, running.Content);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
     }
 }

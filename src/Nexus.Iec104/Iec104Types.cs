@@ -8,11 +8,15 @@ namespace Nexus.Iec104
         M_DP_NA_1 = 3,
         M_ME_NA_1 = 9,
         M_ME_NC_1 = 13,
+        M_IT_NA_1 = 15,
         C_SC_NA_1 = 45,
         C_DC_NA_1 = 46,
         C_SE_NA_1 = 48,
         C_IC_NA_1 = 100,
+        C_CI_NA_1 = 101,
         C_RD_NA_1 = 102,
+        C_CS_NA_1 = 103,
+        C_TS_TA_1 = 104,
     }
 
     public enum CauseOfTransmission : byte
@@ -89,7 +93,7 @@ namespace Nexus.Iec104
     {
         public int Address { get; set; }
         public TypeId Type { get; set; }
-        public object Value { get; set; }
+        public object Value { get; set; } = 0;
         public QualityFlags Quality { get; set; }
         public DateTime Timestamp { get; set; }
 

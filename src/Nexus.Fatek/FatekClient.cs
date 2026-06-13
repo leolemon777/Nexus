@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -728,8 +729,12 @@ namespace Nexus.Fatek
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, object?>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadInt16(addr);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
@@ -746,8 +751,12 @@ namespace Nexus.Fatek
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, byte[]>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadBytes(addr, 2);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
@@ -764,7 +773,11 @@ namespace Nexus.Fatek
         /// <inheritdoc/>
         public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
         {
-            foreach (var kv in items)
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
             {
                 OperateResult r = kv.Value switch
                 {

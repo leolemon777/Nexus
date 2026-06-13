@@ -151,7 +151,7 @@ namespace Nexus.Bacnet
             return base.SendAndReceive(frame);
         }
 
-        private async Task<OperateResult<byte[]>> SendBvlcAsync(byte[] apdu, byte[] destMac = null, CancellationToken ct = default)
+        private async Task<OperateResult<byte[]>> SendBvlcAsync(byte[] apdu, byte[]? destMac = null, CancellationToken ct = default)
         {
             byte[] npdu = WrapNpdu(apdu, destMac);
             byte[] frame = WrapBvlc(npdu);
@@ -584,8 +584,8 @@ namespace Nexus.Bacnet
             {
                 for (int i = 0; i < response.Values.Length; i++)
                 {
-                    if (response.Values[i].Tag == BacnetApplicationTag.OctetString)
-                        return OperateResult<byte[]>.Success((byte[])response.Values[i].Data);
+                    if (response.Values[i].Tag == BacnetApplicationTag.OctetString && response.Values[i].Data is byte[] bytes)
+                        return OperateResult<byte[]>.Success(bytes);
                 }
             }
 
@@ -764,8 +764,8 @@ namespace Nexus.Bacnet
             if (result.Content.Length == 0) return OperateResult<byte[]>.Failed("无返回数据");
 
             var val = result.Content[0];
-            if (val.Tag == BacnetApplicationTag.OctetString)
-                return OperateResult<byte[]>.Success((byte[])val.Data);
+            if (val.Tag == BacnetApplicationTag.OctetString && val.Data is byte[] bytes)
+                return OperateResult<byte[]>.Success(bytes);
 
             return OperateResult<byte[]>.Failed($"不支持的标签类型: {val.Tag}");
         }
@@ -793,11 +793,28 @@ namespace Nexus.Bacnet
                 new BacnetValue(BacnetApplicationTag.Signed, value));
         }
 
+        public override OperateResult Write(string address, uint value)
+        {
+            var pref = ParseAddress(address);
+            return WriteProperty(pref.ObjectIdentifier, pref.PropertyId,
+                new BacnetValue(BacnetApplicationTag.Unsigned, value));
+        }
+
         public override OperateResult Write(string address, short value) => Write(address, (int)value);
         public override OperateResult Write(string address, ushort value) => Write(address, (int)value);
-        public override OperateResult Write(string address, uint value) => Write(address, (int)(uint)value);
-        public override OperateResult Write(string address, long value) => Write(address, (int)value);
-        public override OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public override OperateResult Write(string address, long value)
+        {
+            if (value < int.MinValue || value > int.MaxValue)
+                return OperateResult.Failed("BACnet Signed 当前编码器仅支持 32 位范围，不能截断写入 Int64");
+            return Write(address, (int)value);
+        }
+
+        public override OperateResult Write(string address, ulong value)
+        {
+            if (value > uint.MaxValue)
+                return OperateResult.Failed("BACnet Unsigned 当前编码器仅支持 32 位范围，不能截断写入 UInt64");
+            return Write(address, (uint)value);
+        }
 
         public override OperateResult Write(string address, bool value)
         {
@@ -815,6 +832,9 @@ namespace Nexus.Bacnet
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var pref = ParseAddress(address);
             return WriteProperty(pref.ObjectIdentifier, pref.PropertyId,
                 new BacnetValue(BacnetApplicationTag.OctetString, data));

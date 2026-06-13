@@ -36,21 +36,21 @@ jobs:
       - name: Test
         run: dotnet test Nexus.slnx --configuration Release --no-build -- xunit.parallelizeTestCollections=false
 
-      # ── Pack all production-ready protocol packages ──
-      - name: Pack Nexus.Modbus
-        run: dotnet pack src\Nexus.Modbus --configuration Release --no-build --output artifacts\packages
+      # ── Pack all protocol libraries ──
+      - name: Pack all Nexus protocol libraries
+        shell: pwsh
+        run: |
+          $projects = Get-ChildItem -Path src\Nexus.*\*.csproj -Exclude *.App.csproj
+          foreach ($proj in $projects) {
+            # Skip Nexus.App (WPF app, not a library)
+            if ($proj.FullName -match 'Nexus\.App\\') { continue }
+            Write-Host "Packing $($proj.FullName)..."
+            dotnet pack $proj.FullName --configuration Release --no-build --output artifacts\packages
+          }
 
-      - name: Pack Nexus.Siemens
-        run: dotnet pack src\Nexus.Siemens --configuration Release --no-build --output artifacts\packages
-
-      - name: Pack Nexus.Mitsubishi
-        run: dotnet pack src\Nexus.Mitsubishi --configuration Release --no-build --output artifacts\packages
-
-      - name: Pack Nexus.Omron
-        run: dotnet pack src\Nexus.Omron --configuration Release --no-build --output artifacts\packages
-
-      - name: Pack Nexus.AllenBradley
-        run: dotnet pack src\Nexus.AllenBradley --configuration Release --no-build --output artifacts\packages
+      - name: List packages
+        shell: pwsh
+        run: Get-ChildItem artifacts\packages\*.nupkg | ForEach-Object { Write-Host $_.Name }
 
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v4

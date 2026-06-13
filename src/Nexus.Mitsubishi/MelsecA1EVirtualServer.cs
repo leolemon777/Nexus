@@ -17,6 +17,7 @@ namespace Nexus.Mitsubishi
         private Thread? _acceptThread;
         private volatile bool _running;
         private readonly int _port;
+        private int _connectionCount;
 
         // ── 字类型存储（大端序，每字 2 字节，byte 偏移 = address * 2）──
         private readonly byte[] _d  = new byte[8192]; // D 数据寄存器
@@ -41,6 +42,7 @@ namespace Nexus.Mitsubishi
 
         public MelsecA1EVirtualServer(int port) => _port = port;
         public bool IsRunning => _running;
+        public int ConnectionCount => Volatile.Read(ref _connectionCount);
 
         // ═══════════════════════════════════════════
         //  数据设置 API（供测试使用）
@@ -129,6 +131,7 @@ namespace Nexus.Mitsubishi
                 try
                 {
                     var client = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
                     var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                     thread.Start();
                 }

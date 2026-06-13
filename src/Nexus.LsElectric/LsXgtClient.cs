@@ -108,7 +108,7 @@ namespace Nexus.LsElectric
                     _stream.Write(frame, 0, frameLen);
 
                     // 读取响应
-                    byte[] respHeader = ReadExact(1 + 10 + 10 + 6 + 1 + 1 + 2 + 2);
+                    byte[]? respHeader = ReadExact(1 + 10 + 10 + 6 + 1 + 1 + 2 + 2);
                     if (respHeader == null) return OperateResult<byte[]>.Failed("读取响应头超时");
 
                     if (respHeader[0] != 0x06) // ACK
@@ -128,7 +128,7 @@ namespace Nexus.LsElectric
                     byte respDataType = respHeader[29];
                     ushort respDataLen = (ushort)(respHeader[32] | (respHeader[33] << 8));
 
-                    byte[] respData = respDataLen > 0 ? ReadExact(respDataLen) : new byte[0];
+                    byte[]? respData = respDataLen > 0 ? ReadExact(respDataLen) : new byte[0];
                     byte eot = ReadExact(1)?[0] ?? 0;
 
                     Log.Debug($"XGT RX ← Cmd=0x{respCmd:X2} Len={respDataLen}");
@@ -404,12 +404,17 @@ namespace Nexus.LsElectric
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public OperateResult Write(string address, int value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
-        public unsafe OperateResult Write(string address, float value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public OperateResult Write(string address, long value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
+        public OperateResult Write(string address, ulong value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
+        public OperateResult Write(string address, float value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
+        public OperateResult Write(string address, double value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value)); }
         public OperateResult Write(string address, string value) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, DataConverter.GetBytes(value ?? "")); }
-        public OperateResult Write(string address, byte[] data) { var (a, o) = ParseAddress(address); return WriteRegisters(a, o, data); }
+        public OperateResult Write(string address, byte[] data)
+        {
+            if (data == null) return OperateResult.Failed("写入数据不能为空");
+            var (a, o) = ParseAddress(address);
+            return WriteRegisters(a, o, data);
+        }
 
         // ═══════════════════════════════════════════
         //  连接
@@ -526,7 +531,10 @@ namespace Nexus.LsElectric
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")

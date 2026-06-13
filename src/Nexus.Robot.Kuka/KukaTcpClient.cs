@@ -78,7 +78,7 @@ namespace Nexus.Robot.Kuka
         /// </summary>
         /// <param name="address">变量名称。</param>
         /// <param name="value">写入值（字符串）。</param>
-        public OperateResult Write(string address, string value)
+        public override OperateResult Write(string address, string value)
         {
             return Write(new string[] { address }, new string[] { value });
         }
@@ -88,10 +88,113 @@ namespace Nexus.Robot.Kuka
         /// </summary>
         /// <param name="address">变量名称。</param>
         /// <param name="value">写入值（字节数组）。</param>
-        public OperateResult Write(string address, byte[] value)
+        public override OperateResult Write(string address, byte[] value)
         {
             return Write(address, Encoding.UTF8.GetString(value));
         }
+
+        // ── IReadWriteDevice 类型化读写 ────────────
+
+        public override OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            var r = Read(address);
+            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
+            byte[] data = r.Content;
+            if (data.Length > length)
+            {
+                byte[] trimmed = new byte[length];
+                Buffer.BlockCopy(data, 0, trimmed, 0, length);
+                data = trimmed;
+            }
+            return OperateResult<byte[]>.Success(data);
+        }
+
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var r = ReadBytes(address, 1);
+            return r.IsSuccess ? OperateResult<bool>.Success(r.Content[0] != 0) : OperateResult<bool>.Failed(r.Message);
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            return r.IsSuccess ? OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0)) : OperateResult<short>.Failed(r.Message);
+        }
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            return r.IsSuccess ? OperateResult<ushort>.Success(DataConverter.ToUInt16(r.Content, 0)) : OperateResult<ushort>.Failed(r.Message);
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<int>.Success(DataConverter.ToInt32(r.Content, 0)) : OperateResult<int>.Failed(r.Message);
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<uint>.Success(DataConverter.ToUInt32(r.Content, 0)) : OperateResult<uint>.Failed(r.Message);
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 0)) : OperateResult<long>.Failed(r.Message);
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<ulong>.Success(DataConverter.ToUInt64(r.Content, 0)) : OperateResult<ulong>.Failed(r.Message);
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<float>.Success(DataConverter.ToFloat(r.Content, 0)) : OperateResult<float>.Failed(r.Message);
+        }
+
+        public override OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<double>.Success(DataConverter.ToDouble(r.Content, 0)) : OperateResult<double>.Failed(r.Message);
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            var r = Read(address);
+            return r.IsSuccess ? OperateResult<string>.Success(Encoding.UTF8.GetString(r.Content)) : OperateResult<string>.Failed(r.Message);
+        }
+
+        public override OperateResult Write(string address, bool value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, short value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ushort value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, int value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, uint value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, long value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ulong value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, float value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, double value)
+            => Write(address, DataConverter.GetBytes(value));
 
         /// <summary>
         /// 批量写入多个变量。
@@ -207,7 +310,9 @@ namespace Nexus.Robot.Kuka
                             int read = _stream.Read(buf, 0, buf.Length);
                             if (read > 0)
                             {
-                                response.AddRange(buf);
+                                byte[] chunk = new byte[read];
+                                Array.Copy(buf, chunk, read);
+                                response.AddRange(chunk);
                                 // 短暂等待看是否有更多数据
                                 System.Threading.Thread.Sleep(50);
                                 continue;
@@ -428,6 +533,13 @@ namespace Nexus.Robot.Kuka
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return System.Text.Encoding.ASCII.GetBytes(BuildReadCommand("$POS_ACT")); }
+            catch { return null; }
         }
     }
 }

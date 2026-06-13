@@ -21,7 +21,7 @@ public abstract partial class ModbusSerialViewModelBase : ProtocolViewModelBase
     [ObservableProperty] private int _timeout = 3000;
     [ObservableProperty] private bool _dtrEnable;
     [ObservableProperty] private bool _rtsEnable;
-    [ObservableProperty] private string[] _availablePorts = Array.Empty<string>();
+    [ObservableProperty] private string[] _availablePorts = new[] { "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8" };
 
     private SerialPort? _serialPort;
     private SerialDeviceBase? _client;
@@ -37,7 +37,6 @@ public abstract partial class ModbusSerialViewModelBase : ProtocolViewModelBase
     {
         Address = "0";
         DataType = "Int16";
-        RefreshPorts();
     }
 
     protected ModbusSerialViewModelBase(PacketRecorderService packetRecorder)
@@ -46,7 +45,6 @@ public abstract partial class ModbusSerialViewModelBase : ProtocolViewModelBase
         _serialPacketRecorder = packetRecorder;
         Address = "0";
         DataType = "Int16";
-        RefreshPorts();
     }
 
     public override string AddressHint => "e.g. 0, 100, 40001, 00001";
@@ -105,14 +103,19 @@ public abstract partial class ModbusSerialViewModelBase : ProtocolViewModelBase
 
     protected override IReadWriteDevice? GetClient() => _client;
 
-    [RelayCommand]
-    private void RefreshPorts()
+        [RelayCommand]
+    private async Task RefreshPortsAsync()
     {
         try
         {
-            AvailablePorts = SerialPort.GetPortNames();
-            Array.Sort(AvailablePorts, StringComparer.OrdinalIgnoreCase);
-            if (AvailablePorts.Length > 0 && string.IsNullOrWhiteSpace(PortName))
+            var ports = await Task.Run(() =>
+            {
+                var p = SerialPort.GetPortNames();
+                Array.Sort(p, StringComparer.OrdinalIgnoreCase);
+                return p;
+            }).ConfigureAwait(true);
+            AvailablePorts = ports.Length > 0 ? ports : new[] { "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8" };
+            if (AvailablePorts.Length > 0 && (string.IsNullOrWhiteSpace(PortName) || !System.Array.Exists(AvailablePorts, p => p == PortName)))
                 PortName = AvailablePorts[0];
         }
         catch (Exception ex)
@@ -120,7 +123,6 @@ public abstract partial class ModbusSerialViewModelBase : ProtocolViewModelBase
             AppendLog("[ERR] 刷新串口失败: " + ex.Message);
         }
     }
-
     private void AttachClientEvents(SerialDeviceBase client)
     {
         client.OnMessageSent += OnMessageSent;

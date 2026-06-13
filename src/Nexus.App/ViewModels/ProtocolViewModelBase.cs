@@ -37,7 +37,7 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
 
     // ── 可选包记录服务 ──────────────────────
     private readonly PacketRecorderService? _packetRecorder;
-    private readonly string _packetProtocol;
+    private readonly string _packetProtocol = string.Empty;
     private readonly ModbusPacketTransport _packetTransport;
 
     protected ProtocolViewModelBase()
@@ -355,18 +355,21 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
 
     private void RecordPacketCore(string direction, string hex, ModbusPacketDirection packetDirection)
     {
+        var recorder = _packetRecorder;
+        if (recorder == null) return;
+
         switch (_packetTransport)
         {
             case ModbusPacketTransport.Tcp:
             case ModbusPacketTransport.Udp:
-                _packetRecorder.RecordMbap(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                recorder.RecordMbap(_packetProtocol, direction, hex, packetDirection, AppendLog);
                 break;
             case ModbusPacketTransport.Rtu:
             case ModbusPacketTransport.RtuOverTcp:
-                _packetRecorder.RecordRtu(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                recorder.RecordRtu(_packetProtocol, direction, hex, packetDirection, AppendLog);
                 break;
             case ModbusPacketTransport.Ascii:
-                _packetRecorder.RecordAscii(_packetProtocol, direction, hex, packetDirection, AppendLog);
+                recorder.RecordAscii(_packetProtocol, direction, hex, packetDirection, AppendLog);
                 break;
         }
     }

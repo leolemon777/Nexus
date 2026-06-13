@@ -12,38 +12,52 @@
       href: core/batch-read-write.md
     - name: ISubscribeDevice 订阅
       href: core/subscribe-device.md
-    - name: 数据采集引擎
-      href: core/data-acquisition.md
     - name: 连接池
       href: core/connection-pool.md
     - name: 重连与心跳
       href: core/reconnect-heartbeat.md
     - name: 结构体映射
       href: core/struct-mapping.md
+    - name: 地址上下文
+      href: core/address-context.md
 - name: 协议库
   items:
     - name: Modbus TCP/RTU/ASCII/UDP
-      href: protocols/modbus.md
+      href: protocols/modbus/index.md
     - name: Siemens S7/FetchWrite/PPI
-      href: protocols/siemens.md
+      href: protocols/siemens/index.md
     - name: Mitsubishi MC3E/A1E/FX
-      href: protocols/mitsubishi.md
+      href: protocols/mitsubishi/index.md
     - name: Omron FINS/HostLink
-      href: protocols/omron.md
+      href: protocols/omron/index.md
     - name: Allen-Bradley CIP/PCCC
-      href: protocols/allenbradley.md
+      href: protocols/allenbradley/index.md
     - name: Schneider Modicon
-      href: protocols/schneider.md
-    - name: Yokogawa 二进制链接
-      href: protocols/yokogawa.md
-    - name: Inovance Easy
-      href: protocols/inovance.md
-    - name: Delta DVP
-      href: protocols/delta.md
-    - name: GE SRTP
-      href: protocols/gesrtp.md
+      href: protocols/schneider/index.md
+    - name: DNP3
+      href: protocols/dnp3/index.md
+    - name: IEC 61850 (MMS)
+      href: protocols/iec61850/index.md
+    - name: IEC 104
+      href: protocols/iec104/index.md
+    - name: BACnet/IP
+      href: protocols/bacnet/index.md
     - name: 更多协议
       href: protocols/more-protocols.md
+- name: 高级功能
+  items:
+    - name: 虚拟 PLC
+      href: advanced/virtual-plc.md
+    - name: 数据采集引擎
+      href: advanced/data-acquisition.md
+    - name: 抓包记录器
+      href: advanced/packet-recorder.md
+    - name: 协议桥接
+      href: advanced/protocol-bridge.md
+    - name: Modbus 诊断
+      href: advanced/modbus-diagnostics.md
+- name: 审计报告
+  href: audit/current-status.md
 - name: API 参考
   href: api/
   homepage: api/index.md

@@ -17,15 +17,16 @@ namespace Nexus.Robot.Yaskawa
         private Thread? _acceptThread;
         private volatile bool _running;
         private readonly object _dataLock = new object();
+        private int _connectionCount;
 
         // 内存模型
         private readonly bool[] _inputs = new bool[256];
         private readonly bool[] _outputs = new bool[256];
         private readonly int[] _registers = new int[256];
-        private readonly byte _servoState;
-        private readonly byte _runState;
-        private readonly ushort _alarmCode;
-        private readonly ushort _errorCode;
+        private readonly byte _servoState = 0;
+        private readonly byte _runState = 0;
+        private readonly ushort _alarmCode = 0;
+        private readonly ushort _errorCode = 0;
 
         // 命令码
         private const ushort CMD_READ_IO_INPUT = 0x0101;
@@ -42,10 +43,13 @@ namespace Nexus.Robot.Yaskawa
         private const int HEADER_SIZE = 16;
 
         /// <summary>监听端口。</summary>
-        public int Port { get; }
+        public int Port { get; private set; }
 
         /// <summary>是否正在运行。</summary>
         public bool IsRunning => _running;
+
+        /// <summary>累计接收的 TCP 连接数量。</summary>
+        public int ConnectionCount => _connectionCount;
 
         public Yrc1000VirtualServer(int port = 18080)
         {
@@ -80,6 +84,7 @@ namespace Nexus.Robot.Yaskawa
             if (_running) return;
             _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _running = true;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
             _acceptThread.Start();
@@ -108,6 +113,7 @@ namespace Nexus.Robot.Yaskawa
                 try
                 {
                     var client = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
                     var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                     thread.Start();
                 }
@@ -125,7 +131,7 @@ namespace Nexus.Robot.Yaskawa
                     while (_running && client.Connected)
                     {
                         // 读取 16 字节头
-                        byte[] header = ReadExact(stream, HEADER_SIZE);
+                        byte[]? header = ReadExact(stream, HEADER_SIZE);
                         if (header == null) break;
 
                         // 解析数据长度 (big endian, offset 8-11)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Xunit;
 using Nexus.Yokogawa;
@@ -7,18 +8,11 @@ namespace Nexus.Yokogawa.Tests
 {
     /// <summary>
     /// 横河 PLC 二进制链接协议综合测试。
-    /// 端口基址: 27000（避免与其他协议测试冲突）。
+    /// 使用动态端口启动虚拟服务器，避免与本机服务或并行测试冲突。
     /// </summary>
     public class YokogawaTests : IDisposable
     {
-        private static int _portCounter = 27000;
-        private readonly int _port;
         private YokogawaVirtualServer? _server;
-
-        public YokogawaTests()
-        {
-            _port = Interlocked.Increment(ref _portCounter);
-        }
 
         public void Dispose()
         {
@@ -29,11 +23,11 @@ namespace Nexus.Yokogawa.Tests
         /// <summary>启动虚拟服务器并返回客户端（已连接，长连接模式）。</summary>
         private (YokogawaVirtualServer server, YokogawaClient client) StartServerAndConnect()
         {
-            var server = new YokogawaVirtualServer(_port);
+            var server = new YokogawaVirtualServer(0);
             server.Start();
             _server = server;
 
-            var client = new YokogawaClient("127.0.0.1", _port);
+            var client = new YokogawaClient("127.0.0.1", server.Port);
             client.SetPersistentConnection();
             var conn = client.Connect();
             Assert.True(conn.IsSuccess, $"连接失败: {conn.Message}");
@@ -717,7 +711,7 @@ namespace Nexus.Yokogawa.Tests
         [Fact]
         public void Server_StartStop()
         {
-            var server = new YokogawaVirtualServer(27999);
+            var server = new YokogawaVirtualServer(0);
             server.Start();
             Assert.True(true); // no exception
 
@@ -728,11 +722,11 @@ namespace Nexus.Yokogawa.Tests
         [Fact]
         public void E2E_NonPersistent()
         {
-            var server = new YokogawaVirtualServer(_port);
+            var server = new YokogawaVirtualServer(0);
             server.Start();
             _server = server;
 
-            var client = new YokogawaClient("127.0.0.1", _port);
+            var client = new YokogawaClient("127.0.0.1", server.Port);
             // 非持久模式（默认）— 每次 SendAndReceive 自动连接/断开
 
             var write = client.Write("D100", (short)42);
@@ -772,11 +766,11 @@ namespace Nexus.Yokogawa.Tests
         [Fact]
         public void E2E_CpuNumber_Custom()
         {
-            var server = new YokogawaVirtualServer(_port) { CpuNumber = 5 };
+            var server = new YokogawaVirtualServer(0) { CpuNumber = 5 };
             server.Start();
             _server = server;
 
-            var client = new YokogawaClient("127.0.0.1", _port) { CpuNumber = 5 };
+            var client = new YokogawaClient("127.0.0.1", server.Port) { CpuNumber = 5 };
             client.SetPersistentConnection();
             var conn = client.Connect();
             Assert.True(conn.IsSuccess, conn.Message);
@@ -791,6 +785,109 @@ namespace Nexus.Yokogawa.Tests
                 Assert.Equal((short)99, read.Content);
             }
             finally { client.Disconnect(); }
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+        {
+            var server = new YokogawaVirtualServer(0);
+            server.Start();
+            _server = server;
+
+            using var pool = new YokogawaConnectionPool("127.0.0.1", server.Port, maxPoolSize: 1);
+
+            var write = pool.Write("D100", (short)1234);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("D100");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)1234, read.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsPacketEvents()
+        {
+            var server = new YokogawaVirtualServer(0);
+            server.SetWord(4, 10, 0x1234);
+            server.Start();
+            _server = server;
+
+            using var pool = new YokogawaConnectionPool("127.0.0.1", server.Port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, _) => Interlocked.Increment(ref sent);
+            pool.OnMessageReceived += (_, _) => Interlocked.Increment(ref received);
+
+            var read = pool.ReadUInt16("D10");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((ushort)0x1234, read.Content);
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+
+        [Fact]
+        public void ConnectionPool_RandomAndBatchReadWrite()
+        {
+            var server = new YokogawaVirtualServer(0);
+            server.Start();
+            _server = server;
+
+            using var pool = new YokogawaConnectionPool("127.0.0.1", server.Port);
+            var items = new[]
+            {
+                new KeyValuePair<string, object>("D20", (short)111),
+                new KeyValuePair<string, object>("D21", (short)222),
+            };
+
+            var write = pool.BatchWrite(items);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var batchRead = pool.BatchRead(new[] { "D20", "D21" });
+            Assert.True(batchRead.IsSuccess, batchRead.Message);
+            Assert.Equal((short)111, batchRead.Content["D20"]);
+            Assert.Equal((short)222, batchRead.Content["D21"]);
+
+            var randomRead = pool.ReadRandomInt16(new[] { "D20", "D21" });
+            Assert.True(randomRead.IsSuccess, randomRead.Message);
+            Assert.Equal(new short[] { 111, 222 }, randomRead.Content);
+        }
+
+        [Fact]
+        public void ConnectionPool_StartStop_ControlsPlcState()
+        {
+            var server = new YokogawaVirtualServer(0);
+            server.Start();
+            _server = server;
+
+            using var pool = new YokogawaConnectionPool("127.0.0.1", server.Port);
+            Assert.True(server.IsPlcRunning);
+
+            var stop = pool.Stop();
+            Assert.True(stop.IsSuccess, stop.Message);
+            Assert.False(server.IsPlcRunning);
+
+            var start = pool.Start();
+            Assert.True(start.IsSuccess, start.Message);
+            Assert.True(server.IsPlcRunning);
+        }
+
+        [Fact]
+        public void ConnectionPool_UsesCustomCpuNumber()
+        {
+            var server = new YokogawaVirtualServer(0) { CpuNumber = 5 };
+            server.Start();
+            _server = server;
+
+            using var pool = new YokogawaConnectionPool("127.0.0.1", server.Port, cpuNumber: 5);
+
+            var write = pool.Write("D30", (short)555);
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("D30");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)555, read.Content);
         }
 
         #endregion

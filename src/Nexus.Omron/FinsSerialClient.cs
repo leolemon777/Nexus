@@ -206,6 +206,9 @@ namespace Nexus.Omron
         {
             try
             {
+                if (data == null)
+                    return OperateResult.Failed("写入数据不能为空");
+
                 var parser = new FinsAddressParser();
                 FinsAddress finsAddr = parser.Parse(address);
                 byte bitOff = finsAddr.BitOffset >= 0 ? (byte)finsAddr.BitOffset : (byte)0;
@@ -223,58 +226,47 @@ namespace Nexus.Omron
             (data) => (data[0] & 0x01) != 0);
 
         public OperateResult<short> ReadInt16(string address) => ReadBytesSafe<short>(address, 1,
-            (data) => (short)((data[0] << 8) | data[1]));
+            (data) => DataConverter.ToInt16(data, 0));
 
         public OperateResult<ushort> ReadUInt16(string address) => ReadBytesSafe<ushort>(address, 1,
-            (data) => (ushort)((data[0] << 8) | data[1]));
+            (data) => DataConverter.ToUInt16(data, 0));
 
         public OperateResult<int> ReadInt32(string address) => ReadBytesSafe<int>(address, 2,
-            (data) => (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]);
+            (data) => DataConverter.ToInt32(data, 0));
 
         public OperateResult<uint> ReadUInt32(string address) => ReadBytesSafe<uint>(address, 2,
-            (data) => (uint)((data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]));
+            (data) => DataConverter.ToUInt32(data, 0));
 
         public OperateResult<long> ReadInt64(string address) => ReadBytesSafe<long>(address, 4,
-            (data) => (long)((data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]) << 32 |
-                      (long)((data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7]));
+            (data) => DataConverter.ToInt64(data, 0));
 
         public OperateResult<ulong> ReadUInt64(string address) => ReadBytesSafe<ulong>(address, 4,
-            (data) => (ulong)((data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]) << 32 |
-                      (ulong)((data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7]));
+            (data) => DataConverter.ToUInt64(data, 0));
 
         public OperateResult<float> ReadFloat(string address) => ReadBytesSafe<float>(address, 2,
-            (data) =>
-            {
-                int bits = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-                unsafe { return *(float*)&bits; }
-            });
+            (data) => DataConverter.ToFloat(data, 0));
 
         public OperateResult<double> ReadDouble(string address) => ReadBytesSafe<double>(address, 4,
-            (data) =>
-            {
-                long bits = (long)((data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]) << 32 |
-                            (long)((data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7]);
-                unsafe { return *(double*)&bits; }
-            });
+            (data) => DataConverter.ToDouble(data, 0));
 
         public OperateResult<string> ReadString(string address, ushort length) => ReadBytesSafe<string>(address, length,
             (data) => Encoding.ASCII.GetString(data).TrimEnd('\0'));
 
         public OperateResult Write(string address, bool value) => Write(address, new byte[] { (byte)(value ? 1 : 0) });
-        public OperateResult Write(string address, short value) => Write(address, new byte[] { (byte)(value >> 8), (byte)value });
-        public OperateResult Write(string address, int value) => Write(address, new byte[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
-        public OperateResult Write(string address, float value) { unsafe { int bits = *(int*)&value; return Write(address, bits); } }
-        public OperateResult Write(string address, double value) { unsafe { long bits = (long)(*(double*)&value); return Write(address, new byte[] { (byte)(bits >> 56), (byte)(bits >> 48), (byte)(bits >> 40), (byte)(bits >> 32), (byte)(bits >> 24), (byte)(bits >> 16), (byte)(bits >> 8), (byte)bits }); } }
+        public OperateResult Write(string address, short value) => Write(address, DataConverter.GetBytes(value));
+        public OperateResult Write(string address, int value) => Write(address, DataConverter.GetBytes(value));
+        public OperateResult Write(string address, float value) => Write(address, DataConverter.GetBytes(value));
+        public OperateResult Write(string address, double value) => Write(address, DataConverter.GetBytes(value));
         public OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value) => Write(address, DataConverter.GetBytes(value));
+        public OperateResult Write(string address, ulong value) => Write(address, DataConverter.GetBytes(value));
 
         private OperateResult<T> ReadBytesSafe<T>(string address, ushort length, Func<byte[], T> converter)
         {
             var result = ReadBytes(address, length);
-            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message);
+            if (!result.IsSuccess) return OperateResult<T>.Failed(result.Message, result.ErrorCode);
             try { return OperateResult<T>.Success(converter(result.Content)); }
             catch (Exception ex) { return OperateResult<T>.Failed(ex.Message); }
         }
@@ -374,7 +366,10 @@ namespace Nexus.Omron
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")

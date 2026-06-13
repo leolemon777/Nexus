@@ -325,7 +325,7 @@ public partial class ProtocolLogViewer : UserControl, IDisposable
         private readonly Action<object?> _execute;
         public RelayCommand(Action<object?> execute) => _execute = execute;
         public bool CanExecute(object? parameter) => true;
-        public event EventHandler? CanExecuteChanged;
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
         public void Execute(object? parameter) => _execute(parameter);
     }
 }

@@ -115,11 +115,11 @@ public partial class AlarmViewModel : ObservableObject, IDisposable
     private void AcknowledgeAll()
     {
         _alarmService.AcknowledgeAll();
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
         {
             while (ActiveAlarms.Any(a => !a.IsAcknowledged))
                 ActiveAlarms.Remove(ActiveAlarms.First(a => !a.IsAcknowledged));
-        });
+        }));
         UpdateCounts();
     }
 
@@ -131,17 +131,17 @@ public partial class AlarmViewModel : ObservableObject, IDisposable
 
     private void OnAlarmTriggered(object? sender, AlarmRecord record)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
         {
             ActiveAlarms.Add(record);
             HistoryRecords.Add(record);
             UpdateCounts();
-        });
+        }));
     }
 
     private void OnAlarmAcknowledged(object? sender, AlarmRecord record)
     {
-        Application.Current.Dispatcher.Invoke(() => UpdateCounts());
+        Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateCounts()));
     }
 
     private void UpdateCounts()

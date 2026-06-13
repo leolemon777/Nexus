@@ -119,6 +119,81 @@ namespace Nexus.App.Services
             lock (_lock) { _records.Clear(); }
         }
 
+        // ── 统计与分析 ────────────────────────────
+
+        /// <summary>获取报文统计摘要。</summary>
+        public PacketStats GetStats()
+        {
+            lock (_lock)
+            {
+                int total = _records.Count;
+                int tx = 0, rx = 0, exceptions = 0, errors = 0;
+                double minLatencyMs = double.MaxValue, maxLatencyMs = 0, totalLatencyMs = 0;
+                int latencyCount = 0;
+                var fcCounts = new Dictionary<byte, int>();
+
+                for (int i = 0; i < total; i++)
+                {
+                    var r = _records[i];
+                    if (r.Direction == "TX") tx++;
+                    else rx++;
+
+                    if (r.IsException) exceptions++;
+                    if (!r.IsValid) errors++;
+
+                    if (r.FunctionCode.HasValue)
+                    {
+                        byte fc = r.BaseFunctionCode ?? r.FunctionCode.Value;
+                        if (!fcCounts.ContainsKey(fc))
+                            fcCounts[fc] = 0;
+                        fcCounts[fc]++;
+                    }
+
+                    // 计算 TX→RX 延迟（匹配 TransactionId）
+                    if (r.Direction == "TX" && r.TransactionId.HasValue && i + 1 < total)
+                    {
+                        var next = _records[i + 1];
+                        if (next.Direction == "RX" && next.TransactionId == r.TransactionId)
+                        {
+                            double latency = (next.Timestamp - r.Timestamp).TotalMilliseconds;
+                            if (latency < minLatencyMs) minLatencyMs = latency;
+                            if (latency > maxLatencyMs) maxLatencyMs = latency;
+                            totalLatencyMs += latency;
+                            latencyCount++;
+                        }
+                    }
+                }
+
+                return new PacketStats
+                {
+                    TotalPackets = total,
+                    TxCount = tx,
+                    RxCount = rx,
+                    ExceptionCount = exceptions,
+                    ErrorCount = errors,
+                    MinLatencyMs = latencyCount > 0 ? minLatencyMs : 0,
+                    MaxLatencyMs = latencyCount > 0 ? maxLatencyMs : 0,
+                    AvgLatencyMs = latencyCount > 0 ? totalLatencyMs / latencyCount : 0,
+                    FunctionCodeCounts = fcCounts
+                };
+            }
+        }
+
+        /// <summary>获取异常报文列表。</summary>
+        public List<PacketRecord> GetExceptions()
+        {
+            lock (_lock)
+            {
+                var result = new List<PacketRecord>();
+                foreach (var r in _records)
+                {
+                    if (r.IsException || !r.IsValid)
+                        result.Add(r);
+                }
+                return result;
+            }
+        }
+
         // ── 内部实现 ──────────────────────────────
 
         private delegate ModbusPacketInfo ParseFrameDelegate(byte[] frame, ModbusPacketDirection direction);
@@ -299,5 +374,26 @@ namespace Nexus.App.Services
         public string DataHex { get; set; } = string.Empty;
         public string Error { get; set; } = string.Empty;
         public string Summary { get; set; } = string.Empty;
+    }
+
+    /// <summary>报文统计摘要。</summary>
+    public sealed class PacketStats
+    {
+        public int TotalPackets { get; set; }
+        public int TxCount { get; set; }
+        public int RxCount { get; set; }
+        public int ExceptionCount { get; set; }
+        public int ErrorCount { get; set; }
+        public double MinLatencyMs { get; set; }
+        public double MaxLatencyMs { get; set; }
+        public double AvgLatencyMs { get; set; }
+        public Dictionary<byte, int> FunctionCodeCounts { get; set; } = new();
+
+        public override string ToString()
+        {
+            return $"Total={TotalPackets}, TX={TxCount}, RX={RxCount}, " +
+                   $"Exceptions={ExceptionCount}, Errors={ErrorCount}, " +
+                   $"Latency={AvgLatencyMs:F1}ms (min={MinLatencyMs:F1}, max={MaxLatencyMs:F1})";
+        }
     }
 }

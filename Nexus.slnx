@@ -26,10 +26,12 @@
     <Project Path="src/Nexus.Mqtt/Nexus.Mqtt.csproj" />
     <Project Path="src/Nexus.Bacnet/Nexus.Bacnet.csproj" />
     <Project Path="src/Nexus.Iec104/Nexus.Iec104.csproj" />
+    <Project Path="src/Nexus.Iec61850/Nexus.Iec61850.csproj" />
     <Project Path="src/Nexus.Inovance/Nexus.Inovance.csproj" />
     <Project Path="src/Nexus.Yaskawa/Nexus.Yaskawa.csproj" />
     <Project Path="src/Nexus.Yokogawa/Nexus.Yokogawa.csproj" />
     <Project Path="src/Nexus.Dlt/Nexus.Dlt.csproj" />
+    <Project Path="src/Nexus.Bridge/Nexus.Bridge.csproj" />
     <Project Path="src/Nexus.Cjt/Nexus.Cjt.csproj" />
     <Project Path="src/Nexus.Secs/Nexus.Secs.csproj" />
     <Project Path="src/Nexus.Robot.Abb/Nexus.Robot.Abb.csproj" />
@@ -37,11 +39,26 @@
     <Project Path="src/Nexus.Robot.Yaskawa/Nexus.Robot.Yaskawa.csproj" />
     <Project Path="src/Nexus.Ftp/Nexus.Ftp.csproj" />
     <Project Path="src/Nexus.Robot.Kuka/Nexus.Robot.Kuka.csproj" />
+    <Project Path="src/Nexus.Robot.Staubli/Nexus.Robot.Staubli.csproj" />
     <Project Path="src/Nexus.Robot.Efort/Nexus.Robot.Efort.csproj" />
     <Project Path="src/Nexus.Robot.Estun/Nexus.Robot.Estun.csproj" />
     <Project Path="src/Nexus.Robot.Yamaha/Nexus.Robot.Yamaha.csproj" />
+    <Project Path="src/Nexus.MegMeet/Nexus.MegMeet.csproj" />
     <Project Path="src/Nexus.Rkc/Nexus.Rkc.csproj" />
     <Project Path="src/Nexus.Toledo/Nexus.Toledo.csproj" />
+    <Project Path="src/Nexus.Vigor/Nexus.Vigor.csproj" />
+    <Project Path="src/Nexus.Yamatake/Nexus.Yamatake.csproj" />
+    <Project Path="src/Nexus.VirtualPlc/Nexus.VirtualPlc.csproj" />
+    <Project Path="src/Nexus.Freedom/Nexus.Freedom.csproj" />
+    <Project Path="src/Nexus.ToyoPuc/Nexus.ToyoPuc.csproj" />
+    <Project Path="src/Nexus.OpenProtocol/Nexus.OpenProtocol.csproj" />
+    <Project Path="src/Nexus.Knx/Nexus.Knx.csproj" />
+    <Project Path="src/Nexus.Geniitek/Nexus.Geniitek.csproj" />
+    <Project Path="src/Nexus.Sam/Nexus.Sam.csproj" />
+    <Project Path="src/Nexus.EcFan/Nexus.EcFan.csproj" />
+    <Project Path="src/Nexus.YuDian/Nexus.YuDian.csproj" />
+    <Project Path="src/Nexus.Delixi/Nexus.Delixi.csproj" />
+    <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Core.Tests/Nexus.Core.Tests.csproj" />
@@ -64,6 +81,7 @@
     <Project Path="tests/Nexus.Mqtt.Tests/Nexus.Mqtt.Tests.csproj" />
     <Project Path="tests/Nexus.Bacnet.Tests/Nexus.Bacnet.Tests.csproj" />
     <Project Path="tests/Nexus.Iec104.Tests/Nexus.Iec104.Tests.csproj" />
+    <Project Path="tests/Nexus.Iec61850.Tests/Nexus.Iec61850.Tests.csproj" />
     <Project Path="tests/Nexus.Inovance.Tests/Nexus.Inovance.Tests.csproj" />
     <Project Path="tests/Nexus.Yaskawa.Tests/Nexus.Yaskawa.Tests.csproj" />
     <Project Path="tests/Nexus.Yokogawa.Tests/Nexus.Yokogawa.Tests.csproj" />
@@ -80,10 +98,12 @@
     <Project Path="tests/Nexus.Robot.Yaskawa.Tests/Nexus.Robot.Yaskawa.Tests.csproj" />
     <Project Path="tests/Nexus.Ftp.Tests/Nexus.Ftp.Tests.csproj" />
     <Project Path="tests/Nexus.Robot.Kuka.Tests/Nexus.Robot.Kuka.Tests.csproj" />
+    <Project Path="tests/Nexus.Robot.Staubli.Tests/Nexus.Robot.Staubli.Tests.csproj" />
     <Project Path="tests/Nexus.Robot.Efort.Tests/Nexus.Robot.Efort.Tests.csproj" />
     <Project Path="tests/Nexus.Robot.Estun.Tests/Nexus.Robot.Estun.Tests.csproj" />
     <Project Path="tests/Nexus.Robot.Yamaha.Tests/Nexus.Robot.Yamaha.Tests.csproj" />
     <Project Path="tests/Nexus.Rkc.Tests/Nexus.Rkc.Tests.csproj" />
     <Project Path="tests/Nexus.Toledo.Tests/Nexus.Toledo.Tests.csproj" />
+    <Project Path="tests/Nexus.VirtualPlc.Tests/Nexus.VirtualPlc.Tests.csproj" />
   </Folder>
 </Solution>

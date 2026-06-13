@@ -49,7 +49,7 @@ namespace Nexus.Rkc
         /// <para>地址示例: M1(测量值1), M2(测量值2), AA, AB, B1, ER 等。</para>
         /// </summary>
         /// <param name="address">数据地址，支持 s=N; 前缀指定站号。</param>
-        public OperateResult<double> ReadDouble(string address)
+        public override OperateResult<double> ReadDouble(string address)
         {
             byte station = Station;
             address = ExtractStation(ref station, address);
@@ -72,7 +72,7 @@ namespace Nexus.Rkc
         /// </summary>
         /// <param name="address">数据地址，支持 s=N; 前缀指定站号。</param>
         /// <param name="value">设定值（最多 6 个字符）。</param>
-        public OperateResult Write(string address, double value)
+        public override OperateResult Write(string address, double value)
         {
             byte station = Station;
             address = ExtractStation(ref station, address);
@@ -94,12 +94,112 @@ namespace Nexus.Rkc
             return OperateResult.Success();
         }
 
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message);
+            return OperateResult<bool>.Success(r.Content != 0);
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message);
+            return OperateResult<short>.Success((short)r.Content);
+        }
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message);
+            return OperateResult<ushort>.Success((ushort)r.Content);
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message);
+            return OperateResult<int>.Success((int)r.Content);
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<uint>.Failed(r.Message);
+            return OperateResult<uint>.Success((uint)r.Content);
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message);
+            return OperateResult<long>.Success((long)r.Content);
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<ulong>.Failed(r.Message);
+            return OperateResult<ulong>.Success((ulong)r.Content);
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message);
+            return OperateResult<float>.Success((float)r.Content);
+        }
+
+        public override OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
+            return OperateResult<byte[]>.Success(DataConverter.GetBytes(r.Content));
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            var r = ReadDouble(address);
+            if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
+            return OperateResult<string>.Success(r.Content.ToString());
+        }
+
+        public override OperateResult Write(string address, bool value)
+            => Write(address, value ? 1.0 : 0.0);
+
+        public override OperateResult Write(string address, short value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, ushort value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, int value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, uint value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, long value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, ulong value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, float value)
+            => Write(address, (double)value);
+
+        public override OperateResult Write(string address, string value)
+            => Write(address, double.Parse(value));
+
+        public override OperateResult Write(string address, byte[] data)
+            => Write(address, DataConverter.ToDouble(data, 0));
+
         // ═══════════════════════════════════════════
         //  命令构建（公开供测试）
         // ═══════════════════════════════════════════
 
         /// <summary>构建读取命令。</summary>
-        public static OperateResult<byte[]> BuildReadCommand(byte station, string address)
+        public static OperateResult<byte[]> BuildReadCommand(byte station, string? address)
         {
             if (station >= 100)
                 return OperateResult<byte[]>.Failed("站号必须小于 100");
@@ -108,10 +208,11 @@ namespace Nexus.Rkc
 
             try
             {
-                byte[] cmd = new byte[4 + address.Length];
+                string effectiveAddress = address!;
+                byte[] cmd = new byte[4 + effectiveAddress.Length];
                 cmd[0] = EOT;
                 Encoding.ASCII.GetBytes(station.ToString("D2")).CopyTo(cmd, 1);
-                Encoding.ASCII.GetBytes(address).CopyTo(cmd, 3);
+                Encoding.ASCII.GetBytes(effectiveAddress).CopyTo(cmd, 3);
                 cmd[cmd.Length - 1] = ENQ;
                 return OperateResult<byte[]>.Success(cmd);
             }
@@ -158,7 +259,7 @@ namespace Nexus.Rkc
         }
 
         /// <summary>解析读取响应。</summary>
-        public static OperateResult<double> ParseReadResponse(byte[] response)
+        public static OperateResult<double> ParseReadResponse(byte[]? response)
         {
             if (response == null || response.Length < 3)
                 return OperateResult<double>.Failed("响应数据过短");
@@ -197,7 +298,7 @@ namespace Nexus.Rkc
         //  内部实现
         // ═══════════════════════════════════════════
 
-        private string ExtractStation(ref byte station, string address)
+        private static string ExtractStation(ref byte station, string address)
         {
             if (address != null && address.StartsWith("s=", StringComparison.OrdinalIgnoreCase))
             {
@@ -209,7 +310,7 @@ namespace Nexus.Rkc
                     return address.Substring(semiPos + 1);
                 }
             }
-            return address;
+            return address ?? string.Empty;
         }
 
         private OperateResult<byte[]> SendAndReceiveCustom(byte[] request)
@@ -232,7 +333,11 @@ namespace Nexus.Rkc
                         if (_stream.DataAvailable)
                         {
                             int read = _stream.Read(buf, 0, buf.Length);
-                            if (read > 0) response.AddRange(buf);
+                            if (read > 0)
+                            {
+                                for (int i = 0; i < read; i++)
+                                    response.Add(buf[i]);
+                            }
 
                             // 检查响应完整性
                             if (response.Count > 0)
@@ -475,6 +580,13 @@ namespace Nexus.Rkc
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand(1, "M1").Content; }
+            catch { return null; }
         }
     }
 }

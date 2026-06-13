@@ -60,7 +60,11 @@ namespace Nexus.Modbus
             if (string.IsNullOrWhiteSpace(address))
                 throw new AddressParseException(address, "地址不能为空");
 
-            address = address.Trim();
+            string original = address;
+            address = AddressContext.ExtractCoreAddress(address).Trim();
+            if (string.IsNullOrWhiteSpace(address))
+                throw new AddressParseException(original, "地址不能为空");
+
             char prefix = address[0];
             string numPart = address.Substring(1);
 

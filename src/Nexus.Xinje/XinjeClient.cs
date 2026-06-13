@@ -140,12 +140,12 @@ namespace Nexus.Xinje
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
         public OperateResult Write(string address, int value) { var r1 = Write(address, (short)(value & 0xFFFF)); if (!r1.IsSuccess) return r1; return Write(Incr(address), (short)((value >> 16) & 0xFFFF)); }
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value) { var r1 = Write(address, (int)(value & 0xFFFFFFFF)); if (!r1.IsSuccess) return r1; return Write(Incr(address, 2), (int)((value >> 32) & 0xFFFFFFFF)); }
         public OperateResult Write(string address, ulong value) => Write(address, (long)value);
         public OperateResult Write(string address, float value) => Write(address, BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
         public OperateResult Write(string address, double value) => Write(address, (long)BitConverter.DoubleToInt64Bits(value));
         public OperateResult Write(string address, string value) => Write(address, Encoding.ASCII.GetBytes(value));
-        public OperateResult Write(string address, byte[] data) { for (int i = 0; i < data.Length; i += 2) { short v = data.Length > i + 1 ? (short)(data[i] | (data[i + 1] << 8)) : data[i]; var r = Write(Incr(address, i / 2), v); if (!r.IsSuccess) return r; } return OperateResult.Success(); }
+        public OperateResult Write(string address, byte[] data) { if (data == null) return OperateResult.Failed("写入数据不能为空"); for (int i = 0; i < data.Length; i += 2) { short v = data.Length > i + 1 ? (short)(data[i] | (data[i + 1] << 8)) : data[i]; var r = Write(Incr(address, i / 2), v); if (!r.IsSuccess) return r; } return OperateResult.Success(); }
 
         public Task<OperateResult<bool>> ReadBoolAsync(string a) => Task.Run(() => ReadBool(a));
         public Task<OperateResult<short>> ReadInt16Async(string a) => Task.Run(() => ReadInt16(a));
@@ -343,7 +343,10 @@ namespace Nexus.Xinje
                     ushort us => Write(kv.Key, us),
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
+                    long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
+                    double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),
                     byte[] b => Write(kv.Key, b),
                     _ => OperateResult.Failed($"不支持的类型: {kv.Value?.GetType().Name}")

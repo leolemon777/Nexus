@@ -19,6 +19,7 @@ namespace Nexus.Omron
         private Thread? _acceptThread;
         private volatile bool _running;
         private readonly int _port;
+        private int _connectionCount;
 
         // ── 字存储（大端序，每字 2 字节，byte 偏移 = address * 2）──
         private readonly byte[] _dm  = new byte[16384];
@@ -34,6 +35,7 @@ namespace Nexus.Omron
 
         public OmronHostLinkVirtualServer(int port) => _port = port;
         public bool IsRunning => _running;
+        public int ConnectionCount => Volatile.Read(ref _connectionCount);
 
         // ═══════════════════════════════════════════
         //  数据设置 API（供测试使用）
@@ -170,6 +172,7 @@ namespace Nexus.Omron
                 try
                 {
                     var client = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
                     var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                     thread.Start();
                 }

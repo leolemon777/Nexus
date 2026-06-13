@@ -11,6 +11,19 @@ public partial class MitsubishiViewModel : ProtocolViewModelBase
     [ObservableProperty] private string _selectedTransport = TransportMc3EBinaryTcp;
     [ObservableProperty] private string _selectedModel = ModelQna3E;
     [ObservableProperty] private string _selectedByteOrder = nameof(Endianness.BigEndian);
+
+    public void SetTransport(string transportTag)
+    {
+        SelectedTransport = transportTag switch
+        {
+            "mc3e-binary-tcp" => TransportMc3EBinaryTcp,
+            "mc3e-ascii-tcp"  => TransportMc3EAsciiTcp,
+            "mc3e-binary-udp" => TransportMc3EUdpBinary,
+            "mc3e-ascii-udp"  => TransportMc3EUdpAscii,
+            "a1e-binary-tcp"  => TransportA1ETcp,
+            _                 => TransportMc3EBinaryTcp
+        };
+    }
     [ObservableProperty] private byte _networkNo = 0x00;
     [ObservableProperty] private byte _pcNo = 0xFF;
     [ObservableProperty] private ushort _destinationStationNo = 0x00;
@@ -30,23 +43,6 @@ public partial class MitsubishiViewModel : ProtocolViewModelBase
 
     public override string ProtocolName => "Mitsubishi MC / A1E";
     public override string AddressHint => "MC: D100, M100, X0, Y10, W1A, ZR100; A1E: D100, M100, X0, Y10, TS0, CN0";
-
-    public string[] TransportPresets { get; } =
-    {
-        TransportMc3EBinaryTcp,
-        TransportMc3EAsciiTcp,
-        TransportMc3EUdpBinary,
-        TransportMc3EUdpAscii,
-        TransportA1ETcp
-    };
-
-    public string[] ModelPresets { get; } =
-    {
-        ModelQna3E,
-        ModelA3E,
-        ModelFx3U,
-        ModelFx5U
-    };
 
     public string[] ByteOrderPresets { get; } =
     {

@@ -157,14 +157,14 @@ namespace Nexus.Inovance
                     while (_running && client.Connected)
                     {
                         // 读取长度头 (2 字节)
-                        byte[] lenBuf = ReadExact(stream, 2);
+                        byte[]? lenBuf = ReadExact(stream, 2);
                         if (lenBuf == null) break;
 
                         int totalLen = lenBuf[0] | (lenBuf[1] << 8);
                         if (totalLen < FrameHeader) break;
 
                         // 读取剩余数据
-                        byte[] restBuf = ReadExact(stream, totalLen - 2);
+                        byte[]? restBuf = ReadExact(stream, totalLen - 2);
                         if (restBuf == null) break;
 
                         // 组合完整帧

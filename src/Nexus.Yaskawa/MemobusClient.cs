@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 using System.Threading;
 
@@ -60,8 +61,9 @@ namespace Nexus.Yaskawa
         /// </summary>
         /// <param name="ip">PLC IP 地址。</param>
         /// <param name="port">端口号（默认 502）。</param>
-        public MemobusClient(string ip, int port = 502)
-            : base(ip, port)
+        /// <param name="timeout">连接和读写超时时间（毫秒）。</param>
+        public MemobusClient(string ip, int port = 502, int timeout = 5000)
+            : base(ip, port, timeout)
         {
         }
 
@@ -901,8 +903,12 @@ namespace Nexus.Yaskawa
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, object?>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadInt16(addr);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
@@ -919,8 +925,12 @@ namespace Nexus.Yaskawa
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, byte[]>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadBytes(addr, 2);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
@@ -937,7 +947,11 @@ namespace Nexus.Yaskawa
         /// <inheritdoc/>
         public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
         {
-            foreach (var kv in items)
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
             {
                 OperateResult r = kv.Value switch
                 {
@@ -1063,6 +1077,13 @@ namespace Nexus.Yaskawa
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand("D0", 1).Content; }
+            catch { return null; }
         }
     }
 }

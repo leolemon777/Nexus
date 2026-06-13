@@ -43,12 +43,14 @@ namespace Nexus.Siemens
             functionCode = 0; data = Array.Empty<byte>();
             if (response.Length < 9 || response[0] != 0x68 || response[3] != 0x68 || response[response.Length - 1] != 0x16) return false;
             int lenField = response[1];
+            if (response[2] != response[1]) return false;
             if (response.Length != 4 + lenField + 2) return false;
             byte bcc = 0;
             for (int i = 4; i < response.Length - 2; i++) bcc ^= response[i];
             if (bcc != response[response.Length - 2]) return false;
             functionCode = response[7];
             int dataLen = lenField - 4;
+            if (dataLen < 0) return false;
             if (dataLen > 0) { data = new byte[dataLen]; Buffer.BlockCopy(response, 8, data, 0, dataLen); }
             return true;
         }
@@ -67,15 +69,17 @@ namespace Nexus.Siemens
         protected OperateResult<byte[]> SendPpi(byte control, byte functionCode, byte[] data)
             => SendPpiAsync(control, functionCode, data, CancellationToken.None).GetAwaiter().GetResult();
 
-        private static readonly Regex _ppiAddrRegex = new Regex(@"^([VMIQSMC]|SM)(\d+)(?:\.(\d+))?$", RegexOptions.IgnoreCase);
+        private static readonly Regex _ppiAddrRegex = new Regex(@"^(SM|[VMIQSC])(\d+)(?:\.(\d+))?$", RegexOptions.IgnoreCase);
         private class PpiAddress { public byte AreaCode; public int ByteAddress; public int BitOffset; public bool IsBit; }
         private static PpiAddress ParseAddress(string address)
         {
-            var match = _ppiAddrRegex.Match(address.ToUpper());
+            var match = _ppiAddrRegex.Match(address.ToUpperInvariant());
             if (!match.Success) throw new ArgumentException($"无效的 PPI 地址格式: {address}");
             string area = match.Groups[1].Value;
             int byteAddr = int.Parse(match.Groups[2].Value);
             int bitOffset = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
+            if (byteAddr > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(address), "PPI 字节地址不能超过 65535");
+            if (match.Groups[3].Success && bitOffset > 7) throw new ArgumentOutOfRangeException(nameof(address), "PPI 位偏移必须在 0-7 之间");
             byte areaCode = area switch { "V" => 0x85, "I" => 0x81, "Q" => 0x82, "M" => 0x83, "S" => 0x84, "SM" => 0x86, "C" => 0x1C, _ => 0x85 };
             return new PpiAddress { AreaCode = areaCode, ByteAddress = byteAddr, BitOffset = bitOffset, IsBit = match.Groups[3].Success };
         }
@@ -86,8 +90,9 @@ namespace Nexus.Siemens
             if (!addr.IsBit) throw new ArgumentException("读取 Bool 需要位地址 (如 V100.0)");
             byte[] cmd = new byte[] { 0x01, 0x00, 0x01, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, (byte)addr.BitOffset };
             var result = SendPpi(0x00, 0x01, cmd);
-            return result.IsSuccess && result.Content.Length > 1 && result.Content[0] == 0xFF 
-                ? OperateResult<bool>.Success((result.Content[1] & (1 << addr.BitOffset)) != 0) 
+            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length > 1 && result.Content[0] == 0xFF
+                ? OperateResult<bool>.Success((result.Content[1] & (1 << addr.BitOffset)) != 0)
                 : OperateResult<bool>.Failed("PPI 读取位响应异常");
         }
 
@@ -96,7 +101,8 @@ namespace Nexus.Siemens
             var addr = ParseAddress(address);
             byte[] cmd = new byte[] { 0x01, 0x00, 0x02, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
             var result = SendPpi(0x00, 0x01, cmd);
-            return result.IsSuccess && result.Content.Length >= 3 && result.Content[0] == 0xFF
+            if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length >= 3 && result.Content[0] == 0xFF
                 ? OperateResult<short>.Success((short)((result.Content[1] << 8) | result.Content[2]))
                 : OperateResult<short>.Failed("PPI 读取字响应异常");
         }
@@ -106,7 +112,8 @@ namespace Nexus.Siemens
             var addr = ParseAddress(address);
             byte[] cmd = new byte[] { 0x01, 0x00, 0x04, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
             var result = SendPpi(0x00, 0x01, cmd);
-            return result.IsSuccess && result.Content.Length >= 5 && result.Content[0] == 0xFF
+            if (!result.IsSuccess) return OperateResult<int>.Failed(result.Message, result.ErrorCode);
+            return result.Content.Length >= 5 && result.Content[0] == 0xFF
                 ? OperateResult<int>.Success((result.Content[1] << 24) | (result.Content[2] << 16) | (result.Content[3] << 8) | result.Content[4])
                 : OperateResult<int>.Failed("PPI 读取双字响应异常");
         }
@@ -119,23 +126,27 @@ namespace Nexus.Siemens
 
         public override OperateResult<string> ReadString(string address, ushort length)
         {
+            if (length > byte.MaxValue) return OperateResult<string>.Failed("PPI 单次读取长度不能超过 255 字节");
             var addr = ParseAddress(address);
             byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
             var result = SendPpi(0x00, 0x01, cmd);
-            if (!result.IsSuccess || result.Content.Length < 2 || result.Content[0] != 0xFF) return OperateResult<string>.Failed("PPI 读取字符串响应异常");
+            if (!result.IsSuccess) return OperateResult<string>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 1 + length || result.Content[0] != 0xFF) return OperateResult<string>.Failed("PPI 读取字符串响应异常");
             byte[] data = new byte[length];
-            Buffer.BlockCopy(result.Content, 1, data, 0, Math.Min(length, result.Content.Length - 1));
+            Buffer.BlockCopy(result.Content, 1, data, 0, length);
             return OperateResult<string>.Success(Encoding.ASCII.GetString(data).TrimEnd('\0'));
         }
 
         public override OperateResult<byte[]> ReadBytes(string address, ushort length)
         {
+            if (length > byte.MaxValue) return OperateResult<byte[]>.Failed("PPI 单次读取长度不能超过 255 字节");
             var addr = ParseAddress(address);
             byte[] cmd = new byte[] { 0x01, 0x00, (byte)length, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
             var result = SendPpi(0x00, 0x01, cmd);
-            if (!result.IsSuccess || result.Content.Length < 2 || result.Content[0] != 0xFF) return OperateResult<byte[]>.Failed("PPI 读取字节响应异常");
+            if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 1 + length || result.Content[0] != 0xFF) return OperateResult<byte[]>.Failed("PPI 读取字节响应异常");
             byte[] data = new byte[length];
-            Buffer.BlockCopy(result.Content, 1, data, 0, Math.Min(length, result.Content.Length - 1));
+            Buffer.BlockCopy(result.Content, 1, data, 0, length);
             return OperateResult<byte[]>.Success(data);
         }
 
@@ -169,9 +180,11 @@ namespace Nexus.Siemens
 
         public override OperateResult Write(string address, string value)
         {
+            if (value == null) return OperateResult.Failed("写入字符串不能为空");
             var addr = ParseAddress(address);
             byte[] data = Encoding.ASCII.GetBytes(value);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            if (data.Length > byte.MaxValue) return OperateResult.Failed("PPI 单次写入长度不能超过 255 字节");
             byte[] cmd = new byte[7 + data.Length];
             cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
             cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
@@ -182,8 +195,10 @@ namespace Nexus.Siemens
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null) return OperateResult.Failed("写入数据不能为空");
             var addr = ParseAddress(address);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
+            if (data.Length > byte.MaxValue) return OperateResult.Failed("PPI 单次写入长度不能超过 255 字节");
             byte[] cmd = new byte[7 + data.Length];
             cmd[0] = 0x01; cmd[1] = 0x00; cmd[2] = (byte)data.Length; cmd[3] = addr.AreaCode;
             cmd[4] = (byte)(addr.ByteAddress >> 8); cmd[5] = (byte)addr.ByteAddress; cmd[6] = 0x00;
@@ -224,7 +239,8 @@ namespace Nexus.Siemens
             var addr = ParseAddress(address);
             byte[] cmd = new byte[] { 0x01, 0x00, 0x08, addr.AreaCode, (byte)(addr.ByteAddress >> 8), (byte)addr.ByteAddress, 0x00 };
             var result = SendPpi(0x00, 0x01, cmd);
-            if (!result.IsSuccess || result.Content.Length < 9 || result.Content[0] != 0xFF)
+            if (!result.IsSuccess) return OperateResult<long>.Failed(result.Message, result.ErrorCode);
+            if (result.Content.Length < 9 || result.Content[0] != 0xFF)
                 return OperateResult<long>.Failed("PPI 读取长整型响应异常");
             return OperateResult<long>.Success(
                 ((long)result.Content[1] << 56) | ((long)result.Content[2] << 48) |

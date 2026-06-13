@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Nexus;
 using Nexus.Modbus;
 using Xunit;
@@ -54,6 +55,60 @@ internal class FakeSerialPort : ISerialPort
     }
 
     public void Dispose() { Close(); }
+}
+
+public class ModbusRtuAddressContextTests
+{
+    [Fact]
+    public void ByteOrderPrefix_OverridesReadAndWrite()
+    {
+        var readPort = new FakeSerialPort();
+        readPort.SetupResponse(new byte[] { 0x01, 0x03, 0x04, 0x88, 0x77, 0x66, 0x55 });
+        readPort.Open();
+
+        using (var client = new ModbusRtuClient(readPort, station: 1) { ByteOrder = Endianness.BigEndian })
+        {
+            var result = client.ReadInt32("bo=LittleEndian;40001");
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x55667788, result.Content);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+
+        var writePort = new FakeSerialPort();
+        writePort.SetupResponse(new byte[] { 0x01, 0x10, 0x00, 0x01, 0x00, 0x02 });
+        writePort.Open();
+
+        using (var client = new ModbusRtuClient(writePort, station: 1) { ByteOrder = Endianness.BigEndian })
+        {
+            var result = client.Write("bo=LittleEndian;40001", 0x11223344);
+            Assert.True(result.IsSuccess, result.Message);
+            byte[] sent = writePort.LastWrittenData!;
+            Assert.Equal(0x44, sent[7]);
+            Assert.Equal(0x33, sent[8]);
+            Assert.Equal(0x22, sent[9]);
+            Assert.Equal(0x11, sent[10]);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+    }
+
+    [Fact]
+    public void ReadUInt16_AcceptsAddressContextPrefix()
+    {
+        var port = new FakeSerialPort();
+        port.SetupResponse(new byte[] { 0x07, 0x03, 0x02, 0x12, 0x34 });
+        port.Open();
+
+        using var client = new ModbusRtuClient(port, station: 1);
+        var result = client.ReadUInt16("unit=7;40001");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)0x1234, result.Content);
+        byte[] sent = port.LastWrittenData!;
+        Assert.Equal(0x07, sent[0]);
+        Assert.Equal(0x00, sent[2]);
+        Assert.Equal(0x01, sent[3]);
+        Assert.Equal((byte)1, client.Station);
+    }
 }
 
 public class Crc16Tests
@@ -152,10 +207,9 @@ public class AddressParsingTests
         port.Open();
         using var client = new ModbusRtuClient(port);
 
-        var result = (expectedAddr, expectedReadFc, expectedWriteFc);
         var parsed = typeof(ModbusRtuClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { address });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { address });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal(expectedAddr, tuple.address);
@@ -166,9 +220,12 @@ public class AddressParsingTests
     [Fact]
     public void ParseAddressEx_NoPrefix_DefaultsToHoldingRegister()
     {
+        var port = new FakeSerialPort();
+        using var client = new ModbusRtuClient(port);
+
         var parsed = typeof(ModbusRtuClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { "100" });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { "100" });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal((ushort)100, tuple.address);
@@ -181,9 +238,12 @@ public class AddressParsingTests
     {
         Assert.Throws<System.Reflection.TargetInvocationException>(() =>
         {
+            var port = new FakeSerialPort();
+            using var client = new ModbusRtuClient(port);
+
             typeof(ModbusRtuClient)
-                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-                .Invoke(null, new object[] { "" });
+                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(client, new object[] { "" });
         });
     }
 }
@@ -582,6 +642,45 @@ public class EndiannessWriteTests
         Assert.Equal(0x56, sent[8]);
         Assert.Equal(0x34, sent[9]);
         Assert.Equal(0x12, sent[10]);
+    }
+
+    [Fact]
+    public void WriteUInt64_BigEndian_SendsFourRegisters()
+    {
+        var port = new FakeSerialPort();
+        port.SetupResponse(new byte[] { 0x01, 0x10, 0x00, 0x00, 0x00, 0x04 });
+        port.Open();
+
+        using var client = new ModbusRtuClient(port, station: 1) { ByteOrder = Endianness.BigEndian };
+        var result = client.Write("40001", 0x1122334455667788UL);
+
+        Assert.True(result.IsSuccess, result.Message);
+        byte[] sent = port.LastWrittenData!;
+        Assert.Equal(17, sent.Length);
+        Assert.Equal(0x10, sent[1]);
+        Assert.Equal(0x00, sent[4]);
+        Assert.Equal(0x04, sent[5]);
+        Assert.Equal(0x08, sent[6]);
+        Assert.Equal(new byte[] { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 }, sent.Skip(7).Take(8).ToArray());
+    }
+
+    [Fact]
+    public void WriteDouble_BigEndian_SendsFourRegisters()
+    {
+        var port = new FakeSerialPort();
+        port.SetupResponse(new byte[] { 0x01, 0x10, 0x00, 0x00, 0x00, 0x04 });
+        port.Open();
+
+        using var client = new ModbusRtuClient(port, station: 1) { ByteOrder = Endianness.BigEndian };
+        var result = client.Write("40001", 1.5d);
+
+        Assert.True(result.IsSuccess, result.Message);
+        byte[] sent = port.LastWrittenData!;
+        Assert.Equal(0x10, sent[1]);
+        Assert.Equal(0x00, sent[4]);
+        Assert.Equal(0x04, sent[5]);
+        Assert.Equal(0x08, sent[6]);
+        Assert.Equal(new byte[] { 0x3F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, sent.Skip(7).Take(8).ToArray());
     }
 }
 

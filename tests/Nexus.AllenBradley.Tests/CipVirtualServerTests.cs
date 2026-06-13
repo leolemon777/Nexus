@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using Xunit;
@@ -13,9 +14,17 @@ namespace Nexus.AllenBradley.Tests
 
         public CipVirtualServerTests()
         {
-            // 动态端口避免冲突
-            _port = 44818 + new Random().Next(100, 9999);
+            _port = GetFreeTcpPort();
             _server = new CipVirtualServer(_port);
+        }
+
+        private static int GetFreeTcpPort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
         }
 
         public void Dispose()
@@ -286,8 +295,8 @@ namespace Nexus.AllenBradley.Tests
             cipReq[2 + tagPath.Length] = 0x01; // 1 element
             cipReq[3 + tagPath.Length] = 0x00;
 
-            byte[] response = SendRRData(stream, sessionHandle, cipReq);
-            Assert.NotNull(response);
+            byte[] response = SendRRData(stream, sessionHandle, cipReq)
+                ?? throw new InvalidOperationException("Null response");
             Assert.True(response.Length >= 4);
 
             // CIP 响应: Service(1) + Reserved(1) + Status(1) + ExtStatusSize(1) + Data(4)
@@ -331,8 +340,8 @@ namespace Nexus.AllenBradley.Tests
             cipReq[pos++] = (byte)((999 >> 16) & 0xFF);
             cipReq[pos++] = (byte)((999 >> 24) & 0xFF);
 
-            byte[] response = SendRRData(stream, sessionHandle, cipReq);
-            Assert.NotNull(response);
+            byte[] response = SendRRData(stream, sessionHandle, cipReq)
+                ?? throw new InvalidOperationException("Null response");
             Assert.Equal((byte)(0x4D | 0x80), response[0]);
             Assert.Equal(0x00, response[2]); // Status = Success
 
@@ -421,8 +430,8 @@ namespace Nexus.AllenBradley.Tests
             cipReq[2 + tagPath.Length] = 0x01;
             cipReq[3 + tagPath.Length] = 0x00;
 
-            byte[] response = SendRRData(stream, sessionHandle, cipReq);
-            Assert.NotNull(response);
+            byte[] response = SendRRData(stream, sessionHandle, cipReq)
+                ?? throw new InvalidOperationException("Null response");
             Assert.Equal((byte)(0x4C | 0x80), response[0]);
             Assert.Equal(0x14, response[2]); // Tag not found
         }
@@ -493,7 +502,7 @@ namespace Nexus.AllenBradley.Tests
                         cipReq[2 + tagPath.Length] = 0x01;
                         cipReq[3 + tagPath.Length] = 0x00;
 
-                        byte[] resp = SendRRData(stream, session, cipReq);
+                        byte[]? resp = SendRRData(stream, session, cipReq);
                         if (resp == null) throw new Exception("Null response");
                         if ((resp[0] & 0x80) == 0) throw new Exception("Not a response service");
                     }

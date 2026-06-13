@@ -84,20 +84,33 @@ namespace Nexus.Mitsubishi
                     if (b == 0x02) // STX — 读响应带数据
                     {
                         using var ms = new MemoryStream();
+                        byte[]? sumBuf = null;
                         while (true)
                         {
                             int c = ReadByteWithTimeout();
                             if (c < 0) return OperateResult<string>.Failed("读取数据超时");
                             if (c == 0x03) // ETX
                             {
-                                byte[] sumBuf = new byte[2];
+                                sumBuf = new byte[2];
                                 if (!ReadExact2(sumBuf, Environment.TickCount + Timeout))
                                     return OperateResult<string>.Failed("Sum check 读取超时");
                                 break;
                             }
                             ms.WriteByte((byte)c);
                         }
-                        string responseData = Encoding.ASCII.GetString(ms.ToArray());
+                        byte[] responseBytes = ms.ToArray();
+                        if (SumCheckEnabled)
+                        {
+                            byte[] checkBytes = new byte[responseBytes.Length + 1];
+                            Buffer.BlockCopy(responseBytes, 0, checkBytes, 0, responseBytes.Length);
+                            checkBytes[checkBytes.Length - 1] = 0x03;
+                            string expected = ComputeSum(checkBytes).ToString("X2");
+                            string actual = Encoding.ASCII.GetString(sumBuf!);
+                            if (!expected.Equals(actual, StringComparison.OrdinalIgnoreCase))
+                                return OperateResult<string>.Failed($"FX Sum check 校验失败: 期望 {expected}, 实际 {actual}");
+                        }
+
+                        string responseData = Encoding.ASCII.GetString(responseBytes);
                         OnMessageReceived?.Invoke(this, $"FX Data [{responseData.Length}]");
                         return OperateResult<string>.Success(responseData);
                     }
@@ -239,7 +252,7 @@ namespace Nexus.Mitsubishi
         public OperateResult<ushort> ReadUInt16(string address)
         {
             var r = ReadInt16(address);
-            return r.IsSuccess ? OperateResult<ushort>.Success(unchecked((ushort)r.Content)) : OperateResult<ushort>.Failed(r.Message);
+            return r.IsSuccess ? OperateResult<ushort>.Success(unchecked((ushort)r.Content)) : OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
         }
 
         public OperateResult<int> ReadInt32(string address)
@@ -253,35 +266,43 @@ namespace Nexus.Mitsubishi
         public OperateResult<uint> ReadUInt32(string address)
         {
             var r = ReadInt32(address);
-            return r.IsSuccess ? OperateResult<uint>.Success(unchecked((uint)r.Content)) : OperateResult<uint>.Failed(r.Message);
+            return r.IsSuccess ? OperateResult<uint>.Success(unchecked((uint)r.Content)) : OperateResult<uint>.Failed(r.Message, r.ErrorCode);
         }
 
         public OperateResult<long> ReadInt64(string address)
         {
-            var r = ReadInt32(address);
-            return r.IsSuccess ? OperateResult<long>.Success((long)r.Content) : OperateResult<long>.Failed(r.Message);
+            var r = ReadUInt64(address);
+            return r.IsSuccess ? OperateResult<long>.Success(unchecked((long)r.Content)) : OperateResult<long>.Failed(r.Message, r.ErrorCode);
         }
 
         public OperateResult<ulong> ReadUInt64(string address)
         {
-            var r = ReadInt64(address);
-            return r.IsSuccess ? OperateResult<ulong>.Success(unchecked((ulong)r.Content)) : OperateResult<ulong>.Failed(r.Message);
+            var (device, addrHex, _) = ParseAddress(address);
+            var r = ReadWords(device, addrHex, 4);
+            if (!r.IsSuccess) return OperateResult<ulong>.Failed(r.Message, r.ErrorCode);
+            return OperateResult<ulong>.Success(Convert.ToUInt64(r.Content.Trim(), 16));
         }
 
         public unsafe OperateResult<float> ReadFloat(string address)
         {
             var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message);
+            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message, r.ErrorCode);
             int v = r.Content;
             return OperateResult<float>.Success(*(float*)&v);
         }
 
-        public OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("FX 不支持 Double");
+        public unsafe OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadUInt64(address);
+            if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message, r.ErrorCode);
+            ulong v = r.Content;
+            return OperateResult<double>.Success(*(double*)&v);
+        }
 
         public OperateResult<string> ReadString(string address, ushort length)
         {
             var r = ReadBytes(address, length);
-            if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
+            if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message, r.ErrorCode);
             return OperateResult<string>.Success(Encoding.ASCII.GetString(r.Content).TrimEnd('\0'));
         }
 
@@ -290,10 +311,12 @@ namespace Nexus.Mitsubishi
             var (d, a, _) = ParseAddress(address);
             int cnt = (length + 1) / 2;
             var r = ReadWords(d, a, cnt);
-            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
+            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode);
             byte[] raw = HexToBytes(r.Content);
+            if (raw.Length < length)
+                return OperateResult<byte[]>.Failed($"响应数据不足: 期望 {length} 字节, 实际 {raw.Length} 字节");
             byte[] result = new byte[length];
-            Array.Copy(raw, result, Math.Min(length, raw.Length));
+            Array.Copy(raw, result, length);
             return OperateResult<byte[]>.Success(result);
         }
 
@@ -320,10 +343,19 @@ namespace Nexus.Mitsubishi
         }
 
         public OperateResult Write(string address, uint value) => Write(address, unchecked((int)value));
-        public OperateResult Write(string address, long value) => Write(address, unchecked((int)value));
-        public OperateResult Write(string address, ulong value) => Write(address, unchecked((int)value));
+        public OperateResult Write(string address, long value) => Write(address, unchecked((ulong)value));
+        public OperateResult Write(string address, ulong value)
+        {
+            var (d, a, _) = ParseAddress(address);
+            return WriteWords(d, a, value.ToString("X16"));
+        }
+
         public unsafe OperateResult Write(string address, float value) => Write(address, *(int*)&value);
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public unsafe OperateResult Write(string address, double value)
+        {
+            ulong bits = *(ulong*)&value;
+            return Write(address, bits);
+        }
 
         public OperateResult Write(string address, string value)
         {
@@ -335,6 +367,7 @@ namespace Nexus.Mitsubishi
 
         public OperateResult Write(string address, byte[] data)
         {
+            if (data == null) return OperateResult.Failed("写入数据不能为空");
             var (d, a, _) = ParseAddress(address);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
             return WriteWords(d, a, BytesToHex(data));

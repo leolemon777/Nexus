@@ -26,6 +26,13 @@ namespace Nexus.Inovance
         /// <summary>EasyNet 错误标志位（response[8] == 0x0F 表示错误）。</summary>
         private const byte ErrorFlag = 0x0F;
 
+        /// <summary>默认心跳：读 D0 的 1 个 word。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            var result = BuildReadCommand("D0", 1, isBit: false);
+            return result.IsSuccess ? result.Content : null;
+        }
+
         /// <inheritdoc/>
         protected override int ResponseHeaderLength => 2;
 
@@ -42,8 +49,9 @@ namespace Nexus.Inovance
         /// </summary>
         /// <param name="ip">PLC IP 地址。</param>
         /// <param name="port">端口号（默认 502）。</param>
-        public InovanceEasyClient(string ip, int port = 502)
-            : base(ip, port)
+        /// <param name="timeout">连接和读写超时时间（毫秒）。</param>
+        public InovanceEasyClient(string ip, int port = 502, int timeout = 5000)
+            : base(ip, port, timeout)
         {
         }
 

@@ -3,18 +3,26 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- NuGet Package Metadata -->
+    <IsPackable>true</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/nexus-iot/nexus</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/nexus-iot/nexus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>industrial;plc;modbus;siemens;mitsubishi;omron;automation;iot;protocol</PackageTags>
+    <Description>Nexus Industrial Communication Library — open-source .NET library for PLC and industrial device communication</Description>
+    <Authors>Nexus Team</Authors>
+    <Company>Nexus</Company>
+
+    <!-- Source Link for debugging -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
-  <!-- NuGet 包元数据（协议库继承） -->
-  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
-    <Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>industrial-communication PLC protocol</PackageTags>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  <!-- Test projects should not be packaged -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 </Project>

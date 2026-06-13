@@ -83,8 +83,7 @@ public class KukaTcpTests
     [InlineData("main", "03main")]
     public void StartProgram_CommandFormat(string prog, string expected)
     {
-        // 通过 BuildReadCommand 间接验证命令前缀
-        Assert.StartsWith("03", expected);
+        Assert.Equal(expected, "03" + prog);
     }
 
     #endregion
@@ -186,6 +185,73 @@ public class KukaVarProxyTests
         var client = new KukaVarProxyClient("192.168.1.1");
         string s = client.ToString();
         Assert.Contains("7000", s);
+    }
+
+    #endregion
+
+    #region 扩展覆盖
+
+    [Fact]
+    public void Constructor_CustomPort()
+    {
+        var client = new KukaVarProxyClient("10.0.0.1", 8000);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotThrow()
+    {
+        var client = new KukaVarProxyClient("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void BuildReadCore_EmptyName()
+    {
+        byte[] core = KukaVarProxyClient.BuildReadCore("");
+        Assert.Equal(0x00, core[0]);
+        int nameLen = (core[1] << 8) | core[2];
+        Assert.Equal(0, nameLen);
+    }
+
+    [Fact]
+    public void BuildWriteCore_EmptyValue()
+    {
+        byte[] core = KukaVarProxyClient.BuildWriteCore("test", "");
+        Assert.Equal(0x01, core[0]);
+    }
+
+    [Fact]
+    public void PackCommand_IncrementingId()
+    {
+        var client = new KukaVarProxyClient("127.0.0.1");
+        byte[] core = KukaVarProxyClient.BuildReadCore("test");
+        byte[] packed1 = client.PackCommand(core);
+        byte[] packed2 = client.PackCommand(core);
+        ushort id1 = (ushort)((packed1[0] << 8) | packed1[1]);
+        ushort id2 = (ushort)((packed2[0] << 8) | packed2[1]);
+        Assert.Equal(id1 + 1, id2);
+    }
+
+    [Fact]
+    public void ExtractActualData_EmptyData()
+    {
+        var result = KukaVarProxyClient.ExtractActualData(new byte[0]);
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public void KukaTcpClient_Dispose_DoesNotThrow()
+    {
+        var client = new KukaTcpClient("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void KukaTcpClient_SetLogger_DoesNotThrow()
+    {
+        var client = new KukaTcpClient("192.168.1.1");
+        client.SetLogger(NullLogger.Instance);
     }
 
     #endregion

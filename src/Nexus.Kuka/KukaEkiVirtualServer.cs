@@ -18,9 +18,11 @@ namespace Nexus.Kuka
         private volatile bool _running;
         private readonly object _varLock = new object();
         private readonly System.Collections.Generic.Dictionary<string, string> _variables = new System.Collections.Generic.Dictionary<string, string>();
+        private int _connectionCount;
 
-        public int Port { get; }
+        public int Port { get; private set; }
         public bool IsRunning => _running;
+        public int ConnectionCount => _connectionCount;
 
         public KukaEkiVirtualServer(int port = 54601) { Port = port; }
 
@@ -34,6 +36,7 @@ namespace Nexus.Kuka
             if (_running) return;
             _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _running = true;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
             _acceptThread.Start();
@@ -45,7 +48,12 @@ namespace Nexus.Kuka
         {
             while (_running)
             {
-                try { var c = _listener!.AcceptTcpClient(); new Thread(() => HandleClient(c)) { IsBackground = true }.Start(); }
+                try
+                {
+                    var c = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
+                    new Thread(() => HandleClient(c)) { IsBackground = true }.Start();
+                }
                 catch { if (!_running) break; }
             }
         }
@@ -60,22 +68,30 @@ namespace Nexus.Kuka
                 {
                     try
                     {
-                        // EKI 使用简单的 XML 帧分隔，以 &lt;Robot&gt; 开头
+                        // EKI XML can be null-terminated by the client or wrapped in a <Robot> document.
                         int bytesRead = 0;
                         var sb = new StringBuilder();
                         while (stream.DataAvailable || bytesRead == 0)
                         {
                             int n = stream.Read(buf, 0, buf.Length);
                             if (n <= 0) return;
-                            sb.Append(Encoding.UTF8.GetString(buf, 0, n));
+                            string chunk = Encoding.UTF8.GetString(buf, 0, n);
+                            int nullIndex = chunk.IndexOf('\0');
+                            if (nullIndex >= 0)
+                            {
+                                sb.Append(chunk.Substring(0, nullIndex));
+                                break;
+                            }
+                            sb.Append(chunk);
                             bytesRead += n;
-                            if (sb.ToString().Contains("</Robot>")) break;
+                            string current = sb.ToString();
+                            if (current.Contains("</Robot>") || current.Contains("</READ>") || current.Contains("</WRITE>")) break;
                         }
 
                         string request = sb.ToString();
                         string response = ProcessXml(request);
 
-                        byte[] respBytes = Encoding.UTF8.GetBytes(response);
+                        byte[] respBytes = Encoding.UTF8.GetBytes(response + "\0");
                         stream.Write(respBytes, 0, respBytes.Length);
                     }
                     catch { break; }
@@ -85,6 +101,44 @@ namespace Nexus.Kuka
 
         private string ProcessXml(string request)
         {
+            // Client format: <READ><VARIABLE name="..."/></READ>
+            int clientReadIdx = request.IndexOf("<READ><VARIABLE name=\"");
+            if (clientReadIdx >= 0)
+            {
+                int start = clientReadIdx + "<READ><VARIABLE name=\"".Length;
+                int end = request.IndexOf("\"", start);
+                if (end > start)
+                {
+                    string varName = request.Substring(start, end - start);
+                    string value;
+                    lock (_varLock)
+                    {
+                        value = _variables.TryGetValue(varName, out var v) ? v : "0";
+                    }
+                    return $"<REPLY><VARIABLE>{value}</VARIABLE></REPLY>";
+                }
+            }
+
+            // Client format: <WRITE><VARIABLE name="...">VALUE</VARIABLE></WRITE>
+            int clientWriteIdx = request.IndexOf("<WRITE><VARIABLE name=\"");
+            if (clientWriteIdx >= 0)
+            {
+                int start = clientWriteIdx + "<WRITE><VARIABLE name=\"".Length;
+                int end = request.IndexOf("\"", start);
+                if (end > start)
+                {
+                    string varName = request.Substring(start, end - start);
+                    int valStart = request.IndexOf(">", end) + 1;
+                    int valEnd = request.IndexOf("</VARIABLE>", valStart);
+                    if (valEnd > valStart)
+                    {
+                        string value = request.Substring(valStart, valEnd - valStart);
+                        lock (_varLock) _variables[varName] = value;
+                        return $"<REPLY><VARIABLE>{value}</VARIABLE></REPLY>";
+                    }
+                }
+            }
+
             // 解析 <Read Var="..." />
             int readIdx = request.IndexOf("<Read Var=\"");
             if (readIdx >= 0)

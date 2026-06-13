@@ -503,5 +503,12 @@ namespace Nexus.Siemens
             }
             catch { }
         }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand("DB1.0", 1).Content; }
+            catch { return null; }
+        }
     }
 }

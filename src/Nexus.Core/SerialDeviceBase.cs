@@ -59,7 +59,7 @@ namespace Nexus
         protected ISerialPort Port { get; }
         protected int Timeout { get; set; }
         protected ILogger Log { get; set; }
-        private readonly object _lock = new object();
+        protected readonly object _lock = new object();
         protected bool _persistentMode;
 
         // ── 可配置属性 ──────────────────────────────

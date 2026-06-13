@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Nexus.Siemens;
 
@@ -382,6 +385,174 @@ public class FetchWriteTests
             server.Stop();
             server.Dispose();
         }
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadInt16_ReusesPersistentConnection()
+    {
+        int port = PortBase + 20;
+        var server = new SiemensFetchWriteVirtualServer(port);
+        server.SetM(100, 0x12);
+        server.SetM(101, 0x34);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensFetchWriteConnectionPool("127.0.0.1", port);
+
+            var first = pool.ReadInt16("M100");
+            Assert.True(first.IsSuccess, first.Message);
+            Assert.Equal(0x1234, (ushort)first.Content);
+
+            var second = pool.ReadInt16("M100");
+            Assert.True(second.IsSuccess, second.Message);
+            Assert.Equal(0x1234, (ushort)second.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_WriteAndRead_RoundTrip()
+    {
+        int port = PortBase + 21;
+        var server = new SiemensFetchWriteVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensFetchWriteConnectionPool("127.0.0.1", port);
+
+            var write = pool.Write("DB1.10", unchecked((short)0xABCD));
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.ReadInt16("DB1.10");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal(unchecked((short)0xABCD), read.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_BatchReadAndWrite_UsesSingleConnection()
+    {
+        int port = PortBase + 22;
+        var server = new SiemensFetchWriteVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensFetchWriteConnectionPool("127.0.0.1", port);
+
+            var write = pool.BatchWrite(new[]
+            {
+                new KeyValuePair<string, object>("M10", (short)123),
+                new KeyValuePair<string, object>("M12", (short)456)
+            });
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = pool.BatchRead(new[] { "M10", "M12" });
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal((short)123, read.Content["M10"]);
+            Assert.Equal((short)456, read.Content["M12"]);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectionPool_ExecuteAsync_ReadInt16_ReusesPersistentConnection()
+    {
+        int port = PortBase + 23;
+        var server = new SiemensFetchWriteVirtualServer(port);
+        server.SetM(30, 0x01);
+        server.SetM(31, 0x2C);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensFetchWriteConnectionPool("127.0.0.1", port);
+
+            var result = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("M30")));
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)300, result.Content);
+
+            var second = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("M30")));
+            Assert.True(second.IsSuccess, second.Message);
+            Assert.Equal((short)300, second.Content);
+
+            Assert.True(WaitForConnections(server, 1));
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsMessageEvents()
+    {
+        int port = PortBase + 24;
+        var server = new SiemensFetchWriteVirtualServer(port);
+        server.SetM(40, 0x00);
+        server.SetM(41, 0x2A);
+        server.Start();
+
+        try
+        {
+            using var pool = new SiemensFetchWriteConnectionPool("127.0.0.1", port);
+            int sent = 0;
+            int received = 0;
+            pool.OnMessageSent += (_, _) => sent++;
+            pool.OnMessageReceived += (_, _) => received++;
+
+            var result = pool.ReadInt16("M40");
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)42, result.Content);
+
+            Assert.True(sent > 0);
+            Assert.True(received > 0);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    private static bool WaitForConnections(SiemensFetchWriteVirtualServer server, int expected, int timeoutMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (server.ConnectionCount >= expected)
+                return true;
+            Thread.Sleep(10);
+        }
+        return server.ConnectionCount >= expected;
     }
 
     #endregion

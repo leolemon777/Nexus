@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using Xunit;
 using Nexus.AllenBradley;
 
@@ -631,6 +635,87 @@ public class PcccTests
         {
             server.Stop();
             server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadWrite_ReusesPersistentSession()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new PcccVirtualServer(port);
+        server.Start();
+
+        using var pool = new PcccConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+
+        var write = pool.Write("N7:20", (short)4321);
+        Assert.True(write.IsSuccess, write.Message);
+
+        var read = pool.ReadInt16("N7:20");
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((short)4321, read.Content);
+        Assert.Equal(0, pool.ActiveCount);
+        Assert.Equal(1, pool.IdleCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsPacketEvents()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new PcccVirtualServer(port);
+        server.SetN7Word(10, 0x1234);
+        server.Start();
+
+        using var pool = new PcccConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+        int sent = 0;
+        int received = 0;
+        pool.OnMessageSent += (_, hex) =>
+        {
+            if (!string.IsNullOrWhiteSpace(hex)) Interlocked.Increment(ref sent);
+        };
+        pool.OnMessageReceived += (_, hex) =>
+        {
+            if (!string.IsNullOrWhiteSpace(hex)) Interlocked.Increment(ref received);
+        };
+
+        var read = pool.ReadUInt16("N7:10");
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((ushort)0x1234, read.Content);
+        Assert.True(sent > 0);
+        Assert.True(received > 0);
+    }
+
+    [Fact]
+    public void ConnectionPool_BatchReadWrite()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new PcccVirtualServer(port);
+        server.Start();
+
+        using var pool = new PcccConnectionPool("127.0.0.1", port, maxPoolSize: 1);
+        var write = pool.BatchWrite(new[]
+        {
+            new KeyValuePair<string, object>("N7:30", (short)111),
+            new KeyValuePair<string, object>("N7:31", (short)222)
+        });
+        Assert.True(write.IsSuccess, write.Message);
+
+        var read = pool.BatchRead(new[] { "N7:30", "N7:31" });
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((short)111, read.Content["N7:30"]);
+        Assert.Equal((short)222, read.Content["N7:31"]);
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 

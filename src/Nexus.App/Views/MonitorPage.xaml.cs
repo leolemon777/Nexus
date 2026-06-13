@@ -24,7 +24,10 @@ public partial class MonitorPage : Page
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
-        => _vm!.LogLines.CollectionChanged += OnLogChanged;
+    {
+        _vm!.Initialize();
+        _vm.LogLines.CollectionChanged += OnLogChanged;
+    }
 
     private void OnLogChanged(object? s, NotifyCollectionChangedEventArgs e)
     {

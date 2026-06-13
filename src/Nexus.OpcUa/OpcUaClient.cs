@@ -1,3 +1,4 @@
+#nullable disable warnings
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -1477,4 +1478,3 @@ namespace Nexus.OpcUa
         public override string ToString() => $"{BrowseName} [{NodeId}] ({NodeClass})";
     }
 }
-

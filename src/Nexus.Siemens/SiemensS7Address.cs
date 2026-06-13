@@ -47,6 +47,30 @@ namespace Nexus.Siemens
                 // V 区原生映射为 S7Area.V (0x85)，DBNumber 为 0
                 result = ParseSubAddress(address.Substring(1), S7Area.V, 0);
             }
+            else if (address.StartsWith("T"))
+            {
+                // 定时器区 (S7Area.TM = 0x1D)
+                result = new SiemensS7Address
+                {
+                    Area = S7Area.TM,
+                    DBNumber = 0,
+                    ByteAddress = int.Parse(address.Substring(1)),
+                    BitOffset = 0,
+                    DataSize = 2
+                };
+            }
+            else if (address.StartsWith("C"))
+            {
+                // 计数器区 (S7Area.CT = 0x1C)
+                result = new SiemensS7Address
+                {
+                    Area = S7Area.CT,
+                    DBNumber = 0,
+                    ByteAddress = int.Parse(address.Substring(1)),
+                    BitOffset = 0,
+                    DataSize = 2
+                };
+            }
             else
             {
                 throw new AddressParseException(original, "不支持的地址格式");

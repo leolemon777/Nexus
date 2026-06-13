@@ -17,7 +17,7 @@ namespace Nexus.Schneider
         private volatile bool _running;
 
         /// <summary>监听端口。</summary>
-        public int Port { get; }
+        public int Port { get; private set; }
 
         private readonly ushort[] _holdingRegisters = new ushort[65536];
         private readonly bool[] _coils = new bool[65536];
@@ -75,6 +75,7 @@ namespace Nexus.Schneider
             if (_running) return;
             _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _running = true;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
             _acceptThread.Start();

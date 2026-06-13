@@ -44,7 +44,7 @@ namespace Nexus.Yokogawa
         public byte CpuNumber { get; set; } = 1;
 
         /// <summary>监听端口。</summary>
-        public int Port { get; }
+        public int Port { get; private set; }
 
         /// <summary>数据存储: dataCode → byte[]。</summary>
         private readonly Dictionary<int, byte[]> _storage = new Dictionary<int, byte[]>();
@@ -169,6 +169,7 @@ namespace Nexus.Yokogawa
 
             _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _cts = new CancellationTokenSource();
             _isRunning = true;
             _acceptTask = AcceptLoop(_cts.Token);

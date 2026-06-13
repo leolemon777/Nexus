@@ -162,11 +162,15 @@ namespace Nexus.Iec104
                 case TypeId.M_DP_NA_1: return 1; // DIQ
                 case TypeId.M_ME_NA_1: return 3; // NVA(2) + QDS(1)
                 case TypeId.M_ME_NC_1: return 5; // Float(4) + QDS(1)
+                case TypeId.M_IT_NA_1: return 5; // BCR(5)
                 case TypeId.C_SC_NA_1: return 1; // SCO
                 case TypeId.C_DC_NA_1: return 1; // DCO
                 case TypeId.C_SE_NA_1: return 3; // NVA(2) + QOS(1)
                 case TypeId.C_IC_NA_1: return 1; // QOI
+                case TypeId.C_CI_NA_1: return 1; // QCC
                 case TypeId.C_RD_NA_1: return 0; // no data
+                case TypeId.C_CS_NA_1: return 7; // CP56Time2a
+                case TypeId.C_TS_TA_1: return 9; // TSC(2) + CP56Time2a(7)
                 default: return 0;
             }
         }
@@ -319,6 +323,95 @@ namespace Nexus.Iec104
                 Data = Array.Empty<byte>()
             });
             return asdu;
+        }
+
+        public static Iec104Asdu BuildClockSyncCommand(int commonAddr, DateTime time, byte originator = 0)
+        {
+            var asdu = new Iec104Asdu
+            {
+                TypeId = TypeId.C_CS_NA_1,
+                Vsq = 1,
+                Cause = CauseOfTransmission.Activation,
+                OriginatorAddress = originator,
+                CommonAddress = commonAddr,
+            };
+            byte[] cp56Time = EncodeCP56Time2a(time);
+            asdu.Objects.Add(new Iec104InformationObject
+            {
+                Address = 0,
+                Data = cp56Time
+            });
+            return asdu;
+        }
+
+        public static Iec104Asdu BuildCounterReadCommand(int commonAddr, byte groupNumber = 0, byte originator = 0)
+        {
+            var asdu = new Iec104Asdu
+            {
+                TypeId = TypeId.C_CI_NA_1,
+                Vsq = 1,
+                Cause = CauseOfTransmission.Activation,
+                OriginatorAddress = originator,
+                CommonAddress = commonAddr,
+            };
+            asdu.Objects.Add(new Iec104InformationObject
+            {
+                Address = 0,
+                Data = new byte[] { (byte)(groupNumber == 0 ? 5 : (groupNumber & 0x3F)) }
+            });
+            return asdu;
+        }
+
+        public static Iec104Asdu BuildTestCommand(int commonAddr, ushort testCounter, DateTime time, byte originator = 0)
+        {
+            var asdu = new Iec104Asdu
+            {
+                TypeId = TypeId.C_TS_TA_1,
+                Vsq = 1,
+                Cause = CauseOfTransmission.Activation,
+                OriginatorAddress = originator,
+                CommonAddress = commonAddr,
+            };
+            byte[] cp56Time = EncodeCP56Time2a(time);
+            byte[] data = new byte[2 + 7]; // TSC(2) + CP56Time2a(7)
+            data[0] = (byte)(testCounter & 0xFF);
+            data[1] = (byte)((testCounter >> 8) & 0xFF);
+            Buffer.BlockCopy(cp56Time, 0, data, 2, 7);
+            asdu.Objects.Add(new Iec104InformationObject
+            {
+                Address = 0,
+                Data = data
+            });
+            return asdu;
+        }
+
+        public static byte[] EncodeCP56Time2a(DateTime time)
+        {
+            byte[] result = new byte[7];
+            int ms = time.Millisecond + time.Second * 1000;
+            result[0] = (byte)(ms & 0xFF);
+            result[1] = (byte)((ms >> 8) & 0xFF);
+            result[2] = (byte)time.Minute;
+            result[3] = (byte)time.Hour;
+            int dow = (int)time.DayOfWeek;
+            if (dow == 0) dow = 7; // Sunday = 7 in IEC 104
+            result[4] = (byte)((dow & 0x07) | ((time.Day & 0x1F) << 3));
+            result[5] = (byte)(((time.Day >> 5) & 0x03) | ((time.Month & 0x0F) << 4));
+            result[6] = (byte)(time.Year % 100);
+            return result;
+        }
+
+        public static DateTime DecodeCP56Time2a(byte[] data, int offset)
+        {
+            int ms = data[offset] | (data[offset + 1] << 8);
+            int sec = ms / 1000;
+            int milli = ms % 1000;
+            int min = data[offset + 2] & 0x3F;
+            int hour = data[offset + 3] & 0x1F;
+            int day = ((data[offset + 4] >> 3) & 0x1F) | ((data[offset + 5] & 0x03) << 5);
+            int month = (data[offset + 5] >> 4) & 0x0F;
+            int year = 2000 + (data[offset + 6] & 0x7F);
+            return new DateTime(year, Math.Max(1, month), Math.Max(1, day), hour, min, sec, milli, DateTimeKind.Utc);
         }
     }
 }

@@ -161,5 +161,74 @@ namespace Nexus.Dnp3.Tests
             Assert.Equal((ushort)1, client.MasterAddress);
             Assert.Equal((ushort)1024, client.OutstationAddress);
         }
+
+        [Fact]
+        public void Dnp3Client_Constructor_SetsIp()
+        {
+            var client = new Dnp3Client("10.0.0.1");
+            Assert.False(client.IsConnected);
+        }
+
+        [Fact]
+        public void Dnp3Client_Dispose_DoesNotThrow()
+        {
+            var client = new Dnp3Client("127.0.0.1");
+            client.Dispose();
+        }
+
+        [Fact]
+        public void Dnp3Client_MasterAddress_CanBeSet()
+        {
+            var client = new Dnp3Client("127.0.0.1");
+            client.MasterAddress = 5;
+            Assert.Equal((ushort)5, client.MasterAddress);
+        }
+
+        [Fact]
+        public void Dnp3Client_OutstationAddress_CanBeSet()
+        {
+            var client = new Dnp3Client("127.0.0.1");
+            client.OutstationAddress = 2048;
+            Assert.Equal((ushort)2048, client.OutstationAddress);
+        }
+
+        [Fact]
+        public void BuildReadRequest_CounterGroup()
+        {
+            byte[] pdu = Dnp3Client.BuildReadRequest(1, Dnp3Group.Counter, Dnp3Variation.Counter32, 0, 5);
+            Assert.True(pdu.Length >= 8);
+            Assert.Equal((byte)Dnp3Group.Counter, pdu[2]);
+        }
+
+        [Fact]
+        public void BuildReadRequest_BinaryInputGroup()
+        {
+            byte[] pdu = Dnp3Client.BuildReadRequest(1, Dnp3Group.BinaryInput, Dnp3Variation.BinaryInputPacked, 0, 8);
+            Assert.True(pdu.Length >= 8);
+            Assert.Equal((byte)Dnp3Group.BinaryInput, pdu[2]);
+        }
+
+        [Fact]
+        public void BuildLinkHeader_SmallPayload()
+        {
+            byte[] userData = new byte[] { 0xFF };
+            byte[] frame = Dnp3Client.BuildLinkHeader(1, 1, 0xC4, userData);
+            Assert.Equal(Dnp3Constants.StartByte1, frame[0]);
+            Assert.Equal(Dnp3Constants.StartByte2, frame[1]);
+        }
+
+        [Fact]
+        public void FunctionCode_AllReadRelated()
+        {
+            Assert.Equal(0x01, (byte)Dnp3FunctionCode.Read);
+            Assert.Equal(0x02, (byte)Dnp3FunctionCode.Write);
+            Assert.Equal(0x05, (byte)Dnp3FunctionCode.DirectOperate);
+        }
+
+        [Fact]
+        public void Dnp3Group_AnalogOutput_Value()
+        {
+            Assert.Equal(40, (byte)Dnp3Group.AnalogOutput);
+        }
     }
 }

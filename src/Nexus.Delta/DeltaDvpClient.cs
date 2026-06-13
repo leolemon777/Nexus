@@ -13,7 +13,7 @@ namespace Nexus.Delta
     /// <para>地址映射: Y0=0x0000, X0=0x0400, T0=0x0600, C0=0x0800, D0=0x1000, T0(Timer当前值)=0x1800</para>
     /// <para>对标 HSL: DeltaDvp — Read/Write D/T/C/Y/X/M 寄存器, ReadBools/WriteBools, 大块分割</para>
     /// </summary>
-    public class DeltaDvpClient : IBatchReadWrite, ISubscribeDevice
+    public class DeltaDvpClient : IReadWriteDevice, IBatchReadWrite, ISubscribeDevice
     {
         private readonly Stream _stream;
         private readonly object _lock = new object();
@@ -39,6 +39,11 @@ namespace Nexus.Delta
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             Station = station;
             Timeout = timeout;
+            if (_stream.CanTimeout)
+            {
+                _stream.ReadTimeout = timeout;
+                _stream.WriteTimeout = timeout;
+            }
             Log = NullLogger.Instance;
         }
 
@@ -54,22 +59,8 @@ namespace Nexus.Delta
         /// </summary>
         private static (ushort address, byte readFc, byte writeFc) ParseDeltaAddress(string address)
         {
-            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("地址不能为空");
-            address = address.Trim().ToUpperInvariant();
-
-            char prefix = address[0];
-            int num = int.Parse(address.Substring(1));
-
-            return prefix switch
-            {
-                'Y' => ((ushort)(0x0000 + num), 0x01, 0x05), // Output Coil
-                'X' => ((ushort)(0x0000 + num), 0x02, 0x00), // Input Discrete (read-only, use FC02 but address in 1x range)
-                'M' => ((ushort)(0x0800 + num), 0x01, 0x05), // Internal Relay → Coil range 2048+
-                'T' => ((ushort)(0x0C00 + num), 0x01, 0x05), // Timer Coil → Coil range 3072+
-                'C' => ((ushort)(0x1000 + num), 0x01, 0x05), // Counter Coil → Coil range 4096+
-                'D' => ((ushort)(0x1000 + num), 0x03, 0x06), // Data Register → Holding Register 4096+
-                _   => ((ushort)num, 0x03, 0x06),             // Default: holding register
-            };
+            var parsed = DeltaDvpAddress.Parse(address);
+            return (parsed.Address, parsed.ReadFunctionCode, parsed.WriteFunctionCode);
         }
 
         // ═══════════════════════════════════════════
@@ -88,59 +79,106 @@ namespace Nexus.Delta
                 frame[frame.Length - 2] = (byte)(crc & 0xFF);
                 frame[frame.Length - 1] = (byte)((crc >> 8) & 0xFF);
 
+                OnMessageSent?.Invoke(this, BitConverter.ToString(frame));
                 _stream.Write(frame, 0, frame.Length);
 
                 // 读取响应
                 var r = ReadRtuResponse();
+                if (r.IsSuccess)
+                    OnMessageReceived?.Invoke(this, BitConverter.ToString(r.Content));
+                else
+                    OnError?.Invoke(this, r.Message);
+
                 return r;
             }
         }
 
         private OperateResult<byte[]> ReadRtuResponse()
         {
-            // 简化: 读到足够字节
-            byte[] header = new byte[2];
-            ReadExact(header, 0, 2);
+            try
+            {
+                byte[] header = new byte[2];
+                ReadExact(header, 0, 2);
 
-            byte fc = header[1];
-            if ((fc & 0x80) != 0)
-            {
-                byte[] errData = new byte[3];
-                ReadExact(errData, 0, 3);
-                byte exCode = errData[2];
-                return OperateResult<byte[]>.Failed($"Delta Modbus 异常: 0x{exCode:X2}", exCode);
-            }
+                if (header[0] != Station)
+                    return OperateResult<byte[]>.Failed($"站号不匹配: 期望 {Station}, 实际 {header[0]}");
 
-            if (fc == 0x01 || fc == 0x02)
-            {
-                byte[] rest = new byte[1];
-                ReadExact(rest, 0, 1);
-                byte byteCount = rest[0];
-                byte[] data = new byte[byteCount + 2]; // data + CRC
-                ReadExact(data, 0, byteCount + 2);
-                byte[] result = new byte[byteCount];
-                Buffer.BlockCopy(data, 0, result, 0, byteCount);
-                return OperateResult<byte[]>.Success(result);
-            }
-            else if (fc == 0x03 || fc == 0x04)
-            {
-                byte[] rest = new byte[1];
-                ReadExact(rest, 0, 1);
-                byte byteCount = rest[0];
-                byte[] data = new byte[byteCount + 2];
-                ReadExact(data, 0, byteCount + 2);
-                byte[] result = new byte[byteCount];
-                Buffer.BlockCopy(data, 0, result, 0, byteCount);
-                return OperateResult<byte[]>.Success(result);
-            }
-            else if (fc == 0x05 || fc == 0x06 || fc == 0x0F || fc == 0x10)
-            {
-                byte[] rest = new byte[6]; // addr(2) + value(2) + crc(2)
-                ReadExact(rest, 0, 6);
-                return OperateResult<byte[]>.Success(rest);
-            }
+                byte fc = header[1];
+                if ((fc & 0x80) != 0)
+                {
+                    byte[] rest = new byte[3]; // exception code + CRC
+                    ReadExact(rest, 0, rest.Length);
+                    var crcCheck = VerifyCrc(header, rest);
+                    if (!crcCheck.IsSuccess) return crcCheck;
+                    byte exCode = rest[0];
+                    return OperateResult<byte[]>.Failed($"Delta Modbus 异常: 0x{exCode:X2}", exCode);
+                }
 
-            return OperateResult<byte[]>.Failed($"未知功能码: 0x{fc:X2}");
+                if (fc == 0x01 || fc == 0x02 || fc == 0x03 || fc == 0x04)
+                {
+                    byte[] countBuf = new byte[1];
+                    ReadExact(countBuf, 0, countBuf.Length);
+                    byte byteCount = countBuf[0];
+                    byte[] dataAndCrc = new byte[byteCount + 2];
+                    ReadExact(dataAndCrc, 0, dataAndCrc.Length);
+
+                    byte[] rest = new byte[1 + dataAndCrc.Length];
+                    rest[0] = byteCount;
+                    Buffer.BlockCopy(dataAndCrc, 0, rest, 1, dataAndCrc.Length);
+                    var crcCheck = VerifyCrc(header, rest);
+                    if (!crcCheck.IsSuccess) return crcCheck;
+
+                    byte[] result = new byte[byteCount];
+                    Buffer.BlockCopy(dataAndCrc, 0, result, 0, byteCount);
+                    return OperateResult<byte[]>.Success(result);
+                }
+
+                if (fc == 0x05 || fc == 0x06 || fc == 0x0F || fc == 0x10)
+                {
+                    byte[] rest = new byte[6]; // addr(2) + value/count(2) + CRC(2)
+                    ReadExact(rest, 0, rest.Length);
+                    var crcCheck = VerifyCrc(header, rest);
+                    if (!crcCheck.IsSuccess) return crcCheck;
+
+                    byte[] result = new byte[4];
+                    Buffer.BlockCopy(rest, 0, result, 0, result.Length);
+                    return OperateResult<byte[]>.Success(result);
+                }
+
+                return OperateResult<byte[]>.Failed($"未知功能码: 0x{fc:X2}");
+            }
+            catch (TimeoutException ex)
+            {
+                return OperateResult<byte[]>.Failed(ex.Message);
+            }
+            catch (IOException ex)
+            {
+                return OperateResult<byte[]>.Failed($"读取响应失败: {ex.Message}");
+            }
+        }
+
+        private static OperateResult<byte[]> VerifyCrc(byte[] header, byte[] rest)
+        {
+            byte[] frame = new byte[header.Length + rest.Length];
+            Buffer.BlockCopy(header, 0, frame, 0, header.Length);
+            Buffer.BlockCopy(rest, 0, frame, header.Length, rest.Length);
+
+            if (frame.Length < 4)
+                return OperateResult<byte[]>.Failed("响应长度不足，无法校验 CRC");
+
+            ushort expected = Crc16(frame, 0, frame.Length - 2);
+            ushort actual = (ushort)(frame[frame.Length - 2] | (frame[frame.Length - 1] << 8));
+            if (expected != actual)
+                return OperateResult<byte[]>.Failed($"CRC 校验失败: 期望 0x{expected:X4}, 实际 0x{actual:X4}");
+
+            return OperateResult<byte[]>.Success(Array.Empty<byte>());
+        }
+
+        private static OperateResult EnsureLength(byte[] data, int expectedLength)
+        {
+            if (data.Length < expectedLength)
+                return OperateResult.Failed($"响应数据不足: 期望 {expectedLength} 字节, 实际 {data.Length} 字节");
+            return OperateResult.Success();
         }
 
         private void ReadExact(byte[] buffer, int offset, int count)
@@ -148,11 +186,23 @@ namespace Nexus.Delta
             int deadline = Environment.TickCount + Timeout;
             while (count > 0 && Environment.TickCount <= deadline)
             {
-                int n = _stream.Read(buffer, offset, count);
+                int n;
+                try
+                {
+                    n = _stream.Read(buffer, offset, count);
+                }
+                catch (IOException ex)
+                {
+                    throw new TimeoutException("读取超时", ex);
+                }
+
                 if (n <= 0) throw new TimeoutException("读取超时");
                 offset += n;
                 count -= n;
             }
+
+            if (count > 0)
+                throw new TimeoutException("读取超时");
         }
 
         private static ushort Crc16(byte[] data, int offset, int length)
@@ -180,6 +230,8 @@ namespace Nexus.Delta
             byte[] pdu = { readFc, (byte)(addr >> 8), (byte)addr, 0, 1 };
             var r = SendReceive(pdu);
             if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode);
+            var length = EnsureLength(r.Content, 1);
+            if (!length.IsSuccess) return OperateResult<bool>.Failed(length.Message, length.ErrorCode);
             return OperateResult<bool>.Success((r.Content[0] & 0x01) != 0);
         }
 
@@ -189,7 +241,9 @@ namespace Nexus.Delta
             byte[] pdu = { readFc, (byte)(addr >> 8), (byte)addr, 0, 1 };
             var r = SendReceive(pdu);
             if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0));
+            var length = EnsureLength(r.Content, 2);
+            if (!length.IsSuccess) return OperateResult<short>.Failed(length.Message, length.ErrorCode);
+            return OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0, ByteOrder));
         }
 
         public OperateResult<ushort> ReadUInt16(string address)
@@ -204,29 +258,72 @@ namespace Nexus.Delta
             byte[] pdu = { readFc, (byte)(addr >> 8), (byte)addr, 0, 2 };
             var r = SendReceive(pdu);
             if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<int>.Success(DataConverter.ToInt32(r.Content, 0));
+            var length = EnsureLength(r.Content, 4);
+            if (!length.IsSuccess) return OperateResult<int>.Failed(length.Message, length.ErrorCode);
+            return OperateResult<int>.Success(DataConverter.ToInt32(r.Content, 0, ByteOrder));
         }
 
         public OperateResult<uint> ReadUInt32(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<uint>.Success((uint)r.Content) : OperateResult<uint>.Failed(r.Message, r.ErrorCode); }
-        public OperateResult<long> ReadInt64(string address) { var r = ReadInt32(address); return r.IsSuccess ? OperateResult<long>.Success((long)r.Content) : OperateResult<long>.Failed(r.Message, r.ErrorCode); }
+        public OperateResult<long> ReadInt64(string address)
+        {
+            var (addr, readFc, _) = ParseDeltaAddress(address);
+            byte[] pdu = { readFc, (byte)(addr >> 8), (byte)addr, 0, 4 };
+            var r = SendReceive(pdu);
+            if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message, r.ErrorCode);
+            var length = EnsureLength(r.Content, 8);
+            if (!length.IsSuccess) return OperateResult<long>.Failed(length.Message, length.ErrorCode);
+            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 0, ByteOrder));
+        }
+
         public OperateResult<ulong> ReadUInt64(string address) { var r = ReadInt64(address); return r.IsSuccess ? OperateResult<ulong>.Success((ulong)r.Content) : OperateResult<ulong>.Failed(r.Message, r.ErrorCode); }
-        public unsafe OperateResult<float> ReadFloat(string address) { var r = ReadInt32(address); if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message); int v = r.Content; return OperateResult<float>.Success(*(float*)&v); }
-        public unsafe OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("Delta DVP 不支持 64 位浮点");
-        public OperateResult<string> ReadString(string address, ushort length) { var r = ReadBytes(address, length); if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message); return OperateResult<string>.Success(System.Text.Encoding.ASCII.GetString(r.Content).TrimEnd('\0')); }
-        public OperateResult<byte[]> ReadBytes(string address, ushort length) { var (a, fc, _) = ParseDeltaAddress(address); ushort cnt = (ushort)((length + 1) / 2); var r = SendReceive(new byte[] { fc, (byte)(a >> 8), (byte)a, (byte)(cnt >> 8), (byte)cnt }); if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message); return OperateResult<byte[]>.Success(r.Content); }
+        public unsafe OperateResult<float> ReadFloat(string address) { var r = ReadInt32(address); if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message, r.ErrorCode); int v = r.Content; return OperateResult<float>.Success(*(float*)&v); }
+        public OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadInt64(address);
+            if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message, r.ErrorCode);
+            return OperateResult<double>.Success(DataConverter.ToDouble(DataConverter.GetBytes(r.Content), 0));
+        }
+
+        public OperateResult<string> ReadString(string address, ushort length) { var r = ReadBytes(address, length); if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message, r.ErrorCode); return OperateResult<string>.Success(System.Text.Encoding.ASCII.GetString(r.Content).TrimEnd('\0')); }
+        public OperateResult<byte[]> ReadBytes(string address, ushort length)
+        {
+            var (a, fc, _) = ParseDeltaAddress(address);
+            ushort cnt = (ushort)((length + 1) / 2);
+            var r = SendReceive(new byte[] { fc, (byte)(a >> 8), (byte)a, (byte)(cnt >> 8), (byte)cnt });
+            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode);
+            var lengthCheck = EnsureLength(r.Content, length);
+            if (!lengthCheck.IsSuccess) return OperateResult<byte[]>.Failed(lengthCheck.Message, lengthCheck.ErrorCode);
+            byte[] result = new byte[length];
+            Buffer.BlockCopy(r.Content, 0, result, 0, length);
+            return OperateResult<byte[]>.Success(result);
+        }
 
         // ── 写入 ──
-        public OperateResult Write(string address, bool value) { var (a, _, wfc) = ParseDeltaAddress(address); return SendReceive(new byte[] { wfc, (byte)(a >> 8), (byte)a, (byte)(value ? 0xFF : 0x00), 0x00 }).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败"); }
-        public OperateResult Write(string address, short value) { var (a, _, _) = ParseDeltaAddress(address); var vb = DataConverter.GetBytes(value); return SendReceive(new byte[] { 0x06, (byte)(a >> 8), (byte)a, vb[0], vb[1] }).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败"); }
+        public OperateResult Write(string address, bool value)
+        {
+            var (a, _, wfc) = ParseDeltaAddress(address);
+            if (wfc == 0) return OperateResult.Failed($"地址 {address} 为只读区域");
+            var r = SendReceive(new byte[] { wfc, (byte)(a >> 8), (byte)a, (byte)(value ? 0xFF : 0x00), 0x00 });
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
+        public OperateResult Write(string address, short value)
+        {
+            var (a, _, _) = ParseDeltaAddress(address);
+            var vb = DataConverter.GetBytes(value, ByteOrder);
+            var r = SendReceive(new byte[] { 0x06, (byte)(a >> 8), (byte)a, vb[0], vb[1] });
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
         public OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public OperateResult Write(string address, int value) { var (a, _, _) = ParseDeltaAddress(address); var vb = DataConverter.GetBytes(value); byte[] pdu = new byte[9]; pdu[0] = 0x10; pdu[1] = (byte)(a >> 8); pdu[2] = (byte)a; pdu[3] = 0; pdu[4] = 2; pdu[5] = 4; Buffer.BlockCopy(vb, 0, pdu, 6, 4); return SendReceive(pdu).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败"); }
+        public OperateResult Write(string address, int value) { var (a, _, _) = ParseDeltaAddress(address); var vb = DataConverter.GetBytes(value, ByteOrder); byte[] pdu = new byte[10]; pdu[0] = 0x10; pdu[1] = (byte)(a >> 8); pdu[2] = (byte)a; pdu[3] = 0; pdu[4] = 2; pdu[5] = 4; Buffer.BlockCopy(vb, 0, pdu, 6, 4); var r = SendReceive(pdu); return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode); }
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value) { var (a, _, _) = ParseDeltaAddress(address); var vb = DataConverter.GetBytes(value, ByteOrder); byte[] pdu = new byte[14]; pdu[0] = 0x10; pdu[1] = (byte)(a >> 8); pdu[2] = (byte)a; pdu[3] = 0; pdu[4] = 4; pdu[5] = 8; Buffer.BlockCopy(vb, 0, pdu, 6, 8); var r = SendReceive(pdu); return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode); }
+        public OperateResult Write(string address, ulong value) => Write(address, (long)value);
         public unsafe OperateResult Write(string address, float value) => Write(address, *(int*)&value);
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public OperateResult Write(string address, double value) => Write(address, DataConverter.ToInt64(DataConverter.GetBytes(value), 0));
         public OperateResult Write(string address, string value) => Write(address, System.Text.Encoding.ASCII.GetBytes(value ?? ""));
-        public OperateResult Write(string address, byte[] data) { var (a, _, _) = ParseDeltaAddress(address); if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1); ushort cnt = (ushort)(data.Length / 2); byte[] pdu = new byte[6 + data.Length]; pdu[0] = 0x10; pdu[1] = (byte)(a >> 8); pdu[2] = (byte)a; pdu[3] = (byte)(cnt >> 8); pdu[4] = (byte)cnt; pdu[5] = (byte)data.Length; Buffer.BlockCopy(data, 0, pdu, 6, data.Length); return SendReceive(pdu).IsSuccess ? OperateResult.Success() : OperateResult.Failed("写入失败"); }
+        public OperateResult Write(string address, byte[] data) { if (data == null) return OperateResult.Failed("写入数据不能为空"); var (a, _, _) = ParseDeltaAddress(address); if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1); ushort cnt = (ushort)(data.Length / 2); byte[] pdu = new byte[6 + data.Length]; pdu[0] = 0x10; pdu[1] = (byte)(a >> 8); pdu[2] = (byte)a; pdu[3] = (byte)(cnt >> 8); pdu[4] = (byte)cnt; pdu[5] = (byte)data.Length; Buffer.BlockCopy(data, 0, pdu, 6, data.Length); var r = SendReceive(pdu); return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode); }
 
         // ═══════════════════════════════════════════
         //  批量位操作 — ReadBools / WriteBools
@@ -238,7 +335,7 @@ namespace Nexus.Delta
         public OperateResult<bool[]> ReadBools(string address, ushort count)
         {
             if (count == 0) return OperateResult<bool[]>.Success(Array.Empty<bool>());
-            if (count == 1) { var r = ReadBool(address); return r.IsSuccess ? OperateResult<bool[]>.Success(new[] { r.Content }) : OperateResult<bool[]>.Failed(r.Message); }
+            if (count == 1) { var r = ReadBool(address); return r.IsSuccess ? OperateResult<bool[]>.Success(new[] { r.Content }) : OperateResult<bool[]>.Failed(r.Message, r.ErrorCode); }
 
             try
             {
@@ -253,7 +350,10 @@ namespace Nexus.Delta
                     ushort batchAddr = (ushort)(addr + offset);
                     byte[] pdu = { readFc, (byte)(batchAddr >> 8), (byte)batchAddr, (byte)(batch >> 8), (byte)(batch & 0xFF) };
                     var r = SendReceive(pdu);
-                    if (!r.IsSuccess) return OperateResult<bool[]>.Failed(r.Message);
+                    if (!r.IsSuccess) return OperateResult<bool[]>.Failed(r.Message, r.ErrorCode);
+                    int expectedBytes = (batch + 7) / 8;
+                    if (r.Content.Length < expectedBytes)
+                        return OperateResult<bool[]>.Failed($"响应数据不足: 期望 {expectedBytes} 字节, 实际 {r.Content.Length} 字节");
 
                     for (int i = 0; i < batch; i++)
                     {
@@ -299,7 +399,7 @@ namespace Nexus.Delta
                     Buffer.BlockCopy(bytes, 0, pdu, 6, byteCount);
 
                     var r = SendReceive(pdu);
-                    if (!r.IsSuccess) return OperateResult.Failed(r.Message);
+                    if (!r.IsSuccess) return OperateResult.Failed(r.Message, r.ErrorCode);
                     offset += batch;
                 }
                 return OperateResult.Success();
@@ -329,8 +429,11 @@ namespace Nexus.Delta
                     ushort batchAddr = (ushort)(addr + wordOffset);
                     byte[] pdu = { fc, (byte)(batchAddr >> 8), (byte)batchAddr, (byte)(batch >> 8), (byte)(batch & 0xFF) };
                     var r = SendReceive(pdu);
-                    if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
-                    Buffer.BlockCopy(r.Content, 0, result, wordOffset * 2, r.Content.Length);
+                    if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode);
+                    int expectedBytes = batch * 2;
+                    if (r.Content.Length < expectedBytes)
+                        return OperateResult<byte[]>.Failed($"响应数据不足: 期望 {expectedBytes} 字节, 实际 {r.Content.Length} 字节");
+                    Buffer.BlockCopy(r.Content, 0, result, wordOffset * 2, expectedBytes);
                     wordOffset += batch;
                     remaining -= batch;
                 }
@@ -363,7 +466,7 @@ namespace Nexus.Delta
                     pdu[5] = (byte)batchBytes;
                     Buffer.BlockCopy(data, wordOffset * 2, pdu, 6, batchBytes);
                     var r = SendReceive(pdu);
-                    if (!r.IsSuccess) return OperateResult.Failed(r.Message);
+                    if (!r.IsSuccess) return OperateResult.Failed(r.Message, r.ErrorCode);
                     wordOffset += batchWords;
                 }
                 return OperateResult.Success();
@@ -384,7 +487,7 @@ namespace Nexus.Delta
                 ushort strAddr = 0x1461;
                 byte[] pdu = { 0x03, (byte)(strAddr >> 8), (byte)strAddr, 0x00, 0x0A };
                 var r = SendReceive(pdu);
-                if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
+                if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message, r.ErrorCode);
                 string model = System.Text.Encoding.ASCII.GetString(r.Content).TrimEnd('\0', ' ');
                 return OperateResult<string>.Success(string.IsNullOrEmpty(model) ? "Unknown DVP" : model);
             }

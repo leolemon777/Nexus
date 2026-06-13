@@ -11,9 +11,9 @@ namespace Nexus.Mqtt
 {
     public class MqttBroker : IDisposable
     {
-        private TcpListener _listener;
-        private CancellationTokenSource _cts;
-        private Task _acceptTask;
+        private TcpListener? _listener;
+        private CancellationTokenSource? _cts;
+        private Task? _acceptTask;
         private readonly ConcurrentDictionary<string, BrokerClient> _clients
             = new ConcurrentDictionary<string, BrokerClient>();
         private readonly ConcurrentDictionary<string, List<BrokerSubscription>> _subscriptions
@@ -24,13 +24,13 @@ namespace Nexus.Mqtt
         private int _brokerPacketIdCounter;
 
         public int Port { get; private set; }
-        public EndPoint ServerPort => _listener?.LocalEndpoint;
+        public EndPoint ServerPort => _listener?.LocalEndpoint ?? new IPEndPoint(IPAddress.None, 0);
         public int ClientCount => _clients.Count;
         public bool IsRunning { get; private set; }
 
-        public event EventHandler<string> OnClientConnected;
-        public event EventHandler<string> OnClientDisconnected;
-        public event EventHandler<(string ClientId, string Topic, byte[] Payload)> OnMessagePublished;
+        public event EventHandler<string>? OnClientConnected;
+        public event EventHandler<string>? OnClientDisconnected;
+        public event EventHandler<(string ClientId, string Topic, byte[] Payload)>? OnMessagePublished;
 
         public void Start(int port = 1883)
         {
@@ -69,7 +69,6 @@ namespace Nexus.Mqtt
         {
             Stop();
             _cts?.Dispose();
-            _subscriptionLock?.Dispose();
         }
 
         private async Task AcceptLoopAsync(CancellationToken ct)
@@ -78,7 +77,7 @@ namespace Nexus.Mqtt
             {
                 try
                 {
-                    var tcpClient = await _listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                    var tcpClient = await _listener!.AcceptTcpClientAsync().ConfigureAwait(false);
                     _ = Task.Run(() => HandleClientAsync(tcpClient, ct), ct);
                 }
                 catch (ObjectDisposedException) { break; }
@@ -89,18 +88,18 @@ namespace Nexus.Mqtt
 
         private async Task HandleClientAsync(TcpClient tcpClient, CancellationToken ct)
         {
-            string clientId = null;
+            string? clientId = null;
             var stream = tcpClient.GetStream();
             tcpClient.ReceiveTimeout = 120000;
             tcpClient.SendTimeout = 30000;
 
-            BrokerClient brokerClient = null;
+            BrokerClient? brokerClient = null;
 
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    byte[] packet = await ReadPacketAsync(stream, ct).ConfigureAwait(false);
+                    byte[]? packet = await ReadPacketAsync(stream, ct).ConfigureAwait(false);
                     if (packet == null || packet.Length < 2)
                         break;
 
@@ -170,7 +169,7 @@ namespace Nexus.Mqtt
                             byte pubFlags = (byte)(firstByte & 0x0F);
                             var pubPacket = MqttPacket.DecodePublish(pubFlags, packet, offset, remainingLength);
 
-                            OnMessagePublished?.Invoke(this, (clientId, pubPacket.Topic, pubPacket.Payload));
+                            OnMessagePublished?.Invoke(this, (brokerClient.ClientId, pubPacket.Topic, pubPacket.Payload));
 
                             if (pubPacket.Retain)
                             {
@@ -196,7 +195,7 @@ namespace Nexus.Mqtt
                                 await SafeWriteAsync(stream, pubRecBytes).ConfigureAwait(false);
                             }
 
-                            DispatchMessage(clientId, pubPacket.Topic, pubPacket.Payload, pubPacket.QoS, pubPacket.Retain);
+                            DispatchMessage(brokerClient.ClientId, pubPacket.Topic, pubPacket.Payload, pubPacket.QoS, pubPacket.Retain);
                             break;
 
                         case MqttPacketType.PubAck:
@@ -242,7 +241,7 @@ namespace Nexus.Mqtt
                                 if (qos > MqttQoS.AtLeastOnce)
                                     grantedQos = (byte)MqttQoS.AtLeastOnce;
 
-                                AddSubscription(clientId, topicFilter, (MqttQoS)grantedQos);
+                                AddSubscription(brokerClient.ClientId, topicFilter, (MqttQoS)grantedQos);
                                 subAck.ReturnCodes.Add(grantedQos);
                             }
 
@@ -261,7 +260,7 @@ namespace Nexus.Mqtt
 
                             var unsubPacket = MqttPacket.DecodeUnsubscribe(packet, offset, remainingLength);
                             foreach (string topicFilter in unsubPacket.TopicFilters)
-                                RemoveSubscription(clientId, topicFilter);
+                                RemoveSubscription(brokerClient.ClientId, topicFilter);
 
                             byte[] unsubAckBytes = MqttPacket.EncodeUnsubAck(unsubPacket.PacketId);
                             await SafeWriteAsync(stream, unsubAckBytes).ConfigureAwait(false);
@@ -298,7 +297,7 @@ namespace Nexus.Mqtt
                 {
                     _clients.TryRemove(clientId, out var removed);
 
-                    if (removed != null && removed.HasWill)
+                    if (removed != null && removed.HasWill && removed.WillTopic != null && removed.WillMessage != null)
                     {
                         DispatchMessage(clientId, removed.WillTopic, removed.WillMessage, removed.WillQoS, removed.WillRetain);
                     }
@@ -498,7 +497,7 @@ namespace Nexus.Mqtt
             catch { }
         }
 
-        private static async Task<byte[]> ReadPacketAsync(Stream stream, CancellationToken ct)
+        private static async Task<byte[]?> ReadPacketAsync(Stream stream, CancellationToken ct)
         {
             byte[] headerBuf = new byte[1];
             int read = await ReadExactAsync(stream, headerBuf, 0, 1, ct).ConfigureAwait(false);
@@ -564,15 +563,15 @@ namespace Nexus.Mqtt
 
         private class BrokerClient
         {
-            public string ClientId { get; set; }
-            public TcpClient TcpClient { get; set; }
-            public NetworkStream Stream { get; set; }
+            public string ClientId { get; set; } = "";
+            public TcpClient TcpClient { get; set; } = null!;
+            public NetworkStream Stream { get; set; } = null!;
             public bool CleanSession { get; set; }
             public ushort KeepAlive { get; set; }
             public DateTime LastActivity { get; set; }
             public bool HasWill { get; set; }
-            public string WillTopic { get; set; }
-            public byte[] WillMessage { get; set; }
+            public string? WillTopic { get; set; }
+            public byte[]? WillMessage { get; set; }
             public MqttQoS WillQoS { get; set; }
             public bool WillRetain { get; set; }
             public object WriteLock { get; } = new object();
@@ -594,8 +593,8 @@ namespace Nexus.Mqtt
 
         private class RetainedMessage
         {
-            public string Topic { get; set; }
-            public byte[] Payload { get; set; }
+            public string Topic { get; set; } = "";
+            public byte[] Payload { get; set; } = Array.Empty<byte>();
             public MqttQoS QoS { get; set; }
         }
     }

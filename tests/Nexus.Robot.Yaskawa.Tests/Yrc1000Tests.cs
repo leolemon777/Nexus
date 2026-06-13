@@ -150,4 +150,78 @@ public class Yrc1000Tests
     }
 
     #endregion
+
+    #region 扩展覆盖
+
+    [Fact]
+    public void Constructor_DefaultPort()
+    {
+        var client = new Yrc1000Client("10.0.0.1");
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void Dispose_DoesNotThrow()
+    {
+        var client = new Yrc1000Client("192.168.1.1");
+        client.Dispose();
+    }
+
+    [Fact]
+    public void SetLogger_DoesNotThrow()
+    {
+        var client = new Yrc1000Client("192.168.1.1");
+        client.SetLogger(NullLogger.Instance);
+    }
+
+    [Fact]
+    public void BuildReadCommand_ZeroAddress()
+    {
+        var client = new Yrc1000Client("127.0.0.1");
+        byte[] cmd = client.BuildReadCommand(0x0101, 0, 1);
+        int addr = (cmd[16] << 24) | (cmd[17] << 16) | (cmd[18] << 8) | cmd[19];
+        Assert.Equal(0, addr);
+    }
+
+    [Fact]
+    public void BuildWriteCommand_LargeData()
+    {
+        var client = new Yrc1000Client("127.0.0.1");
+        byte[] data = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
+        byte[] cmd = client.BuildWriteCommand(0x0103, 0, data);
+        Assert.True(cmd.Length >= 16 + 4 + data.Length);
+    }
+
+    [Fact]
+    public void YrcRobotStatus_AllStates()
+    {
+        var status = new YrcRobotStatus { ServoState = 1, RunState = 2, AlarmCode = 0, ErrorCode = 0 };
+        Assert.True(status.IsServoOn);
+        Assert.Equal("暂停", status.RunStateDescription);
+    }
+
+    [Fact]
+    public void YrcRobotStatus_ErrorCode()
+    {
+        var status = new YrcRobotStatus { ErrorCode = 0x5678 };
+        string s = status.ToString();
+        Assert.Contains("5678", s);
+    }
+
+    [Fact]
+    public void BlockId_DefaultZero()
+    {
+        var client = new Yrc1000Client("192.168.1.1");
+        Assert.Equal((byte)0x00, client.BlockId);
+    }
+
+    [Fact]
+    public void BlockId_CanBeSet()
+    {
+        var client = new Yrc1000Client("192.168.1.1");
+        client.BlockId = 0x05;
+        Assert.Equal((byte)0x05, client.BlockId);
+    }
+
+    #endregion
 }

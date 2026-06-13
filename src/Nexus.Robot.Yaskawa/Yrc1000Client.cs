@@ -309,6 +309,98 @@ namespace Nexus.Robot.Yaskawa
             return OperateResult.Failed($"地址格式错误: {address}");
         }
 
+        // ── IReadWriteDevice 类型化读写 ────────────
+
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var r = ReadBytes(address, 1);
+            return r.IsSuccess ? OperateResult<bool>.Success(r.Content[0] != 0) : OperateResult<bool>.Failed(r.Message);
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            return r.IsSuccess ? OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0)) : OperateResult<short>.Failed(r.Message);
+        }
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            return r.IsSuccess ? OperateResult<ushort>.Success(DataConverter.ToUInt16(r.Content, 0)) : OperateResult<ushort>.Failed(r.Message);
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<int>.Success(DataConverter.ToInt32(r.Content, 0)) : OperateResult<int>.Failed(r.Message);
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<uint>.Success(DataConverter.ToUInt32(r.Content, 0)) : OperateResult<uint>.Failed(r.Message);
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 0)) : OperateResult<long>.Failed(r.Message);
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<ulong>.Success(DataConverter.ToUInt64(r.Content, 0)) : OperateResult<ulong>.Failed(r.Message);
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadBytes(address, 4);
+            return r.IsSuccess ? OperateResult<float>.Success(DataConverter.ToFloat(r.Content, 0)) : OperateResult<float>.Failed(r.Message);
+        }
+
+        public override OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadBytes(address, 8);
+            return r.IsSuccess ? OperateResult<double>.Success(DataConverter.ToDouble(r.Content, 0)) : OperateResult<double>.Failed(r.Message);
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            var r = ReadBytes(address, length);
+            return r.IsSuccess ? OperateResult<string>.Success(DataConverter.ToString(r.Content, 0, r.Content.Length)) : OperateResult<string>.Failed(r.Message);
+        }
+
+        public override OperateResult Write(string address, bool value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, short value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ushort value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, int value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, uint value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, long value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ulong value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, float value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, double value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, string value)
+            => Write(address, DataConverter.GetBytes(value));
+
         // ═══════════════════════════════════════════
         //  命令构建
         // ═══════════════════════════════════════════
@@ -653,6 +745,13 @@ namespace Nexus.Robot.Yaskawa
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildReadCommand(0x0101, 0, 1); }
+            catch { return null; }
         }
     }
 

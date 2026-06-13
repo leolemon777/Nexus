@@ -36,6 +36,7 @@
     <ProjectReference Include="..\Nexus.OpcUa\Nexus.OpcUa.csproj" />
     <ProjectReference Include="..\Nexus.Yaskawa\Nexus.Yaskawa.csproj" />
     <ProjectReference Include="..\Nexus.Yokogawa\Nexus.Yokogawa.csproj" />
+    <ProjectReference Include="..\Nexus.VirtualPlc\Nexus.VirtualPlc.csproj" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
@@ -51,6 +52,30 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Dnp3\Nexus.Dnp3.csproj" />
+    <ProjectReference Include="..\Nexus.Iec104\Nexus.Iec104.csproj" />
+    <ProjectReference Include="..\Nexus.Iec61850\Nexus.Iec61850.csproj" />
+    <ProjectReference Include="..\Nexus.Inovance\Nexus.Inovance.csproj" />
+    <ProjectReference Include="..\Nexus.Rkc\Nexus.Rkc.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Efort\Nexus.Robot.Efort.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Fanuc\Nexus.Robot.Fanuc.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Kuka\Nexus.Robot.Kuka.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Staubli\Nexus.Robot.Staubli.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Ur\Nexus.Robot.Ur.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Yamaha\Nexus.Robot.Yamaha.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Yaskawa\Nexus.Robot.Yaskawa.csproj" />
+    <ProjectReference Include="..\Nexus.Schneider\Nexus.Schneider.csproj" />
+    <ProjectReference Include="..\Nexus.Secs\Nexus.Secs.csproj" />
+    <ProjectReference Include="..\Nexus.Toledo\Nexus.Toledo.csproj" />
+    <ProjectReference Include="..\Nexus.Bacnet\Nexus.Bacnet.csproj" />
+    <ProjectReference Include="..\Nexus.Mqtt\Nexus.Mqtt.csproj" />
+    <ProjectReference Include="..\Nexus.Redis\Nexus.Redis.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Abb\Nexus.Robot.Abb.csproj" />
+    <ProjectReference Include="..\Nexus.Robot.Estun\Nexus.Robot.Estun.csproj" />
+    <ProjectReference Include="..\Nexus.Ftp\Nexus.Ftp.csproj" />
   </ItemGroup>
 
 </Project>

@@ -43,12 +43,13 @@ namespace Nexus.Secs
 
         // ── TcpDeviceBase 抽象实现 ───────────────
 
-        protected override int ResponseHeaderLength => LENGTH_FIELD_SIZE;
+        protected override int ResponseHeaderLength => LENGTH_FIELD_SIZE + HEADER_LENGTH;
 
         protected override int GetResponsePayloadLength(byte[] header)
         {
             if (header == null || header.Length < 4) return 0;
-            return ((header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3]) - HEADER_LENGTH;
+            int msgLen = (header[0] << 24) | (header[1] << 16) | (header[2] << 8) | header[3];
+            return msgLen - HEADER_LENGTH;
         }
 
         // ── 构造 ────────────────────────────────
@@ -69,7 +70,7 @@ namespace Nexus.Secs
             if (!recv.IsSuccess) return OperateResult.Failed(recv.Message);
 
             if (recv.Content.Length < 14) return OperateResult.Failed("Linktest 响应不完整");
-            byte sType = recv.Content[5];
+            byte sType = recv.Content[6];
             return sType == LinktestRsp ? OperateResult.Success() : OperateResult.Failed($"Linktest 失败: SType=0x{sType:X2}");
         }
 
@@ -82,7 +83,7 @@ namespace Nexus.Secs
             if (!recv.IsSuccess) return OperateResult.Failed(recv.Message);
 
             if (recv.Content.Length < 14) return OperateResult.Failed("Select 响应不完整");
-            byte sType = recv.Content[5];
+            byte sType = recv.Content[6];
             return sType == SType_SelectRsp ? OperateResult.Success() : OperateResult.Failed($"Select 失败: SType=0x{sType:X2}");
         }
 
@@ -194,6 +195,106 @@ namespace Nexus.Secs
             if (!msg.IsSuccess) return OperateResult.Failed(msg.Message);
             return OperateResult.Success();
         }
+
+        public override OperateResult<bool> ReadBool(string address)
+        {
+            var r = ReadBytes(address, 1);
+            if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message);
+            return OperateResult<bool>.Success(r.Content[0] != 0);
+        }
+
+        public override OperateResult<short> ReadInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message);
+            return OperateResult<short>.Success(DataConverter.ToInt16(r.Content, 0));
+        }
+
+        public override OperateResult<ushort> ReadUInt16(string address)
+        {
+            var r = ReadBytes(address, 2);
+            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message);
+            return OperateResult<ushort>.Success(DataConverter.ToUInt16(r.Content, 0));
+        }
+
+        public override OperateResult<int> ReadInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message);
+            return OperateResult<int>.Success(DataConverter.ToInt32(r.Content, 0));
+        }
+
+        public override OperateResult<uint> ReadUInt32(string address)
+        {
+            var r = ReadBytes(address, 4);
+            if (!r.IsSuccess) return OperateResult<uint>.Failed(r.Message);
+            return OperateResult<uint>.Success(DataConverter.ToUInt32(r.Content, 0));
+        }
+
+        public override OperateResult<long> ReadInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message);
+            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 0));
+        }
+
+        public override OperateResult<ulong> ReadUInt64(string address)
+        {
+            var r = ReadBytes(address, 8);
+            if (!r.IsSuccess) return OperateResult<ulong>.Failed(r.Message);
+            return OperateResult<ulong>.Success(DataConverter.ToUInt64(r.Content, 0));
+        }
+
+        public override OperateResult<float> ReadFloat(string address)
+        {
+            var r = ReadBytes(address, 4);
+            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message);
+            return OperateResult<float>.Success(DataConverter.ToFloat(r.Content, 0));
+        }
+
+        public override OperateResult<double> ReadDouble(string address)
+        {
+            var r = ReadBytes(address, 8);
+            if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message);
+            return OperateResult<double>.Success(DataConverter.ToDouble(r.Content, 0));
+        }
+
+        public override OperateResult<string> ReadString(string address, ushort length)
+        {
+            var r = ReadBytes(address, length);
+            if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
+            return OperateResult<string>.Success(DataConverter.ToString(r.Content, 0, r.Content.Length));
+        }
+
+        public override OperateResult Write(string address, bool value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, short value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ushort value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, int value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, uint value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, long value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, ulong value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, float value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, double value)
+            => Write(address, DataConverter.GetBytes(value));
+
+        public override OperateResult Write(string address, string value)
+            => Write(address, DataConverter.GetBytes(value));
 
         // ═══════════════════════════════════════════
         //  HSMS 帧构建与解析
@@ -498,6 +599,13 @@ namespace Nexus.Secs
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildFrame(BuildHsmsHeader(LinktestReq, PType_Linktest), null); }
+            catch { return null; }
         }
     }
 

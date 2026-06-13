@@ -100,6 +100,27 @@ public class DataConverterTests
     }
 
     [Fact]
+    public void GetBytes_UInt64_BigEndian()
+    {
+        var b = DataConverter.GetBytes(0x0123456789ABCDEFUL);
+        Assert.Equal(new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF }, b);
+    }
+
+    [Theory]
+    [InlineData(Endianness.BigEndian,    new byte[] { 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF })]
+    [InlineData(Endianness.LittleEndian, new byte[] { 0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01 })]
+    [InlineData(Endianness.MidBigEndian, new byte[] { 0x23, 0x01, 0x67, 0x45, 0xAB, 0x89, 0xEF, 0xCD })]
+    [InlineData(Endianness.MidLittleEndian, new byte[] { 0x45, 0x67, 0x01, 0x23, 0xCD, 0xEF, 0x89, 0xAB })]
+    public void GetBytes_UInt64_WithEndianness(Endianness byteOrder, byte[] expected)
+    {
+        ulong value = 0x0123456789ABCDEFUL;
+        byte[] bytes = DataConverter.GetBytes(value, byteOrder);
+
+        Assert.Equal(expected, bytes);
+        Assert.Equal(value, DataConverter.ToUInt64(bytes, 0, byteOrder));
+    }
+
+    [Fact]
     public void GetBytes_Float_BigEndian()
     {
         var b = DataConverter.GetBytes(3.1415927f);

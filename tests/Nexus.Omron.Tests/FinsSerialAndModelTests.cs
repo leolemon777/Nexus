@@ -1,5 +1,7 @@
 using Xunit;
 using Nexus.Omron;
+using System;
+using System.IO;
 
 namespace Nexus.Omron.Tests
 {
@@ -97,6 +99,97 @@ namespace Nexus.Omron.Tests
             var stream = new System.IO.MemoryStream();
             var client = new FinsSerialClient(stream);
             client.Dispose();
+        }
+
+        [Fact]
+        public void WriteUInt64_WritesEightPayloadBytes()
+        {
+            var stream = new DuplexStream(BuildSuccessResponse());
+            var client = new FinsSerialClient(stream);
+
+            var result = client.Write("D100", 0x1122334455667788UL);
+
+            Assert.True(result.IsSuccess, result.Message);
+            byte[] written = stream.WrittenBytes;
+            Assert.Equal(26, written.Length);
+            Assert.Equal((byte)FinsMemoryArea.DM, written[12]);
+            Assert.Equal(0, written[16]);
+            Assert.Equal(4, written[17]);
+            Assert.Equal(new byte[] { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 }, written[18..26]);
+        }
+
+        [Fact]
+        public void WriteDouble_WritesIeee754Bits()
+        {
+            var stream = new DuplexStream(BuildSuccessResponse());
+            var client = new FinsSerialClient(stream);
+
+            var result = client.Write("D100", 1.5d);
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(new byte[] { 0x3F, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, stream.WrittenBytes[18..26]);
+        }
+
+        [Fact]
+        public void WriteBytes_Null_ReturnsFailure()
+        {
+            var client = new FinsSerialClient(new MemoryStream());
+
+            var result = client.Write("D100", (byte[])null!);
+
+            Assert.False(result.IsSuccess);
+        }
+
+        private static byte[] BuildSuccessResponse()
+        {
+            var response = new byte[14];
+            response[0] = 0xC0;
+            response[10] = 0x01;
+            response[11] = 0x02;
+            return response;
+        }
+
+        private sealed class DuplexStream : Stream
+        {
+            private readonly byte[] _response;
+            private int _readOffset;
+            private readonly MemoryStream _written = new MemoryStream();
+
+            public DuplexStream(byte[] response)
+            {
+                _response = response;
+            }
+
+            public byte[] WrittenBytes => _written.ToArray();
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (_readOffset >= _response.Length) return 0;
+                int copy = Math.Min(count, _response.Length - _readOffset);
+                Buffer.BlockCopy(_response, _readOffset, buffer, offset, copy);
+                _readOffset += copy;
+                return copy;
+            }
+
+            public override int ReadByte()
+            {
+                if (_readOffset >= _response.Length) return -1;
+                return _response[_readOffset++];
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                _written.Write(buffer, offset, count);
+            }
         }
     }
 

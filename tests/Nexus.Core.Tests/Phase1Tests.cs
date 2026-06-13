@@ -525,6 +525,112 @@ namespace Nexus.Core.Tests
             Assert.False(guard.IsReconnecting);
             guard.Dispose();
         }
+
+        [Fact]
+        public void TcpDeviceBase_AutoReconnect_IgnoresShortConnectionDisconnect()
+        {
+            var device = new StubTcpDevice
+            {
+                ReconnectInterval = 10,
+                MaxReconnectAttempts = 1,
+                AutoReconnect = true
+            };
+
+            device.FireDisconnected();
+            Thread.Sleep(100);
+
+            Assert.Equal(0, device.ConnectCallCount);
+            device.Dispose();
+        }
+
+        [Fact]
+        public void TcpDeviceBase_AutoReconnect_ReconnectsPersistentDisconnect()
+        {
+            var device = new StubTcpDevice
+            {
+                ReconnectInterval = 10,
+                MaxReconnectAttempts = 1
+            };
+            device.SetPersistentConnection();
+            device.AutoReconnect = true;
+
+            device.FireDisconnected();
+            Thread.Sleep(150);
+
+            Assert.True(device.ConnectCallCount >= 1);
+            device.Dispose();
+        }
+
+        [Fact]
+        public void TcpDeviceBase_AutoReconnect_ForwardsReconnectingEvent()
+        {
+            var device = new StubTcpDevice
+            {
+                ReconnectInterval = 10,
+                MaxReconnectAttempts = 1,
+                ForceFail = true
+            };
+            device.SetPersistentConnection();
+            int attempt = 0;
+            device.OnReconnecting += x => attempt = x;
+            device.AutoReconnect = true;
+
+            device.FireDisconnected();
+            Thread.Sleep(150);
+
+            Assert.True(attempt >= 1);
+            device.Dispose();
+        }
+
+        [Fact]
+        public void TcpDeviceBase_HeartbeatEnabled_UsesCustomCallback()
+        {
+            int callCount = 0;
+            var device = new StubTcpDevice
+            {
+                HeartbeatInterval = 30,
+                HeartbeatTimeout = 100,
+                MaxHeartbeatFailures = 3
+            };
+            device.SetHeartbeatCallback(() =>
+            {
+                callCount++;
+                return Task.FromResult(OperateResult.Success());
+            });
+
+            device.HeartbeatEnabled = true;
+            Thread.Sleep(150);
+            device.HeartbeatEnabled = false;
+
+            Assert.True(callCount >= 1);
+            device.Dispose();
+        }
+
+        [Fact]
+        public void TcpDeviceBase_HeartbeatFailure_ForcesDisconnectAndAutoReconnect()
+        {
+            int disconnectCount = 0;
+            var device = new StubTcpDevice
+            {
+                HeartbeatInterval = 30,
+                HeartbeatTimeout = 100,
+                MaxHeartbeatFailures = 1,
+                ReconnectInterval = 10,
+                MaxReconnectAttempts = 1
+            };
+            device.SetPersistentConnection();
+            device.OnDisconnected += (_, __) => disconnectCount++;
+            device.SetHeartbeatCallback(() => Task.FromResult(OperateResult.Failed("dead")));
+            device.AutoReconnect = true;
+
+            device.HeartbeatEnabled = true;
+            Thread.Sleep(250);
+            device.HeartbeatEnabled = false;
+
+            Assert.True(disconnectCount >= 1);
+            Assert.True(device.ConnectCallCount >= 1);
+            device.Dispose();
+        }
     }
 
     // ── HeartbeatGuard ────────────────────────────────────

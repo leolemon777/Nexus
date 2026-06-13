@@ -458,6 +458,12 @@ namespace Nexus.Iec104
 
                 if (asdu.TypeId == TypeId.C_IC_NA_1)
                     Log.Info($"总召唤 {(asdu.IsNegative ? "否定" : "肯定")} 确认");
+                else if (asdu.TypeId == TypeId.C_CS_NA_1)
+                    Log.Info($"时钟同步 {(asdu.IsNegative ? "否定" : "肯定")} 确认");
+                else if (asdu.TypeId == TypeId.C_CI_NA_1)
+                    Log.Info($"计数器读取 {(asdu.IsNegative ? "否定" : "肯定")} 确认");
+                else if (asdu.TypeId == TypeId.C_TS_TA_1)
+                    Log.Info($"测试命令 {(asdu.IsNegative ? "否定" : "肯定")} 确认");
                 return;
             }
 
@@ -474,6 +480,17 @@ namespace Nexus.Iec104
             {
                 if (_pendingRequests.TryRemove(C_RD_NA_1_KEY, out var readTcs))
                     readTcs.TrySetResult(asdu);
+            }
+
+            // Handle Spontaneous responses to clock sync, counter read, test command
+            if (asdu.Cause == CauseOfTransmission.Spontaneous)
+            {
+                if (asdu.TypeId == TypeId.C_CS_NA_1 && _pendingRequests.TryRemove(C_CS_NA_1_KEY, out var csTcs))
+                    csTcs.TrySetResult(asdu);
+                else if (asdu.TypeId == TypeId.C_CI_NA_1 && _pendingRequests.TryRemove(C_CI_NA_1_KEY, out var ciTcs))
+                    ciTcs.TrySetResult(asdu);
+                else if (asdu.TypeId == TypeId.C_TS_TA_1 && _pendingRequests.TryRemove(C_TS_TA_1_KEY, out var tsTcs))
+                    tsTcs.TrySetResult(asdu);
             }
 
             // Process monitoring data and update cache
@@ -571,7 +588,16 @@ namespace Nexus.Iec104
 
         // ── Public IEC 104 Operations ─────────────
 
+        private const int C_CS_NA_1_KEY = -103;
+        private const int C_CI_NA_1_KEY = -101;
+        private const int C_TS_TA_1_KEY = -104;
+
         public OperateResult SendGeneralInterrogation()
+        {
+            return SendGeneralInterrogation(0);
+        }
+
+        public OperateResult SendGeneralInterrogation(int groupNumber)
         {
             if (!_started) return OperateResult.Failed("连接未激活，请先连接");
 
@@ -580,13 +606,13 @@ namespace Nexus.Iec104
 
             try
             {
-                var asdu = Iec104Asdu.BuildGeneralInterrogation(CommonAddress);
+                var asdu = Iec104Asdu.BuildGeneralInterrogation(CommonAddress, (byte)groupNumber);
                 SendIFrame(asdu);
-                Log.Info("发送总召唤命令");
+                Log.Info($"发送总召唤命令 Group={groupNumber}");
 
                 if (tcs.Task.Wait(T1))
                 {
-                    var result = tcs.Task.Result;
+                    var result = tcs.Task.GetAwaiter().GetResult();
                     return result.IsNegative
                         ? OperateResult.Failed("总召唤被否定")
                         : OperateResult.Success();
@@ -605,6 +631,11 @@ namespace Nexus.Iec104
 
         public async Task<OperateResult> SendGeneralInterrogationAsync(CancellationToken ct = default)
         {
+            return await SendGeneralInterrogationAsync(0, ct).ConfigureAwait(false);
+        }
+
+        public async Task<OperateResult> SendGeneralInterrogationAsync(int groupNumber, CancellationToken ct = default)
+        {
             if (!_started) return OperateResult.Failed("连接未激活，请先连接");
 
             var tcs = new TaskCompletionSource<Iec104Asdu>();
@@ -612,9 +643,9 @@ namespace Nexus.Iec104
 
             try
             {
-                var asdu = Iec104Asdu.BuildGeneralInterrogation(CommonAddress);
+                var asdu = Iec104Asdu.BuildGeneralInterrogation(CommonAddress, (byte)groupNumber);
                 SendIFrame(asdu);
-                Log.Info("发送总召唤命令");
+                Log.Info($"发送总召唤命令 Group={groupNumber}");
 
                 using (ct.Register(() => tcs.TrySetCanceled()))
                 {
@@ -651,6 +682,146 @@ namespace Nexus.Iec104
             return SendCommand(Iec104Asdu.BuildSetpointNormalized(CommonAddress, ioa, value));
         }
 
+        public OperateResult<DateTime> SynchronizeClock()
+        {
+            if (!_started) return OperateResult<DateTime>.Failed("连接未激活，请先连接");
+
+            var tcs = new TaskCompletionSource<Iec104Asdu>();
+            _pendingRequests[C_CS_NA_1_KEY] = tcs;
+
+            try
+            {
+                DateTime now = DateTime.UtcNow;
+                var asdu = Iec104Asdu.BuildClockSyncCommand(CommonAddress, now);
+                SendIFrame(asdu);
+                Log.Info("发送时钟同步命令");
+
+                if (tcs.Task.Wait(T1))
+                {
+                    var result = tcs.Task.GetAwaiter().GetResult();
+                    if (result.IsNegative)
+                        return OperateResult<DateTime>.Failed("时钟同步被否定");
+
+                    if (result.Objects.Count > 0 && result.Objects[0].Data.Length >= 7)
+                    {
+                        DateTime syncedTime = Iec104Asdu.DecodeCP56Time2a(result.Objects[0].Data, 0);
+                        return OperateResult<DateTime>.Success(syncedTime);
+                    }
+                    return OperateResult<DateTime>.Success(now);
+                }
+                return OperateResult<DateTime>.Failed("时钟同步超时");
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<DateTime>.Failed($"时钟同步失败: {ex.Message}");
+            }
+            finally
+            {
+                _pendingRequests.TryRemove(C_CS_NA_1_KEY, out _);
+            }
+        }
+
+        public async Task<OperateResult<DateTime>> SynchronizeClockAsync(CancellationToken ct = default)
+        {
+            if (!_started) return OperateResult<DateTime>.Failed("连接未激活，请先连接");
+
+            var tcs = new TaskCompletionSource<Iec104Asdu>();
+            _pendingRequests[C_CS_NA_1_KEY] = tcs;
+
+            try
+            {
+                DateTime now = DateTime.UtcNow;
+                var asdu = Iec104Asdu.BuildClockSyncCommand(CommonAddress, now);
+                SendIFrame(asdu);
+                Log.Info("发送时钟同步命令");
+
+                using (ct.Register(() => tcs.TrySetCanceled()))
+                {
+                    if (await Task.WhenAny(tcs.Task, Task.Delay(T1, ct)) == tcs.Task)
+                    {
+                        var result = await tcs.Task.ConfigureAwait(false);
+                        if (result.IsNegative)
+                            return OperateResult<DateTime>.Failed("时钟同步被否定");
+
+                        if (result.Objects.Count > 0 && result.Objects[0].Data.Length >= 7)
+                        {
+                            DateTime syncedTime = Iec104Asdu.DecodeCP56Time2a(result.Objects[0].Data, 0);
+                            return OperateResult<DateTime>.Success(syncedTime);
+                        }
+                        return OperateResult<DateTime>.Success(now);
+                    }
+                }
+                return OperateResult<DateTime>.Failed("时钟同步超时");
+            }
+            catch (OperationCanceledException) { return OperateResult<DateTime>.Failed("时钟同步已取消"); }
+            catch (Exception ex) { return OperateResult<DateTime>.Failed($"时钟同步失败: {ex.Message}"); }
+            finally { _pendingRequests.TryRemove(C_CS_NA_1_KEY, out _); }
+        }
+
+        public OperateResult ReadCounters()
+        {
+            if (!_started) return OperateResult.Failed("连接未激活，请先连接");
+
+            var tcs = new TaskCompletionSource<Iec104Asdu>();
+            _pendingRequests[C_CI_NA_1_KEY] = tcs;
+
+            try
+            {
+                var asdu = Iec104Asdu.BuildCounterReadCommand(CommonAddress);
+                SendIFrame(asdu);
+                Log.Info("发送读取计数器命令");
+
+                if (tcs.Task.Wait(T1))
+                {
+                    var result = tcs.Task.GetAwaiter().GetResult();
+                    return result.IsNegative
+                        ? OperateResult.Failed("读取计数器被否定")
+                        : OperateResult.Success();
+                }
+                return OperateResult.Failed("读取计数器超时");
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed($"读取计数器失败: {ex.Message}");
+            }
+            finally
+            {
+                _pendingRequests.TryRemove(C_CI_NA_1_KEY, out _);
+            }
+        }
+
+        public OperateResult TestCommand()
+        {
+            if (!_started) return OperateResult.Failed("连接未激活，请先连接");
+
+            var tcs = new TaskCompletionSource<Iec104Asdu>();
+            _pendingRequests[C_TS_TA_1_KEY] = tcs;
+
+            try
+            {
+                var asdu = Iec104Asdu.BuildTestCommand(CommonAddress, 0x1234, DateTime.UtcNow);
+                SendIFrame(asdu);
+                Log.Info("发送测试命令");
+
+                if (tcs.Task.Wait(T1))
+                {
+                    var result = tcs.Task.GetAwaiter().GetResult();
+                    return result.IsNegative
+                        ? OperateResult.Failed("测试命令被否定")
+                        : OperateResult.Success();
+                }
+                return OperateResult.Failed("测试命令超时");
+            }
+            catch (Exception ex)
+            {
+                return OperateResult.Failed($"测试命令失败: {ex.Message}");
+            }
+            finally
+            {
+                _pendingRequests.TryRemove(C_TS_TA_1_KEY, out _);
+            }
+        }
+
         private OperateResult SendCommand(Iec104Asdu asdu)
         {
             var tcs = new TaskCompletionSource<Iec104Asdu>();
@@ -663,7 +834,7 @@ namespace Nexus.Iec104
 
                 if (tcs.Task.Wait(T1))
                 {
-                    var result = tcs.Task.Result;
+                    var result = tcs.Task.GetAwaiter().GetResult();
                     return result.IsNegative
                         ? OperateResult.Failed("命令被否定确认")
                         : OperateResult.Success();
@@ -1131,6 +1302,13 @@ namespace Nexus.Iec104
                 }
             }
             catch { }
+        }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat()
+        {
+            try { return BuildUFrame(U_STARTDT_ACT); }
+            catch { return null; }
         }
     }
 }

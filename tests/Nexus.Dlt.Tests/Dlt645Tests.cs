@@ -240,6 +240,134 @@ public class Dlt645Tests
     }
 
     #endregion
+
+    #region 补强测试
+
+    [Fact]
+    public void BcdToDecimal_AllZeros()
+    {
+        var result = Dlt645Client.BcdToDecimal(new byte[] { 0x00, 0x00 }, 4, 2);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(0.00m, result.Content);
+    }
+
+    [Fact]
+    public void BcdToDecimal_Current()
+    {
+        // BCD: 0x85, 0x01 → "0185" → 18.5A (4 digits, 1 decimal place)
+        var result = Dlt645Client.BcdToDecimal(new byte[] { 0x85, 0x01 }, 4, 1);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(18.5m, result.Content);
+    }
+
+    [Fact]
+    public void ParseDataId_CurrentPhaseA()
+    {
+        var result = Dlt645Client.ParseDataId("02020100");
+        Assert.NotNull(result);
+        Assert.Equal(4, result!.Length);
+    }
+
+    [Fact]
+    public void SetMeterAddress_SetsBytes()
+    {
+        var client = new Dlt645Client(new MockSerialPort());
+        client.SetMeterAddress("000000001234");
+        Assert.NotNull(client.MeterAddress);
+        Assert.Equal(6, client.MeterAddress.Length);
+    }
+
+    [Fact]
+    public void MeterAddress_DefaultIsAllZeros()
+    {
+        var client = new Dlt645Client(new MockSerialPort());
+        Assert.Equal(new byte[6], client.MeterAddress);
+    }
+
+    #endregion
+
+    #region 补强测试 — 扩展覆盖
+
+    [Fact]
+    public void BcdToString_EmptyArray_ReturnsEmpty()
+    {
+        Assert.Equal("", Dlt645Client.BcdToString(new byte[0]));
+    }
+
+    [Fact]
+    public void BcdToString_SingleByte_Zero()
+    {
+        Assert.Equal("00", Dlt645Client.BcdToString(new byte[] { 0x00 }));
+    }
+
+    [Theory]
+    [InlineData(0, (byte)0x00)]
+    [InlineData(1, (byte)0x01)]
+    [InlineData(9, (byte)0x09)]
+    [InlineData(10, (byte)0x10)]
+    [InlineData(55, (byte)0x55)]
+    [InlineData(99, (byte)0x99)]
+    public void DecimalToBcd_RangeTests(byte value, byte expected)
+    {
+        Assert.Equal(expected, Dlt645Client.DecimalToBcd(value));
+    }
+
+    [Fact]
+    public void BcdToDecimal_SingleByte()
+    {
+        var result = Dlt645Client.BcdToDecimal(new byte[] { 0x99 }, 2, 1);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(9.9m, result.Content);
+    }
+
+    [Fact]
+    public void BcdToDecimal_EmptyInput_ReturnsFailure()
+    {
+        var result = Dlt645Client.BcdToDecimal(new byte[0], 2, 1);
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public void ParseDataId_ValidEnergy()
+    {
+        var result = Dlt645Client.ParseDataId("00010000");
+        Assert.NotNull(result);
+        Assert.Equal(4, result!.Length);
+    }
+
+    [Fact]
+    public void BuildReadFrame_ZeroControlCode()
+    {
+        var client = new Dlt645Client(new MockSerialPort());
+        byte[] frame = client.BuildReadFrame(0x00, new byte[] { 0x00, 0x00, 0x00, 0x00 }, null);
+        Assert.Equal(0x68, frame[0]);
+        Assert.Equal(0x00, frame[8]); // ctrl code
+    }
+
+    [Fact]
+    public void BuildReadFrame_LargeData()
+    {
+        var client = new Dlt645Client(new MockSerialPort());
+        byte[] data = new byte[10];
+        byte[] frame = client.BuildReadFrame(0x11, new byte[] { 0x00, 0x00, 0x00, 0x00 }, data);
+        Assert.Equal(0x0E, frame[9]); // 4(DI) + 10(data) = 14 = 0x0E
+    }
+
+    [Fact]
+    public void ParseResponse_NullInput_ReturnsFailure()
+    {
+        var result = Dlt645Client.ParseResponse(null!, 0x11);
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public void ParseResponse_EmptyInput_ReturnsFailure()
+    {
+        var result = Dlt645Client.ParseResponse(new byte[0], 0x11);
+        Assert.False(result.IsSuccess);
+    }
+
+    #endregion
 }
 
 /// <summary>

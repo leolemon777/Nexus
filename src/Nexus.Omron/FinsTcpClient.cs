@@ -63,9 +63,9 @@ namespace Nexus.Omron
         }
 
         // ── FINS 响应头解析 ──────────────────────────
-        // FINS TCP 帧: FrameLength(4) + CommandCode(2) + EndCode(2) = 最少 8 字节
+        // FINS TCP 帧: FrameLength(4) + Payload(N)。基类收包先读 4 字节长度头。
 
-        protected override int ResponseHeaderLength => 8;
+        protected override int ResponseHeaderLength => 4;
 
         protected override int GetResponsePayloadLength(byte[] header)
         {
@@ -164,6 +164,46 @@ namespace Nexus.Omron
 
         // ── FINS 帧收发 ────────────────────────────
 
+        private byte[] BuildFinsFrame(ushort commandCode, byte[] commandData)
+        {
+            byte sid = (byte)(Interlocked.Increment(ref _sid) & 0xFF);
+
+            byte[] finsHeader = new byte[10];
+            finsHeader[0] = 0x80;
+            finsHeader[1] = 0x00;
+            finsHeader[2] = 0x02;
+            finsHeader[3] = DNA;
+            finsHeader[4] = ServerNode;
+            finsHeader[5] = DA2;
+            finsHeader[6] = SNA;
+            finsHeader[7] = ClientNode;
+            finsHeader[8] = SA2;
+            finsHeader[9] = sid;
+
+            byte[] cmdBytes = new byte[] { (byte)(commandCode >> 8), (byte)(commandCode & 0xFF) };
+            int payloadLen = 10 + 2 + commandData.Length;
+
+            byte[] frame = new byte[4 + payloadLen];
+            frame[0] = (byte)((payloadLen + 4) >> 24);
+            frame[1] = (byte)((payloadLen + 4) >> 16);
+            frame[2] = (byte)((payloadLen + 4) >> 8);
+            frame[3] = (byte)(payloadLen + 4);
+
+            Buffer.BlockCopy(finsHeader, 0, frame, 4, 10);
+            Buffer.BlockCopy(cmdBytes, 0, frame, 14, 2);
+            if (commandData.Length > 0)
+                Buffer.BlockCopy(commandData, 0, frame, 16, commandData.Length);
+
+            return frame;
+        }
+
+        /// <summary>默认心跳：读取 DM0 的 1 个 word。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            byte[] commandData = { (byte)FinsMemoryArea.DM, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+            return BuildFinsFrame(FinsCommandCode.MemoryAreaRead, commandData);
+        }
+
         private OperateResult<byte[]> SendFinsCommand(ushort commandCode, byte[] commandData)
         {
             try
@@ -181,41 +221,14 @@ namespace Nexus.Omron
                 lock (_lock) { ns = _stream!; }
                 if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
-                byte sid = (byte)(System.Threading.Interlocked.Increment(ref _sid) & 0xFF);
-
-                byte[] finsHeader = new byte[10];
-                finsHeader[0] = 0x80;
-                finsHeader[1] = 0x00;
-                finsHeader[2] = 0x02;
-                finsHeader[3] = DNA;
-                finsHeader[4] = ServerNode;
-                finsHeader[5] = DA2;
-                finsHeader[6] = SNA;
-                finsHeader[7] = ClientNode;
-                finsHeader[8] = SA2;
-                finsHeader[9] = sid;
-
-                byte[] cmdBytes = new byte[] { (byte)(commandCode >> 8), (byte)(commandCode & 0xFF) };
-
-                int payloadLen = 10 + 2 + commandData.Length;
-
-                byte[] frame = new byte[4 + payloadLen];
-                frame[0] = (byte)((payloadLen + 4) >> 24);
-                frame[1] = (byte)((payloadLen + 4) >> 16);
-                frame[2] = (byte)((payloadLen + 4) >> 8);
-                frame[3] = (byte)(payloadLen + 4);
-
-                Buffer.BlockCopy(finsHeader, 0, frame, 4, 10);
-                Buffer.BlockCopy(cmdBytes, 0, frame, 14, 2);
-                if (commandData.Length > 0)
-                    Buffer.BlockCopy(commandData, 0, frame, 16, commandData.Length);
+                byte[] frame = BuildFinsFrame(commandCode, commandData);
 
                 Log.Debug($"TX → {DataConverter.ToHexString(frame)}");
                 RaiseMessageSent(DataConverter.ToHexString(frame));
 
                 ns.Write(frame, 0, frame.Length);
 
-                byte[] lenBuf = ReadExactNs(ns, 4);
+                byte[]? lenBuf = ReadExactNs(ns, 4);
                 if (lenBuf == null) return OperateResult<byte[]>.Failed("读取 FINS 响应长度失败");
 
                 int respTotalLen = (lenBuf[0] << 24) | (lenBuf[1] << 16) | (lenBuf[2] << 8) | lenBuf[3];

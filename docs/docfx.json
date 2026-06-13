@@ -1,7 +1,7 @@
 {
   "metadata": [
     {
-      "src": [{ "files": ["**/*.csproj"], "src": "../src" }],
+      "src": [{ "files": ["**/*.csproj"], "src": "../src", "exclude": ["**/Nexus.App/*.csproj"] }],
       "dest": "api",
       "properties": {
         "TargetFramework": "netstandard2.0"

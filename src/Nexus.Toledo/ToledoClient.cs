@@ -306,6 +306,9 @@ namespace Nexus.Toledo
             }
             catch { }
         }
+
+        /// <inheritdoc/>
+        protected override byte[] BuildHeartbeat() => null;
     }
 
     /// <summary>
@@ -513,5 +516,7 @@ namespace Nexus.Toledo
         }
 
         public override string ToString() => $"ToledoData[{Weight} {Unit}]";
+
+        /// <inheritdoc/>
     }
 }

@@ -1,5 +1,14 @@
 namespace Nexus.Delta
 {
+    /// <summary>台达 PLC 系列枚举。</summary>
+    public enum DeltaSeries
+    {
+        /// <summary>DVP 系列。</summary>
+        DVP,
+        /// <summary>AS 系列。</summary>
+        AS,
+    }
+
     /// <summary>台达 PLC 区域枚举。</summary>
     public enum DeltaArea
     {

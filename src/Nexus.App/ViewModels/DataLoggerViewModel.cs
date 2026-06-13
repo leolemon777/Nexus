@@ -88,12 +88,12 @@ public partial class DataLoggerViewModel : ObservableObject, IDisposable
 
     private void OnFlushed(object? sender, int count)
     {
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
         {
             TotalLogged = _logger.TotalLogged;
             PendingCount = _logger.PendingCount;
             AppendLog($"[DB] 已写入 {count} 条记录");
-        });
+        }));
     }
 
     private void AppendLog(string line)

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using Xunit;
@@ -117,6 +119,28 @@ public class Mc3EAddressParserTests
     public void IsBitAddress_ReturnsCorrectly(string address, bool expected)
     {
         Assert.Equal(expected, Mc3EAddressParser.IsBitAddress(address));
+    }
+
+    [Fact]
+    public void BuildHeartbeat_ReturnsNonNullFrame()
+    {
+        // Mc3EBinaryClient 构造函数需要 MitsubishiModel，但 BuildHeartbeat 不需要连接
+        var client = new Mc3EBinaryClient(MitsubishiModel.Qna_3E, "127.0.0.1", 5007);
+        // 通过反射访问 protected BuildHeartbeat
+        var method = typeof(Mc3EBinaryClient).GetMethod("BuildHeartbeat",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(client, null) as byte[];
+        Assert.NotNull(result);
+        // MC3E Binary 帧至少 12 字节 (SubHeader 2 + NetworkNo 1 + PcNo 1 + DstStation 2 + WaitTime 2 + Command 2 + SubCommand 2)
+        Assert.True(result!.Length >= 12, $"Heartbeat frame too short: {result.Length}");
+        // SubHeader 应为 0x50 0x00
+        Assert.Equal(0x50, result[0]);
+        Assert.Equal(0x00, result[1]);
+        // Command = 0x0401 (批量读字)
+        Assert.Equal(0x04, result[8]);
+        Assert.Equal(0x01, result[9]);
     }
 }
 
@@ -809,6 +833,89 @@ public class Mc3EClientServerTests
         {
             server.Stop();
             server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new Mc3EVirtuServer(port);
+        server.Start();
+
+        using var pool = new Mc3EBinaryConnectionPool(MitsubishiModel.Qna_3E, "127.0.0.1", port, maxPoolSize: 1);
+
+        var write = pool.Write("D100", (short)1234);
+        Assert.True(write.IsSuccess, write.Message);
+
+        var read = pool.ReadInt16("D100");
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((short)1234, read.Content);
+        Assert.Equal(0, pool.ActiveCount);
+        Assert.Equal(1, pool.IdleCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsPacketEvents()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new Mc3EVirtuServer(port);
+        server.SetDRegister(0, 0x1234);
+        server.Start();
+
+        using var pool = new Mc3EBinaryConnectionPool(MitsubishiModel.Qna_3E, "127.0.0.1", port, maxPoolSize: 1);
+        int sent = 0;
+        int received = 0;
+        pool.OnMessageSent += (_, hex) =>
+        {
+            if (!string.IsNullOrWhiteSpace(hex)) Interlocked.Increment(ref sent);
+        };
+        pool.OnMessageReceived += (_, hex) =>
+        {
+            if (!string.IsNullOrWhiteSpace(hex)) Interlocked.Increment(ref received);
+        };
+
+        var read = pool.ReadUInt16("D0");
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal((ushort)0x1234, read.Content);
+        Assert.True(sent > 0);
+        Assert.True(received > 0);
+    }
+
+    [Fact]
+    public void ConnectionPool_RemoteControlAndPlcType()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new Mc3EVirtuServer(port);
+        server.SetPlcTypeName("Q06UDVCPU");
+        server.Start();
+
+        using var pool = new Mc3EBinaryConnectionPool(MitsubishiModel.Qna_3E, "127.0.0.1", port, maxPoolSize: 1);
+
+        var plcType = pool.ReadPlcType();
+        Assert.True(plcType.IsSuccess, plcType.Message);
+        Assert.Equal("Q06UDVCPU", plcType.Content);
+
+        var stop = pool.RemoteStop();
+        Assert.True(stop.IsSuccess, stop.Message);
+        Assert.False(server.IsPlcRunning);
+
+        var run = pool.RemoteRun();
+        Assert.True(run.IsSuccess, run.Message);
+        Assert.True(server.IsPlcRunning);
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 }

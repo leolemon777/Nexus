@@ -78,6 +78,55 @@ internal class AsciiFakeSerialPort : ISerialPort
     public void Dispose() { Close(); }
 }
 
+public class ModbusAsciiAddressContextTests
+{
+    [Fact]
+    public void ByteOrderPrefix_OverridesReadAndWrite()
+    {
+        var readPort = new AsciiFakeSerialPort();
+        readPort.SetupAsciiResponse(new byte[] { 0x01, 0x03, 0x04, 0x88, 0x77, 0x66, 0x55 });
+        readPort.Open();
+
+        using (var client = new ModbusAsciiClient(readPort, station: 1, timeout: 2000) { InterFrameDelay = 0, ByteOrder = Endianness.BigEndian })
+        {
+            var result = client.ReadInt32("bo=LittleEndian;40001");
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x55667788, result.Content);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+
+        var writePort = new AsciiFakeSerialPort();
+        writePort.SetupAsciiResponse(new byte[] { 0x01, 0x10, 0x00, 0x01, 0x00, 0x02 });
+        writePort.Open();
+
+        using (var client = new ModbusAsciiClient(writePort, station: 1, timeout: 2000) { InterFrameDelay = 0, ByteOrder = Endianness.BigEndian })
+        {
+            var result = client.Write("bo=LittleEndian;40001", 0x11223344);
+            Assert.True(result.IsSuccess, result.Message);
+            string sent = Encoding.ASCII.GetString(writePort.LastWrittenData!);
+            Assert.StartsWith(":0110000100020444332211", sent);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+    }
+
+    [Fact]
+    public void ReadUInt16_AcceptsAddressContextPrefix()
+    {
+        var port = new AsciiFakeSerialPort();
+        port.SetupAsciiResponse(new byte[] { 0x07, 0x03, 0x02, 0x12, 0x34 });
+        port.Open();
+
+        using var client = new ModbusAsciiClient(port, station: 1, timeout: 2000) { InterFrameDelay = 0 };
+        var result = client.ReadUInt16("unit=7;40001");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)0x1234, result.Content);
+        string sent = Encoding.ASCII.GetString(port.LastWrittenData!);
+        Assert.StartsWith(":070300010001", sent);
+        Assert.Equal((byte)1, client.Station);
+    }
+}
+
 public class AsciiFrameBuildingTests
 {
     [Fact]
@@ -624,9 +673,12 @@ public class AsciiAddressParsingTests
     [InlineData("40001", 0x03, 0x01, 0x06)]
     public void ParseAddressEx_PrefixModes(string address, byte expectedReadFc, ushort expectedAddr, byte expectedWriteFc)
     {
+        var port = new AsciiFakeSerialPort();
+        using var client = new ModbusAsciiClient(port);
+
         var parsed = typeof(ModbusAsciiClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { address });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { address });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal(expectedAddr, tuple.address);
@@ -637,9 +689,12 @@ public class AsciiAddressParsingTests
     [Fact]
     public void ParseAddressEx_NoPrefix_DefaultsToHoldingRegister()
     {
+        var port = new AsciiFakeSerialPort();
+        using var client = new ModbusAsciiClient(port);
+
         var parsed = typeof(ModbusAsciiClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { "100" });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { "100" });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal((ushort)100, tuple.address);
@@ -652,9 +707,12 @@ public class AsciiAddressParsingTests
     {
         Assert.Throws<System.Reflection.TargetInvocationException>(() =>
         {
+            var port = new AsciiFakeSerialPort();
+            using var client = new ModbusAsciiClient(port);
+
             typeof(ModbusAsciiClient)
-                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-                .Invoke(null, new object[] { "" });
+                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(client, new object[] { "" });
         });
     }
 }

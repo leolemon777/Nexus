@@ -114,12 +114,20 @@ namespace Nexus.Schneider
                     return null;
                 }
 
-                // 内部位 (%M)
-                if (addr[0] == 'M' && addr.Length > 1 && char.IsDigit(addr[1]))
+            // 内部位 (%M 或 %Mx.y)
+            if (addr[0] == 'M' && addr.Length > 1 && char.IsDigit(addr[1]))
+            {
+                string mBody = addr.Substring(1);
+                int dotIdx = mBody.IndexOf('.');
+                if (dotIdx >= 0)
                 {
-                    if (!ushort.TryParse(addr.Substring(1), out ushort mnum)) return null;
-                    return new SchneiderAddress(SchneiderArea.InternalBit, SchneiderConstants.Fc01ReadCoil, mnum, address);
+                    ushort word = ushort.Parse(mBody.Substring(0, dotIdx));
+                    byte bit = byte.Parse(mBody.Substring(dotIdx + 1));
+                    return new SchneiderAddress(SchneiderArea.InternalBit, SchneiderConstants.Fc01ReadCoil, (ushort)(word * 16 + bit), address);
                 }
+                if (!ushort.TryParse(mBody, out ushort mnum)) return null;
+                return new SchneiderAddress(SchneiderArea.InternalBit, SchneiderConstants.Fc01ReadCoil, mnum, address);
+            }
 
                 return null;
             }

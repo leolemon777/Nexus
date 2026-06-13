@@ -81,6 +81,13 @@ namespace Nexus.Mitsubishi
             return 0;
         }
 
+        /// <summary>默认心跳：批量读字 D0 的 1 个 word（Command=0x0401, SubCommand=0x0000）。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            // D0: sub-label=0x0A(D), start=0, count=1
+            return BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0x0A, 0x00, 0x00, 0x00, 0x00, 0x01 });
+        }
+
         // ── 帧读取（重写）────────────────────────
 
         protected new OperateResult<byte[]> SendAndReceive(byte[] request)

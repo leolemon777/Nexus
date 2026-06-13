@@ -37,6 +37,18 @@ namespace Nexus.App.Services
         [ObservableProperty] private string _quality = "Pending";
         [ObservableProperty] private DateTime? _lastUpdateTime;
 
+        /// <summary>报警上限。null 表示不启用上限报警。</summary>
+        [ObservableProperty] private double? _alarmHigh;
+
+        /// <summary>报警下限。null 表示不启用下限报警。</summary>
+        [ObservableProperty] private double? _alarmLow;
+
+        /// <summary>是否触发报警。</summary>
+        [ObservableProperty] private bool _isAlarming;
+
+        /// <summary>报警信息。</summary>
+        [ObservableProperty] private string _alarmMessage = string.Empty;
+
         private readonly List<DataPoint> _dataPoints = new();
         private readonly object _dataLock = new();
         private readonly int _maxPoints;
@@ -66,6 +78,27 @@ namespace Nexus.App.Services
             CurrentValue = point.Value;
             CurrentValueText = point.Value.ToString("G6");
             LastUpdateTime = point.Time;
+            CheckAlarm(point.Value);
+        }
+
+        private void CheckAlarm(double value)
+        {
+            bool alarming = false;
+            string msg = string.Empty;
+
+            if (AlarmHigh.HasValue && value > AlarmHigh.Value)
+            {
+                alarming = true;
+                msg = $"⚠ 高报警: {value:F2} > {AlarmHigh.Value:F2}";
+            }
+            else if (AlarmLow.HasValue && value < AlarmLow.Value)
+            {
+                alarming = true;
+                msg = $"⚠ 低报警: {value:F2} < {AlarmLow.Value:F2}";
+            }
+
+            IsAlarming = alarming;
+            AlarmMessage = msg;
         }
 
         private void RecalcMinMax()

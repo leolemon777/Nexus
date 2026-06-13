@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Nexus.Bridge</RootNamespace>
+    <Description>Nexus Protocol Bridge — bridge industrial protocol data to MQTT, file, and other outputs</Description>
+    <PackageTags>industrial;modbus;mqtt;bridge;nexus</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
+    <ProjectReference Include="..\Nexus.Mqtt\Nexus.Mqtt.csproj" />
+    <ProjectReference Include="..\Nexus.Siemens\Nexus.Siemens.csproj" />
+    <ProjectReference Include="..\Nexus.Mitsubishi\Nexus.Mitsubishi.csproj" />
+    <ProjectReference Include="..\Nexus.Omron\Nexus.Omron.csproj" />
+    <ProjectReference Include="..\Nexus.AllenBradley\Nexus.AllenBradley.csproj" />
+  </ItemGroup>
+</Project>

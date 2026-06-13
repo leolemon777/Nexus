@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Xunit;
 using Nexus.Inovance;
@@ -128,6 +129,68 @@ namespace Nexus.Inovance.Tests
                 new System.Collections.Generic.KeyValuePair<string, object>("D103", 3.14f),
             });
             Assert.True(result.IsSuccess, result.Message);
+        }
+
+        [Fact]
+        public void ConnectionPool_ReadWrite_ReusesPersistentConnection()
+        {
+            _server = new InovanceEasyVirtualServer(_port);
+            _server.Start();
+
+            using var pool = new InovanceEasyConnectionPool("127.0.0.1", _port, maxPoolSize: 1);
+
+            var writeResult = pool.Write("D100", (short)1234);
+            Assert.True(writeResult.IsSuccess, writeResult.Message);
+
+            var readResult = pool.ReadInt16("D100");
+            Assert.True(readResult.IsSuccess, readResult.Message);
+            Assert.Equal((short)1234, readResult.Content);
+            Assert.Equal(0, pool.ActiveCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+
+        [Fact]
+        public void ConnectionPool_ForwardsPacketEvents()
+        {
+            _server = new InovanceEasyVirtualServer(_port);
+            _server.SetDWord(10, 0x1234);
+            _server.Start();
+
+            using var pool = new InovanceEasyConnectionPool("127.0.0.1", _port, maxPoolSize: 1);
+            int sentCount = 0;
+            int receivedCount = 0;
+            pool.OnMessageSent += (_, _) => Interlocked.Increment(ref sentCount);
+            pool.OnMessageReceived += (_, _) => Interlocked.Increment(ref receivedCount);
+
+            var result = pool.ReadUInt16("D10");
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((ushort)0x1234, result.Content);
+            Assert.True(sentCount > 0);
+            Assert.True(receivedCount > 0);
+        }
+
+        [Fact]
+        public void ConnectionPool_BatchReadWrite()
+        {
+            _server = new InovanceEasyVirtualServer(_port);
+            _server.Start();
+
+            using var pool = new InovanceEasyConnectionPool("127.0.0.1", _port, maxPoolSize: 1);
+            var items = new[]
+            {
+                new KeyValuePair<string, object>("D20", (short)111),
+                new KeyValuePair<string, object>("D21", (ushort)222)
+            };
+
+            var writeResult = pool.BatchWrite(items);
+            Assert.True(writeResult.IsSuccess, writeResult.Message);
+
+            var readResult = pool.BatchRead(new[] { "D20", "D21" });
+
+            Assert.True(readResult.IsSuccess, readResult.Message);
+            Assert.Equal((short)111, readResult.Content["D20"]);
+            Assert.Equal((short)222, readResult.Content["D21"]);
         }
     }
 }

@@ -6,7 +6,7 @@ using Nexus.App.ViewModels;
 
 namespace Nexus.App.Views;
 
-public partial class MitsubishiPage : Page
+public partial class MitsubishiPage : Page, INavigablePage
 {
     private MitsubishiViewModel? _vm;
 
@@ -17,6 +17,11 @@ public partial class MitsubishiPage : Page
         DataContext = _vm;
         Loaded += OnPageLoaded;
         Unloaded += OnPageUnloaded;
+    }
+
+    public void OnNavigatedTo(string navTag)
+    {
+        _vm?.SetTransport(navTag);
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)

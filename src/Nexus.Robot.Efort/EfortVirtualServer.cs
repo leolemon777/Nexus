@@ -19,13 +19,14 @@ namespace Nexus.Robot.Efort
         private Thread? _acceptThread;
         private volatile bool _running;
         private readonly object _dataLock = new object();
+        private int _connectionCount;
 
         // 数据模型
         private byte _errorStatus;
         private byte _emergencyStopStatus = 1;
         private byte _servoStatus;
-        private byte _axisMoveStatus;
-        private byte _programRunStatus;
+        private byte _axisMoveStatus = 0;
+        private byte _programRunStatus = 0;
         private ushort _modeStatus = 1;
         private ushort _speedStatus = 100;
         private readonly float[] _axisPositions = new float[7];
@@ -44,10 +45,13 @@ namespace Nexus.Robot.Efort
         private const int RESPONSE_LENGTH = 788;
 
         /// <summary>监听端口。</summary>
-        public int Port { get; }
+        public int Port { get; private set; }
 
         /// <summary>是否正在运行。</summary>
         public bool IsRunning => _running;
+
+        /// <summary>累计接收的 TCP 连接数量。</summary>
+        public int ConnectionCount => _connectionCount;
 
         public EfortVirtualServer(int port = 18008)
         {
@@ -94,6 +98,7 @@ namespace Nexus.Robot.Efort
             if (_running) return;
             _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _running = true;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
             _acceptThread.Start();
@@ -122,6 +127,7 @@ namespace Nexus.Robot.Efort
                 try
                 {
                     var client = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
                     var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                     thread.Start();
                 }
@@ -139,7 +145,7 @@ namespace Nexus.Robot.Efort
                     while (_running && client.Connected)
                     {
                         // 读取 38 字节固定请求
-                        byte[] request = ReadExact(stream, REQUEST_LENGTH);
+                        byte[]? request = ReadExact(stream, REQUEST_LENGTH);
                         if (request == null) break;
 
                         // 验证帧头

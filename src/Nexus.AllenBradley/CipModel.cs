@@ -93,13 +93,11 @@ namespace Nexus.AllenBradley
     public enum EnipCommand : ushort
     {
         /// <summary>NOP。</summary>
-        Nop = 0x0001,
+        Nop = 0x0000,
         /// <summary>列出身份。</summary>
         ListIdentity = 0x0063,
         /// <summary>列出接口。</summary>
         ListInterfaces = 0x0064,
-        /// <summary>列出服务。</summary>
-        ListServices = 0x0065,
         /// <summary>注册会话。</summary>
         RegisterSession = 0x0065,
         /// <summary>取消注册会话。</summary>

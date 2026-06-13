@@ -28,4 +28,10 @@ public sealed class ModbusOptions
 
     /// <summary>默认字节序（BigEndian / LittleEndian / MidBigEndian / MidLittleEndian）。</summary>
     public string DefaultByteOrder { get; set; } = "BigEndian";
+
+    /// <summary>Modbus TCP 调试器是否默认启用连接池。</summary>
+    public bool UseConnectionPool { get; set; } = false;
+
+    /// <summary>Modbus TCP 调试器默认连接池大小。</summary>
+    public int ConnectionPoolSize { get; set; } = 4;
 }

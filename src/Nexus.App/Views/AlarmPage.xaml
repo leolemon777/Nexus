@@ -2,7 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{DynamicResource Brush.Bg}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
 
             <!-- 添加报警规则 -->
@@ -31,9 +31,9 @@
                             <TextBlock Text="地址" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
                             <TextBox Style="{DynamicResource Input}" Text="{Binding Address, UpdateSourceTrigger=LostFocus}"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="2" Margin="0,0,0,8" MinWidth="160">
+                        <StackPanel Grid.Column="2" Margin="0,0,0,8" MinWidth="210">
                             <TextBlock Text="协议" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
-                            <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding ProtocolName, Mode=TwoWay}" MinWidth="150"/>
+                            <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding ProtocolName, Mode=TwoWay}" MinWidth="260"/>
                         </StackPanel>
 
                         <!-- Row 1 -->
@@ -45,7 +45,7 @@
                             <TextBlock Text="阈值" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
                             <TextBox Style="{DynamicResource Input}" Text="{Binding Threshold, UpdateSourceTrigger=LostFocus}"/>
                         </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,8" MinWidth="160">
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,8" MinWidth="210">
                             <TextBlock Text="严重程度" Style="{DynamicResource Body}" Margin="0,0,0,4"/>
                             <ComboBox ItemsSource="{Binding Severities}" SelectedIndex="{Binding SelectedSeverityIndex, Mode=TwoWay}"/>
                         </StackPanel>
@@ -79,28 +79,28 @@
                         <ListView ItemsSource="{Binding ActiveAlarms}" Background="Transparent" BorderThickness="0">
                             <ListView.View>
                                 <GridView>
-                                    <GridViewColumn Header="时间" Width="140">
+                                    <GridViewColumn Header="时间" Width="160">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding TriggeredAt, StringFormat='{}{0:HH:mm:ss}'}" FontFamily="Consolas" FontSize="12"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="标签" Width="120">
+                                    <GridViewColumn Header="标签" Width="140">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding TagName}" FontWeight="Medium"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="报警信息" Width="300">
+                                    <GridViewColumn Header="报警信息" Width="220">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding Message}"/>
+                                                <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="级别" Width="60">
+                                    <GridViewColumn Header="级别" Width="70">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Severity}"/>
@@ -137,42 +137,42 @@
                         <ListView ItemsSource="{Binding Rules}" Background="Transparent" BorderThickness="0">
                             <ListView.View>
                                 <GridView>
-                                    <GridViewColumn Header="标签名" Width="120">
+                                    <GridViewColumn Header="标签名" Width="160">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding TagName}" FontWeight="Medium"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="地址" Width="100">
+                                    <GridViewColumn Header="地址" Width="140">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Address}" FontFamily="Consolas"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="条件" Width="100">
+                                    <GridViewColumn Header="条件" Width="140">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Condition}"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="阈值" Width="80">
+                                    <GridViewColumn Header="阈值" Width="110">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Threshold}"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="启用" Width="50">
+                                    <GridViewColumn Header="启用" Width="70">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <CheckBox IsChecked="{Binding IsEnabled}" Command="{Binding DataContext.ToggleRuleCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="{Binding}"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>
-                                    <GridViewColumn Header="操作" Width="60">
+                                    <GridViewColumn Header="操作" Width="84">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
                                                 <Button Content="删除" FontSize="11" Padding="8,2" Foreground="#FF4444" Command="{Binding DataContext.RemoveRuleCommand, RelativeSource={RelativeSource AncestorType=ListView}}" CommandParameter="{Binding}"/>

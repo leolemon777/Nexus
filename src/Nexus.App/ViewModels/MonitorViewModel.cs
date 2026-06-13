@@ -77,6 +77,10 @@ namespace Nexus.App.ViewModels
             _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
             _service.TagValueChanged += OnTagValueChanged;
             _service.OnDataPoint += OnDataPointReceived;
+        }
+
+        public void Initialize()
+        {
             LoadSavedTags();
             LoadMonitoredAddresses();
         }

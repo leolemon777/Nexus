@@ -8,7 +8,7 @@
         <local:InvertBoolToVisibilityConverter x:Key="InvertBoolToVisibility"/>
     </Page.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
             <!-- Header -->
             <Border Style="{DynamicResource Card}" Margin="0,0,0,8">
@@ -45,8 +45,8 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="100"/>
                                     <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="190"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 

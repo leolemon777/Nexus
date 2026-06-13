@@ -160,6 +160,160 @@ namespace Nexus.Iec61850
         public const ushort SvEtherType = 0x88BA;
     }
 
+    /// <summary>IEC 61850 质量戳。</summary>
+    [Flags]
+    public enum QualityStamp : ushort
+    {
+        /// <summary>正常。</summary>
+        Valid = 0x0000,
+        /// <summary>溢出。</summary>
+        Overflow = 0x0001,
+        /// <summary>超出范围。</summary>
+        OutOfRange = 0x0002,
+        /// <summary>坏引用。</summary>
+        BadReference = 0x0004,
+        /// <summary>振荡。</summary>
+        Oscillatory = 0x0008,
+        /// <summary>故障。</summary>
+        Failure = 0x0010,
+        /// <summary>旧数据。</summary>
+        OldData = 0x0020,
+        /// <summary>不一致。</summary>
+        Inconsistent = 0x0040,
+        /// <summary>不准确。</summary>
+        Inaccurate = 0x0080,
+        /// <summary>被替代。</summary>
+        Substituted = 0x0100,
+        /// <summary>测试。</summary>
+        Test = 0x0200,
+        /// <summary>操作员阻塞。</summary>
+        Blocked = 0x0400,
+    }
+
+    /// <summary>IEC 61850 带时间戳的值。</summary>
+    public class TimestampedValue
+    {
+        /// <summary>数据值。</summary>
+        public object? Value { get; set; }
+        /// <summary>质量戳。</summary>
+        public QualityStamp Quality { get; set; } = QualityStamp.Valid;
+        /// <summary>时间戳（UTC）。</summary>
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        /// <summary>来源。</summary>
+        public byte Source { get; set; }
+    }
+
+    /// <summary>IEC 61850 数据属性信息。</summary>
+    public class DataAttributeInfo
+    {
+        /// <summary>属性名称。</summary>
+        public string Name { get; set; } = "";
+        /// <summary>功能约束。</summary>
+        public FunctionalConstraint FunctionalConstraint { get; set; }
+        /// <summary>数据类型。</summary>
+        public string DataType { get; set; } = "";
+        /// <summary>是否可写。</summary>
+        public bool IsWritable { get; set; }
+        /// <summary>值。</summary>
+        public object? Value { get; set; }
+        /// <summary>质量戳。</summary>
+        public QualityStamp Quality { get; set; } = QualityStamp.Valid;
+        /// <summary>时间戳。</summary>
+        public DateTime Timestamp { get; set; }
+    }
+
+    /// <summary>IEC 61850 控制操作结果。</summary>
+    public enum ControlResult
+    {
+        /// <summary>成功。</summary>
+        Success,
+        /// <summary>被否定。</summary>
+        Negative,
+        /// <summary>超时。</summary>
+        Timeout,
+        /// <summary>被其他客户端锁定。</summary>
+        Locked,
+        /// <summary>对象不存在。</summary>
+        ObjectNotFound,
+        /// <summary>控制模式不支持。</summary>
+        ControlModeUnsupported,
+    }
+
+    /// <summary>IEC 61850 报告控制块类型。</summary>
+    public enum RcbType
+    {
+        /// <summary>缓存报告控制块 (BRCB)。</summary>
+        Buffered,
+        /// <summary>非缓存报告控制块 (URCB)。</summary>
+        Unbuffered,
+    }
+
+    /// <summary>IEC 61850 报告控制块信息。</summary>
+    public class ReportControlBlockInfo
+    {
+        /// <summary>引用路径。</summary>
+        public string Reference { get; set; } = "";
+        /// <summary>类型。</summary>
+        public RcbType Type { get; set; }
+        /// <summary>数据集引用。</summary>
+        public string? DataSetReference { get; set; }
+        /// <summary>是否启用。</summary>
+        public bool IsEnabled { get; set; }
+        /// <summary>触发选项。</summary>
+        public ReportTriggerOptions TriggerOptions { get; set; }
+        /// <summary>完整性周期（毫秒）。</summary>
+        public int IntegrityPeriod { get; set; }
+    }
+
+    /// <summary>MMS PDU 类型。</summary>
+    public enum MmsPduType
+    {
+        /// <summary>确认请求。</summary>
+        ConfirmedRequest = 0,
+        /// <summary>确认响应。</summary>
+        ConfirmedResponse = 1,
+        /// <summary>确认错误。</summary>
+        ConfirmedError = 2,
+        /// <summary>非确认。</summary>
+        Unconfirmed = 3,
+        /// <summary>拒绝。</summary>
+        Reject = 4,
+        /// <summary>未知类型。</summary>
+        Unknown = 255,
+    }
+
+    /// <summary>MMS 服务类型。</summary>
+    public enum MmsServiceType
+    {
+        /// <summary>获取名称列表。</summary>
+        GetNameList = 0,
+        /// <summary>读取变量值。</summary>
+        Read = 4,
+        /// <summary>写入变量值。</summary>
+        Write = 5,
+        /// <summary>获取变量访问属性。</summary>
+        GetVariableAccessAttributes = 2,
+        /// <summary>定义命名变量。</summary>
+        DefineNamedVariable = 3,
+        /// <summary>删除命名变量访问。</summary>
+        DeleteNamedVariableAccess = 6,
+    }
+
+    /// <summary>COTP 协议类别。</summary>
+    public enum CotpClass
+    {
+        /// <summary>类别 0 — 基本连接。</summary>
+        Class0 = 0,
+        /// <summary>类别 1 — 流量控制。</summary>
+        Class1 = 1,
+        /// <summary>类别 2 — 多路复用。</summary>
+        Class2 = 2,
+        /// <summary>类别 3 — 分段。</summary>
+        Class3 = 3,
+        /// <summary>类别 4 — 加速数据。</summary>
+        Class4 = 4,
+    }
+
     /// <summary>IEC 61850 错误码。</summary>
     public static class Iec61850ErrorCodes
     {

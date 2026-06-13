@@ -16,9 +16,13 @@ internal class RtuOverTcpTestServer : IDisposable
     private byte[] _responseFrame = Array.Empty<byte>();
     private byte[]? _lastReceivedData;
     private Task? _acceptTask;
+    private int _connectionCount;
+    private int _requestCount;
 
     public int Port { get; }
     public byte[]? LastReceivedData => _lastReceivedData;
+    public int ConnectionCount => Volatile.Read(ref _connectionCount);
+    public int RequestCount => Volatile.Read(ref _requestCount);
 
     public RtuOverTcpTestServer(int port = 0)
     {
@@ -44,6 +48,7 @@ internal class RtuOverTcpTestServer : IDisposable
             while (!_cts.IsCancellationRequested)
             {
                 var client = await _listener.AcceptTcpClientAsync();
+                Interlocked.Increment(ref _connectionCount);
                 _ = HandleClient(client);
             }
         }
@@ -63,6 +68,7 @@ internal class RtuOverTcpTestServer : IDisposable
 
                 _lastReceivedData = new byte[bytesRead];
                 Buffer.BlockCopy(buffer, 0, _lastReceivedData, 0, bytesRead);
+                Interlocked.Increment(ref _requestCount);
 
                 if (_responseFrame.Length > 0)
                     await stream.WriteAsync(_responseFrame, 0, _responseFrame.Length, _cts.Token);
@@ -77,6 +83,142 @@ internal class RtuOverTcpTestServer : IDisposable
         _cts.Cancel();
         _cts.Dispose();
         _listener.Stop();
+    }
+}
+
+public class ModbusRtuOverTcpAddressContextTests
+{
+    [Fact]
+    public void ByteOrderPrefix_OverridesReadAndWrite()
+    {
+        using (var server = new RtuOverTcpTestServer())
+        {
+            server.SetupResponse(new byte[] { 0x01, 0x03, 0x04, 0x88, 0x77, 0x66, 0x55 });
+
+            using var client = new ModbusRtuOverTcpClient("127.0.0.1", server.Port, station: 1)
+            {
+                ByteOrder = Endianness.BigEndian
+            };
+            var result = client.ReadInt32("bo=LittleEndian;40001");
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal(0x55667788, result.Content);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+
+        using (var server = new RtuOverTcpTestServer())
+        {
+            server.SetupResponse(new byte[] { 0x01, 0x10, 0x00, 0x01, 0x00, 0x02 });
+
+            using var client = new ModbusRtuOverTcpClient("127.0.0.1", server.Port, station: 1)
+            {
+                ByteOrder = Endianness.BigEndian
+            };
+            var result = client.Write("bo=LittleEndian;40001", 0x11223344);
+            Assert.True(result.IsSuccess, result.Message);
+            byte[] sent = server.LastReceivedData!;
+            Assert.Equal(0x44, sent[7]);
+            Assert.Equal(0x33, sent[8]);
+            Assert.Equal(0x22, sent[9]);
+            Assert.Equal(0x11, sent[10]);
+            Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+        }
+    }
+
+    [Fact]
+    public void ReadUInt16_AcceptsAddressContextPrefix()
+    {
+        using var server = new RtuOverTcpTestServer();
+        server.SetupResponse(new byte[] { 0x07, 0x03, 0x02, 0x12, 0x34 });
+
+        using var client = new ModbusRtuOverTcpClient("127.0.0.1", server.Port, station: 1);
+        var result = client.ReadUInt16("unit=7;40001");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)0x1234, result.Content);
+        byte[] sent = server.LastReceivedData!;
+        Assert.Equal(0x07, sent[0]);
+        Assert.Equal(0x00, sent[2]);
+        Assert.Equal(0x01, sent[3]);
+        Assert.Equal((byte)1, client.Station);
+    }
+}
+
+public class ModbusRtuOverTcpConnectionPoolTests
+{
+    [Fact]
+    public void ConnectionPool_ReadInt16_ReusesPersistentConnection()
+    {
+        using var server = new RtuOverTcpTestServer();
+        server.SetupResponse(new byte[] { 0x01, 0x03, 0x02, 0x12, 0x34 });
+
+        using var pool = new ModbusRtuOverTcpConnectionPool("127.0.0.1", server.Port, station: 1);
+
+        var first = pool.ReadInt16("40001");
+        Assert.True(first.IsSuccess, first.Message);
+        Assert.Equal(0x1234, first.Content);
+
+        var second = pool.ReadInt16("40001");
+        Assert.True(second.IsSuccess, second.Message);
+        Assert.Equal(0x1234, second.Content);
+
+        Assert.True(WaitForConnections(server, 1));
+        Assert.Equal(1, server.ConnectionCount);
+        Assert.Equal(2, server.RequestCount);
+        Assert.Equal(0, pool.ActiveCount);
+        Assert.Equal(1, pool.IdleCount);
+    }
+
+    [Fact]
+    public async Task ConnectionPool_ExecuteAsync_ReadInt16_ReusesPersistentConnection()
+    {
+        using var server = new RtuOverTcpTestServer();
+        server.SetupResponse(new byte[] { 0x01, 0x03, 0x02, 0x01, 0x2C });
+
+        using var pool = new ModbusRtuOverTcpConnectionPool("127.0.0.1", server.Port, station: 1);
+
+        var first = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("40001")));
+        Assert.True(first.IsSuccess, first.Message);
+        Assert.Equal((short)300, first.Content);
+
+        var second = await pool.ExecuteAsync(c => Task.FromResult(c.ReadInt16("40001")));
+        Assert.True(second.IsSuccess, second.Message);
+        Assert.Equal((short)300, second.Content);
+
+        Assert.True(WaitForConnections(server, 1));
+        Assert.Equal(1, server.ConnectionCount);
+        Assert.Equal(2, server.RequestCount);
+    }
+
+    [Fact]
+    public void ConnectionPool_ForwardsMessageEvents()
+    {
+        using var server = new RtuOverTcpTestServer();
+        server.SetupResponse(new byte[] { 0x01, 0x03, 0x02, 0x00, 0x2A });
+
+        using var pool = new ModbusRtuOverTcpConnectionPool("127.0.0.1", server.Port, station: 1);
+        int sent = 0;
+        int received = 0;
+        pool.OnMessageSent += (_, _) => sent++;
+        pool.OnMessageReceived += (_, _) => received++;
+
+        var result = pool.ReadInt16("40001");
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((short)42, result.Content);
+
+        Assert.True(sent > 0);
+        Assert.True(received > 0);
+    }
+
+    private static bool WaitForConnections(RtuOverTcpTestServer server, int expected, int timeoutMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (server.ConnectionCount >= expected)
+                return true;
+            Thread.Sleep(10);
+        }
+        return server.ConnectionCount >= expected;
     }
 }
 
@@ -530,9 +672,11 @@ public class RtuOverTcpAddressParsingTests
     [InlineData("40001", 0x03, 0x01, 0x06)]
     public void ParseAddressEx_PrefixModes(string address, byte expectedReadFc, ushort expectedAddr, byte expectedWriteFc)
     {
+        using var client = new ModbusRtuOverTcpClient("127.0.0.1", 1);
+
         var parsed = typeof(ModbusRtuOverTcpClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { address });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { address });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal(expectedAddr, tuple.address);
@@ -543,9 +687,11 @@ public class RtuOverTcpAddressParsingTests
     [Fact]
     public void ParseAddressEx_NoPrefix_DefaultsToHoldingRegister()
     {
+        using var client = new ModbusRtuOverTcpClient("127.0.0.1", 1);
+
         var parsed = typeof(ModbusRtuOverTcpClient)
-            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, new object[] { "100" });
+            .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(client, new object[] { "100" });
 
         var tuple = ((ushort address, byte readFc, byte writeFc))parsed!;
         Assert.Equal((ushort)100, tuple.address);
@@ -558,9 +704,11 @@ public class RtuOverTcpAddressParsingTests
     {
         Assert.Throws<System.Reflection.TargetInvocationException>(() =>
         {
+            using var client = new ModbusRtuOverTcpClient("127.0.0.1", 1);
+
             typeof(ModbusRtuOverTcpClient)
-                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-                .Invoke(null, new object[] { "" });
+                .GetMethod("ParseAddressEx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(client, new object[] { "" });
         });
     }
 }

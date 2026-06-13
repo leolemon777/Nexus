@@ -14,16 +14,22 @@ namespace Nexus
         private readonly Func<T> _deviceFactory;
         private readonly int _maxPoolSize;
         private readonly TimeSpan _idleTimeout;
+        private readonly Func<T, bool>? _healthCheck;
         private readonly ConcurrentDictionary<string, DeviceBucket> _pools =
             new ConcurrentDictionary<string, DeviceBucket>();
         private readonly Timer _cleanupTimer;
-        private readonly SemaphoreSlim _semaphore;
         private volatile bool _disposed;
 
         private class DeviceBucket
         {
             public ConcurrentStack<PooledDevice> IdleDevices { get; } = new ConcurrentStack<PooledDevice>();
+            public SemaphoreSlim Semaphore { get; }
             public int ActiveCount;
+
+            public DeviceBucket(int maxPoolSize)
+            {
+                Semaphore = new SemaphoreSlim(maxPoolSize, maxPoolSize);
+            }
         }
 
         private class PooledDevice
@@ -42,18 +48,20 @@ namespace Nexus
         /// <param name="maxPoolSize">每个 key 的最大连接数，默认 5</param>
         /// <param name="idleTimeout">空闲超时时间，默认 5 分钟</param>
         /// <param name="cleanupInterval">清理周期，默认等于 idleTimeout</param>
+        /// <param name="healthCheck">可选健康检查委托；Acquire 时对空闲连接执行，返回 false 的连接被淘汰。可用于 ping/读寄存器等。</param>
         public ConnectionPool(
             Func<T> deviceFactory,
             int maxPoolSize = 5,
             TimeSpan? idleTimeout = null,
-            TimeSpan? cleanupInterval = null)
+            TimeSpan? cleanupInterval = null,
+            Func<T, bool>? healthCheck = null)
         {
             _deviceFactory = deviceFactory ?? throw new ArgumentNullException(nameof(deviceFactory));
             if (maxPoolSize <= 0) throw new ArgumentOutOfRangeException(nameof(maxPoolSize));
             _maxPoolSize = maxPoolSize;
             _idleTimeout = idleTimeout ?? TimeSpan.FromMinutes(5);
+            _healthCheck = healthCheck;
             _cleanupTimer = new Timer(CleanupCallback, null, _idleTimeout, cleanupInterval ?? _idleTimeout);
-            _semaphore = new SemaphoreSlim(maxPoolSize, maxPoolSize);
         }
 
         /// <inheritdoc />
@@ -86,52 +94,72 @@ namespace Nexus
             if (_disposed) throw new ObjectDisposedException(nameof(ConnectionPool<T>));
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket());
+            var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket(_maxPoolSize));
+            bucket.Semaphore.Wait();
 
-            while (true)
+            try
             {
-                if (bucket.IdleDevices.TryPop(out var pooled))
+                while (true)
                 {
-                    if (pooled.Device.IsConnected)
+                    if (bucket.IdleDevices.TryPop(out var pooled))
                     {
-                        Interlocked.Increment(ref bucket.ActiveCount);
-                        return pooled.Device;
+                        if (pooled.Device.IsConnected)
+                        {
+                            // 已连接 → 先做健康检查
+                            if (IsHealthy(pooled.Device))
+                            {
+                                Interlocked.Increment(ref bucket.ActiveCount);
+                                return pooled.Device;
+                            }
+
+                            // 健康检查失败 → 淘汰（不断尝试重连不健康的设备）
+                            TryDisposeDevice(pooled.Device);
+                            continue;
+                        }
+
+                        try
+                        {
+                            var reconnect = pooled.Device.Connect();
+                            if (reconnect.IsSuccess && pooled.Device.IsConnected)
+                            {
+                                Interlocked.Increment(ref bucket.ActiveCount);
+                                return pooled.Device;
+                            }
+                        }
+
+                        catch
+                        {
+                            // reconnect failed — fall through to dispose and retry
+                        }
+
+                        TryDisposeDevice(pooled.Device);
+                        continue;
                     }
+
+                    var device = _deviceFactory();
+                    if (device == null)
+                        throw new InvalidOperationException("Device factory returned null.");
 
                     try
                     {
-                        pooled.Device.Connect();
-                        if (pooled.Device.IsConnected)
-                        {
-                            Interlocked.Increment(ref bucket.ActiveCount);
-                            return pooled.Device;
-                        }
+                        var connect = device.Connect();
+                        if (!connect.IsSuccess || !device.IsConnected)
+                            throw new InvalidOperationException(connect.Message);
                     }
                     catch
                     {
-                        // reconnect failed — fall through to dispose and retry
+                        TryDisposeDevice(device);
+                        throw;
                     }
 
-                    TryDisposeDevice(pooled.Device);
-                    continue;
+                    Interlocked.Increment(ref bucket.ActiveCount);
+                    return device;
                 }
-
-                var device = _deviceFactory();
-                if (device == null)
-                    throw new InvalidOperationException("Device factory returned null.");
-
-                try
-                {
-                    device.Connect();
-                }
-                catch
-                {
-                    TryDisposeDevice(device);
-                    throw;
-                }
-
-                Interlocked.Increment(ref bucket.ActiveCount);
-                return device;
+            }
+            catch
+            {
+                bucket.Semaphore.Release();
+                throw;
             }
         }
 
@@ -143,22 +171,39 @@ namespace Nexus
             if (_disposed) throw new ObjectDisposedException(nameof(ConnectionPool<T>));
             if (key == null) throw new ArgumentNullException(nameof(key));
 
-            await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket(_maxPoolSize));
+            await bucket.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             try
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(ConnectionPool<T>));
 
-                var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket());
-
                 if (bucket.IdleDevices.TryPop(out var pooled))
                 {
-                    if (pooled.Device.IsConnected || await TryReconnectAsync(pooled.Device).ConfigureAwait(false))
+                    bool healthy = pooled.Device.IsConnected && IsHealthy(pooled.Device);
+                    if (!healthy && pooled.Device.IsConnected)
+                    {
+                        // 连接存在但健康检查失败，淘汰
+                        TryDisposeDevice(pooled.Device);
+                    }
+                    else if (healthy)
                     {
                         Interlocked.Increment(ref bucket.ActiveCount);
                         return pooled.Device;
                     }
-                    TryDisposeDevice(pooled.Device);
+                    else if (await TryReconnectAsync(pooled.Device).ConfigureAwait(false))
+                    {
+                        if (IsHealthy(pooled.Device))
+                        {
+                            Interlocked.Increment(ref bucket.ActiveCount);
+                            return pooled.Device;
+                        }
+                        TryDisposeDevice(pooled.Device);
+                    }
+                    else
+                    {
+                        TryDisposeDevice(pooled.Device);
+                    }
                 }
 
                 var device = _deviceFactory();
@@ -167,7 +212,9 @@ namespace Nexus
 
                 try
                 {
-                    await device.ConnectAsync().ConfigureAwait(false);
+                    var connect = await device.ConnectAsync().ConfigureAwait(false);
+                    if (!connect.IsSuccess || !device.IsConnected)
+                        throw new InvalidOperationException(connect.Message);
                 }
                 catch
                 {
@@ -180,17 +227,28 @@ namespace Nexus
             }
             catch
             {
-                _semaphore.Release();
+                bucket.Semaphore.Release();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 检查设备是否健康。若配置了 <see cref="_healthCheck"/> 委托则执行它，否则直接返回 true。
+        /// 健康检查异常视为不健康（返回 false），不向上抛出。
+        /// </summary>
+        private bool IsHealthy(T device)
+        {
+            if (_healthCheck == null) return true;
+            try { return _healthCheck(device); }
+            catch { return false; }
         }
 
         private static async Task<bool> TryReconnectAsync(T device)
         {
             try
             {
-                await device.ConnectAsync().ConfigureAwait(false);
-                return device.IsConnected;
+                var result = await device.ConnectAsync().ConfigureAwait(false);
+                return result.IsSuccess && device.IsConnected;
             }
             catch
             {
@@ -209,39 +267,24 @@ namespace Nexus
                 {
                     bucket.IdleDevices.Push(new PooledDevice(device));
                     Interlocked.Decrement(ref bucket.ActiveCount);
-                    _semaphore.Release();
+                    bucket.Semaphore.Release();
                     return;
                 }
 
                 Interlocked.Decrement(ref bucket.ActiveCount);
+                bucket.Semaphore.Release();
             }
 
-            _semaphore.Release();
             TryDisposeDevice(device);
         }
 
         /// <summary>
         /// 异步释放连接回池中。
         /// </summary>
-        public async Task ReleaseAsync(string key, T device)
+        public Task ReleaseAsync(string key, T device)
         {
-            if (device == null) return;
-
-            if (key != null && _pools.TryGetValue(key, out var bucket))
-            {
-                if (bucket.IdleDevices.Count < _maxPoolSize && device.IsConnected)
-                {
-                    bucket.IdleDevices.Push(new PooledDevice(device));
-                    Interlocked.Decrement(ref bucket.ActiveCount);
-                    _semaphore.Release();
-                    return;
-                }
-
-                Interlocked.Decrement(ref bucket.ActiveCount);
-            }
-
-            _semaphore.Release();
-            TryDisposeDevice(device);
+            Release(key, device);
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
@@ -253,6 +296,7 @@ namespace Nexus
             {
                 while (bucket.IdleDevices.TryPop(out var pooled))
                     TryDisposeDevice(pooled.Device);
+                bucket.Semaphore.Dispose();
             }
         }
 
@@ -267,6 +311,7 @@ namespace Nexus
                 {
                     while (bucket.IdleDevices.TryPop(out var pooled))
                         TryDisposeDevice(pooled.Device);
+                    bucket.Semaphore.Dispose();
                 }
             }
         }
@@ -279,7 +324,6 @@ namespace Nexus
 
             _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite);
             _cleanupTimer?.Dispose();
-            _semaphore?.Dispose();
 
             foreach (var kvp in _pools)
             {
@@ -287,6 +331,7 @@ namespace Nexus
                 {
                     while (bucket.IdleDevices.TryPop(out var pooled))
                         TryDisposeDevice(pooled.Device);
+                    bucket.Semaphore.Dispose();
                 }
             }
         }

@@ -173,6 +173,8 @@ public partial class MainWindow : Window
     private void OnNavigate(NavItem item)
     {
         var page = System.Activator.CreateInstance(item.PageType);
+        if (page is INavigablePage navigable)
+            navigable.OnNavigatedTo(item.Tag);
         ContentFrame.Navigate(page);
     }
 }

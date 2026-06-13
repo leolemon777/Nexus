@@ -110,41 +110,79 @@ namespace Nexus.Delta
             using (client)
             {
                 var stream = client.GetStream();
-                var buffer = new byte[1024];
 
                 while (_running && client.Connected)
                 {
                     try
                     {
-                        // 读取 MBAP 头 (7 bytes)
-                        if (!ReadExact(stream, buffer, 0, 7)) break;
-                        int length = (buffer[4] << 8) | buffer[5];
-                        int pduLen = length - 1;
+                        var header = new byte[2];
+                        if (!ReadExact(stream, header, 0, header.Length)) break;
 
-                        if (pduLen <= 0 || pduLen > 260) break;
-                        if (!ReadExact(stream, buffer, 7, pduLen)) break;
-
-                        byte unitId = buffer[6];
-                        byte fc = buffer[7];
+                        byte station = header[0];
+                        byte fc = header[1];
+                        byte[] request = ReadRtuRequestPayload(stream, fc);
 
                         // 处理请求
-                        byte[]? response = ProcessRequest(fc, buffer, 8, pduLen - 1);
+                        byte[]? response = ProcessRequest(fc, request, 0, request.Length);
                         if (response == null) break;
 
-                        // 构建 MBAP 响应
-                        int respLen = 1 + response.Length;
-                        var resp = new byte[7 + response.Length];
-                        resp[0] = buffer[0]; resp[1] = buffer[1]; // TID
-                        resp[2] = 0; resp[3] = 0; // Protocol ID
-                        resp[4] = (byte)(respLen >> 8); resp[5] = (byte)(respLen & 0xFF);
-                        resp[6] = unitId;
-                        Buffer.BlockCopy(response, 0, resp, 7, response.Length);
-
+                        var resp = BuildRtuResponse(station, response);
                         stream.Write(resp, 0, resp.Length);
                     }
                     catch { break; }
                 }
             }
+        }
+
+        private static byte[] ReadRtuRequestPayload(NetworkStream stream, byte fc)
+        {
+            switch (fc)
+            {
+                case 0x01:
+                case 0x02:
+                case 0x03:
+                case 0x04:
+                case 0x05:
+                case 0x06:
+                    var fixedPayload = new byte[4];
+                    ReadExact(stream, fixedPayload, 0, fixedPayload.Length);
+                    ReadAndDiscardCrc(stream);
+                    return fixedPayload;
+
+                case 0x0F:
+                case 0x10:
+                    var prefix = new byte[5];
+                    ReadExact(stream, prefix, 0, prefix.Length);
+                    int byteCount = prefix[4];
+                    var payload = new byte[prefix.Length + byteCount];
+                    Buffer.BlockCopy(prefix, 0, payload, 0, prefix.Length);
+                    if (byteCount > 0)
+                        ReadExact(stream, payload, prefix.Length, byteCount);
+                    ReadAndDiscardCrc(stream);
+                    return payload;
+
+                default:
+                    ReadAndDiscardCrc(stream);
+                    return Array.Empty<byte>();
+            }
+        }
+
+        private static void ReadAndDiscardCrc(NetworkStream stream)
+        {
+            var crc = new byte[2];
+            ReadExact(stream, crc, 0, crc.Length);
+        }
+
+        private static byte[] BuildRtuResponse(byte station, byte[] pdu)
+        {
+            var response = new byte[1 + pdu.Length + 2];
+            response[0] = station;
+            Buffer.BlockCopy(pdu, 0, response, 1, pdu.Length);
+
+            ushort crc = CrcCalculator.ComputeCrc16(response, 0, response.Length - 2);
+            response[response.Length - 2] = (byte)(crc & 0xFF);
+            response[response.Length - 1] = (byte)(crc >> 8);
+            return response;
         }
 
         private byte[]? ProcessRequest(byte fc, byte[] buffer, int offset, int dataLen)

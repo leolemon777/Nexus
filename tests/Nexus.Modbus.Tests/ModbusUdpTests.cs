@@ -30,6 +30,7 @@ internal sealed class ModbusUdpTestServer : IDisposable
     }
 
     public void SetHoldingRegister(ushort address, ushort value) { lock (_lock) _holdingRegisters[address] = value; }
+    public ushort GetHoldingRegister(ushort address) { lock (_lock) return _holdingRegisters[address]; }
     public void SetInputRegister(ushort address, ushort value) { lock (_lock) _inputRegisters[address] = value; }
     public void SetCoil(ushort address, bool value) { lock (_lock) _coils[address] = value; }
     public void SetDiscreteInput(ushort address, bool value) { lock (_lock) _discreteInputs[address] = value; }
@@ -221,6 +222,52 @@ internal sealed class ModbusUdpTestServer : IDisposable
     private static byte[] BuildException(byte fc, byte code) => new byte[] { (byte)(fc | 0x80), code };
 
     public void Dispose() { _running = false; try { _udp.Close(); } catch { } }
+}
+
+public class ModbusUdpAddressContextTests
+{
+    [Fact]
+    public void ByteOrderPrefix_OverridesReadAndWrite()
+    {
+        using var server = new ModbusUdpTestServer();
+        server.SetHoldingRegister(1, 0x8877);
+        server.SetHoldingRegister(2, 0x6655);
+        server.Start();
+
+        using var client = new ModbusUdpClient("127.0.0.1", server.Port, station: 1, timeout: 2000)
+        {
+            ByteOrder = Endianness.BigEndian
+        };
+
+        var read = client.ReadInt32("bo=LittleEndian;40001");
+        var write = client.Write("bo=LittleEndian;40003", 0x11223344);
+
+        Assert.True(read.IsSuccess, read.Message);
+        Assert.Equal(0x55667788, read.Content);
+        Assert.True(write.IsSuccess, write.Message);
+        Assert.Equal((ushort)0x4433, server.GetHoldingRegister(3));
+        Assert.Equal((ushort)0x2211, server.GetHoldingRegister(4));
+        Assert.Equal(Endianness.BigEndian, client.ByteOrder);
+    }
+
+    [Fact]
+    public void ReadUInt16_AcceptsAddressContextPrefix()
+    {
+        using var server = new ModbusUdpTestServer();
+        server.SetHoldingRegister(1, 0x1234);
+        server.Start();
+
+        using var client = new ModbusUdpClient("127.0.0.1", server.Port, station: 1, timeout: 2000);
+        string sentHex = string.Empty;
+        client.OnMessageSent += (_, hex) => sentHex = hex;
+        var result = client.ReadUInt16("unit=7;40001");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)0x1234, result.Content);
+        string normalized = sentHex.Replace(" ", "");
+        Assert.Equal("07", normalized.Substring(12, 2));
+        Assert.Equal((byte)1, client.Station);
+    }
 }
 
 public class ModbusUdpConnectionTests

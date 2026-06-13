@@ -86,5 +86,75 @@ namespace Nexus.Xinje.Tests
             client.Timeout = 10000;
             Assert.Equal(10000, client.Timeout);
         }
+
+        [Fact]
+        public void ReadBool_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.ReadBool("M0").IsSuccess);
+        }
+
+        [Fact]
+        public void ReadInt16_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.ReadInt16("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void ReadFloat_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.ReadFloat("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void ReadDouble_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.ReadDouble("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void ReadString_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.ReadString("D100", 10).IsSuccess);
+        }
+
+        [Fact]
+        public void WriteInt16_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.Write("D100", (short)42).IsSuccess);
+        }
+
+        [Fact]
+        public void WriteFloat_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.Write("D100", 3.14f).IsSuccess);
+        }
+
+        [Fact]
+        public void WriteString_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.Write("D100", "hello").IsSuccess);
+        }
+
+        [Fact]
+        public void WriteBytes_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.Write("D100", new byte[] { 1, 2 }).IsSuccess);
+        }
+
+        [Fact]
+        public void WriteBool_NotConnected_ReturnsError()
+        {
+            using var client = new XinjeClient("127.0.0.1");
+            Assert.False(client.Write("M0", true).IsSuccess);
+        }
     }
 }

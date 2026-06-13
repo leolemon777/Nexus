@@ -13,7 +13,7 @@ namespace Nexus.AllenBradley
     /// <para>协议层次: TCP → ENIP (Encapsulation) → CIP (Common Industrial Protocol)</para>
     /// <para>对标 HSL: AllenBradleyNet — Read/Write Tag, Tag数组, UDT</para>
     /// </summary>
-    public class AllenBradleyCipClient : IBatchReadWrite, ISubscribeDevice
+    public class AllenBradleyCipClient : IReadWriteDevice, IBatchReadWrite, ISubscribeDevice
     {
         private readonly object _lock = new object();
         private TcpClient? _tcp;
@@ -101,6 +101,20 @@ namespace Nexus.AllenBradley
         private static byte[] GetBytesLE(uint value)
             => new byte[] { (byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF) };
 
+        private static byte[] GetBytesLE(long value)
+            => new byte[]
+            {
+                (byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF),
+                (byte)((value >> 32) & 0xFF), (byte)((value >> 40) & 0xFF), (byte)((value >> 48) & 0xFF), (byte)((value >> 56) & 0xFF)
+            };
+
+        private static byte[] GetBytesLE(ulong value)
+            => new byte[]
+            {
+                (byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF),
+                (byte)((value >> 32) & 0xFF), (byte)((value >> 40) & 0xFF), (byte)((value >> 48) & 0xFF), (byte)((value >> 56) & 0xFF)
+            };
+
         private static unsafe byte[] GetBytesLE(float value)
         {
             int v = *(int*)&value;
@@ -121,18 +135,8 @@ namespace Nexus.AllenBradley
         //  ENIP Encapsulation 层
         // ═══════════════════════════════════════════
 
-        private enum EnipCommand : ushort
-        {
-            Nop = 0x0000,
-            ListIdentity = 0x0063,
-            RegisterSession = 0x0065,
-            UnregisterSession = 0x0066,
-            SendRRData = 0x006F,
-            SendUnitData = 0x0070,
-        }
-
         /// <summary>发送 ENIP 命令并接收响应。</summary>
-        private OperateResult<byte[]> SendEnip(EnipCommand command, byte[] data)
+        protected OperateResult<byte[]> SendEnip(EnipCommand command, byte[] data)
         {
             try
             {
@@ -164,7 +168,7 @@ namespace Nexus.AllenBradley
                     _stream.Write(frame, 0, frame.Length);
 
                     // 读取响应头
-                    byte[] respHeader = ReadExact(24);
+                    byte[]? respHeader = ReadExact(24);
                     if (respHeader == null)
                         return OperateResult<byte[]>.Failed("读取 ENIP 响应头超时");
 
@@ -179,7 +183,7 @@ namespace Nexus.AllenBradley
                     }
 
                     // 读取响应数据
-                    byte[] respData = respLen > 0 ? ReadExact(respLen) : new byte[0];
+                    byte[]? respData = respLen > 0 ? ReadExact(respLen) : new byte[0];
                     if (respLen > 0 && respData == null)
                         return OperateResult<byte[]>.Failed("读取 ENIP 响应数据超时");
 
@@ -200,7 +204,7 @@ namespace Nexus.AllenBradley
             }
         }
 
-        private byte[]? ReadExact(int count)
+        protected byte[]? ReadExact(int count)
         {
             byte[] buffer = new byte[count];
             int offset = 0;
@@ -219,13 +223,13 @@ namespace Nexus.AllenBradley
         // ═══════════════════════════════════════════
 
         /// <summary>构建 CIP 路径: 背板路径到目标槽号。</summary>
-        private byte[] BuildPath(byte slot)
+        protected byte[] BuildPath(byte slot)
         {
             return new byte[] { 0x01, slot };
         }
 
         /// <summary>构建 EIP 路径: 从 TCP 到背板再到目标槽。</summary>
-        private byte[] BuildConnectionPath(byte slot)
+        protected byte[] BuildConnectionPath(byte slot)
         {
             return new byte[] { 0x01, 0x00, 0x01, 0x00, 0x20, 0x02, 0x24, slot };
         }
@@ -238,7 +242,7 @@ namespace Nexus.AllenBradley
         /// 将 Tag 名称编码为 CIP 路径段。
         /// <para>支持: "MyTag", "MyTag[3]", "MyTag.SubTag", "Program:MyProgram.MyTag"</para>
         /// </summary>
-        private byte[] EncodeTagPath(string tagName)
+        protected byte[] EncodeTagPath(string tagName)
         {
             using var ms = new MemoryStream();
             bool isProgram = false;
@@ -741,7 +745,7 @@ namespace Nexus.AllenBradley
         //  SendRRData 包装
         // ═══════════════════════════════════════════
 
-        private byte[] BuildSendRRData(byte[] cipData)
+        protected byte[] BuildSendRRData(byte[] cipData)
         {
             int dataLen = cipData.Length;
             int totalLen = 4 + 2 + 2 + 2 + 2 + 2 + 2 + dataLen;
@@ -769,7 +773,7 @@ namespace Nexus.AllenBradley
         //  CIP 响应解析
         // ═══════════════════════════════════════════
 
-        private OperateResult<byte[]> ParseCipResponse(byte[] enipPayload)
+        protected OperateResult<byte[]> ParseCipResponse(byte[] enipPayload)
         {
             int offset = 6;
             if (offset + 2 > enipPayload.Length)
@@ -855,26 +859,26 @@ namespace Nexus.AllenBradley
             //                          + VendorId(2) + DeviceType(2) + ProductCode(2) + Revision{Major,Minor}(2)
             //                          + Status(2) + SerialNumber(4) + ProductNameLen(1) + ProductName(N)
             //                          + State(1)
-            if (r.Content.Length >= 6)
-            {
-                // Skip ItemCount(2) + ItemType(2) + ItemLength(2)
-                off = 6;
-            }
+            // Skip ItemCount(2) + ItemType(2) + ItemLength(2)
+            off = 6;
 
             if (r.Content.Length >= off + 2)
-                id.EncapsulationVersion = (ushort)((r.Content[off] << 8) | r.Content[off + 1]);
+                id.EncapsulationVersion = ToUInt16LE(r.Content, off);
+            off += 2;
+
+            // Socket address: sin_family(2) + sin_port(2) + sin_addr(4) + sin_zero(8)
+            off += 16;
+
+            if (r.Content.Length >= off + 2)
+                id.VendorId = ToUInt16LE(r.Content, off);
             off += 2;
 
             if (r.Content.Length >= off + 2)
-                id.VendorId = (ushort)((r.Content[off] << 8) | r.Content[off + 1]);
+                id.DeviceType = ToUInt16LE(r.Content, off);
             off += 2;
 
             if (r.Content.Length >= off + 2)
-                id.DeviceType = (ushort)((r.Content[off] << 8) | r.Content[off + 1]);
-            off += 2;
-
-            if (r.Content.Length >= off + 2)
-                id.ProductCode = (ushort)((r.Content[off] << 8) | r.Content[off + 1]);
+                id.ProductCode = ToUInt16LE(r.Content, off);
             off += 2;
 
             if (r.Content.Length >= off + 2)
@@ -885,11 +889,11 @@ namespace Nexus.AllenBradley
             off += 2;
 
             if (r.Content.Length >= off + 2)
-                id.Status = (ushort)((r.Content[off] << 8) | r.Content[off + 1]);
+                id.Status = ToUInt16LE(r.Content, off);
             off += 2;
 
             if (r.Content.Length >= off + 4)
-                id.SerialNumber = (uint)((r.Content[off] << 24) | (r.Content[off + 1] << 16) | (r.Content[off + 2] << 8) | r.Content[off + 3]);
+                id.SerialNumber = ToUInt32LE(r.Content, off);
             off += 4;
 
             if (r.Content.Length > off)
@@ -1013,59 +1017,74 @@ namespace Nexus.AllenBradley
         //  IReadWriteDevice — Tag 读写
         // ═══════════════════════════════════════════
 
+        private static bool HasCipTypeHeader(byte[] data)
+        {
+            if (data.Length < 2) return false;
+            ushort type = (ushort)(data[0] | (data[1] << 8));
+            return type >= CipTypeBool && type <= CipTypeStruct;
+        }
+
+        private static int GetTagDataOffset(byte[] data, int expectedDataBytes)
+            => data.Length >= expectedDataBytes + 2 && HasCipTypeHeader(data) ? 2 : 0;
+
         public OperateResult<bool> ReadBool(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 3) return OperateResult<bool>.Failed("响应数据不足");
-            // Type(2) + Data
-            return OperateResult<bool>.Success(r.Content[2] != 0);
+            int offset = GetTagDataOffset(r.Content, 1);
+            if (r.Content.Length < offset + 1) return OperateResult<bool>.Failed("响应数据不足");
+            return OperateResult<bool>.Success(r.Content[offset] != 0);
         }
 
         public OperateResult<short> ReadInt16(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 4) return OperateResult<short>.Failed("响应数据不足");
-            return OperateResult<short>.Success(IsLittleEndian ? ToInt16LE(r.Content, 2) : DataConverter.ToInt16(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 2);
+            if (r.Content.Length < offset + 2) return OperateResult<short>.Failed("响应数据不足");
+            return OperateResult<short>.Success(IsLittleEndian ? ToInt16LE(r.Content, offset) : DataConverter.ToInt16(r.Content, offset));
         }
 
         public OperateResult<ushort> ReadUInt16(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 4) return OperateResult<ushort>.Failed("响应数据不足");
-            return OperateResult<ushort>.Success(IsLittleEndian ? ToUInt16LE(r.Content, 2) : DataConverter.ToUInt16(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 2);
+            if (r.Content.Length < offset + 2) return OperateResult<ushort>.Failed("响应数据不足");
+            return OperateResult<ushort>.Success(IsLittleEndian ? ToUInt16LE(r.Content, offset) : DataConverter.ToUInt16(r.Content, offset));
         }
 
         public OperateResult<int> ReadInt32(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<int>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 6) return OperateResult<int>.Failed("响应数据不足");
-            return OperateResult<int>.Success(IsLittleEndian ? ToInt32LE(r.Content, 2) : DataConverter.ToInt32(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 4);
+            if (r.Content.Length < offset + 4) return OperateResult<int>.Failed("响应数据不足");
+            return OperateResult<int>.Success(IsLittleEndian ? ToInt32LE(r.Content, offset) : DataConverter.ToInt32(r.Content, offset));
         }
 
         public OperateResult<uint> ReadUInt32(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<uint>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 6) return OperateResult<uint>.Failed("响应数据不足");
-            return OperateResult<uint>.Success(IsLittleEndian ? ToUInt32LE(r.Content, 2) : DataConverter.ToUInt32(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 4);
+            if (r.Content.Length < offset + 4) return OperateResult<uint>.Failed("响应数据不足");
+            return OperateResult<uint>.Success(IsLittleEndian ? ToUInt32LE(r.Content, offset) : DataConverter.ToUInt32(r.Content, offset));
         }
 
         public OperateResult<long> ReadInt64(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 10) return OperateResult<long>.Failed("响应数据不足");
+            int offset = GetTagDataOffset(r.Content, 8);
+            if (r.Content.Length < offset + 8) return OperateResult<long>.Failed("响应数据不足");
             if (IsLittleEndian)
             {
-                uint lo = ToUInt32LE(r.Content, 2);
-                uint hi = ToUInt32LE(r.Content, 6);
+                uint lo = ToUInt32LE(r.Content, offset);
+                uint hi = ToUInt32LE(r.Content, offset + 4);
                 return OperateResult<long>.Success(((long)hi << 32) | lo);
             }
-            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, 2));
+            return OperateResult<long>.Success(DataConverter.ToInt64(r.Content, offset));
         }
 
         public OperateResult<ulong> ReadUInt64(string address)
@@ -1078,36 +1097,40 @@ namespace Nexus.AllenBradley
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 6) return OperateResult<float>.Failed("响应数据不足");
-            return OperateResult<float>.Success(IsLittleEndian ? ToFloatLE(r.Content, 2) : DataConverter.ToFloat(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 4);
+            if (r.Content.Length < offset + 4) return OperateResult<float>.Failed("响应数据不足");
+            return OperateResult<float>.Success(IsLittleEndian ? ToFloatLE(r.Content, offset) : DataConverter.ToFloat(r.Content, offset));
         }
 
         public unsafe OperateResult<double> ReadDouble(string address)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 10) return OperateResult<double>.Failed("响应数据不足");
-            return OperateResult<double>.Success(IsLittleEndian ? ToDoubleLE(r.Content, 2) : DataConverter.ToDouble(r.Content, 2));
+            int offset = GetTagDataOffset(r.Content, 8);
+            if (r.Content.Length < offset + 8) return OperateResult<double>.Failed("响应数据不足");
+            return OperateResult<double>.Success(IsLittleEndian ? ToDoubleLE(r.Content, offset) : DataConverter.ToDouble(r.Content, offset));
         }
 
         public OperateResult<string> ReadString(string address, ushort length)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message, r.ErrorCode);
-            // CIP STRING: Type(2) + Length(4) + Data
-            if (r.Content.Length < 6) return OperateResult<string>.Failed("响应数据不足");
-            int strLen = IsLittleEndian ? ToInt32LE(r.Content, 2) : DataConverter.ToInt32(r.Content, 2);
-            if (r.Content.Length < 6 + strLen) return OperateResult<string>.Failed("字符串数据不完整");
-            return OperateResult<string>.Success(System.Text.Encoding.ASCII.GetString(r.Content, 6, strLen));
+            int offset = GetTagDataOffset(r.Content, 4);
+            if (r.Content.Length < offset + 4) return OperateResult<string>.Failed("响应数据不足");
+            int strLen = IsLittleEndian ? ToInt32LE(r.Content, offset) : DataConverter.ToInt32(r.Content, offset);
+            int dataOffset = offset + 4;
+            if (r.Content.Length < dataOffset + strLen) return OperateResult<string>.Failed("字符串数据不完整");
+            return OperateResult<string>.Success(System.Text.Encoding.ASCII.GetString(r.Content, dataOffset, strLen));
         }
 
         public OperateResult<byte[]> ReadBytes(string address, ushort length)
         {
             var r = ReadTagRaw(address);
             if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message, r.ErrorCode);
-            if (r.Content.Length < 2) return OperateResult<byte[]>.Failed("响应数据不足");
-            byte[] data = new byte[r.Content.Length - 2];
-            Buffer.BlockCopy(r.Content, 2, data, 0, data.Length);
+            int offset = HasCipTypeHeader(r.Content) ? 2 : 0;
+            if (r.Content.Length < offset) return OperateResult<byte[]>.Failed("响应数据不足");
+            byte[] data = new byte[r.Content.Length - offset];
+            Buffer.BlockCopy(r.Content, offset, data, 0, data.Length);
             return OperateResult<byte[]>.Success(data);
         }
 
@@ -1137,8 +1160,17 @@ namespace Nexus.AllenBradley
         }
 
         public OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public OperateResult Write(string address, long value) => Write(address, (int)value);
-        public OperateResult Write(string address, ulong value) => Write(address, (int)value);
+        public OperateResult Write(string address, long value)
+        {
+            var data = IsLittleEndian ? GetBytesLE(value) : DataConverter.GetBytes(value);
+            return WriteTagRaw(address, CipTypeLint, data);
+        }
+
+        public OperateResult Write(string address, ulong value)
+        {
+            var data = IsLittleEndian ? GetBytesLE(value) : DataConverter.GetBytes(value);
+            return WriteTagRaw(address, CipTypeUlint, data);
+        }
 
         public unsafe OperateResult Write(string address, float value)
         {
@@ -1146,7 +1178,11 @@ namespace Nexus.AllenBradley
             return WriteTagRaw(address, CipTypeReal, data);
         }
 
-        public OperateResult Write(string address, double value) => Write(address, (float)value);
+        public OperateResult Write(string address, double value)
+        {
+            var data = IsLittleEndian ? GetBytesLE(value) : DataConverter.GetBytes(value);
+            return WriteTagRaw(address, CipTypeLreal, data);
+        }
 
         public OperateResult Write(string address, string value)
         {
@@ -1160,6 +1196,9 @@ namespace Nexus.AllenBradley
 
         public OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             return WriteTagRaw(address, CipTypeDint, data);
         }
 
@@ -1197,8 +1236,12 @@ namespace Nexus.AllenBradley
         /// <summary>批量读取多个 Tag 的值。利用 CIP Multiple Service Packet 一次请求完成。</summary>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             // CIP 已有 BatchReadTags — 复用它获取原始字节，再解析为 object
-            var raw = BatchReadTags(addresses);
+            var raw = BatchReadTags(addressList);
             if (!raw.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(raw.Message, raw.ErrorCode);
 
             var result = new Dictionary<string, object?>();
@@ -1241,7 +1284,13 @@ namespace Nexus.AllenBradley
 
         /// <summary>随机读取多个 Tag 的原始字节。</summary>
         public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
-            => BatchReadTags(addresses);
+        {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
+            return BatchReadTags(addressList);
+        }
 
         public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(
             IEnumerable<string> addresses, CancellationToken cancellationToken = default)
@@ -1250,7 +1299,11 @@ namespace Nexus.AllenBradley
         /// <summary>批量写入多个 Tag。</summary>
         public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
         {
-            foreach (var kv in items)
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
             {
                 OperateResult r = kv.Value switch
                 {
@@ -1260,6 +1313,7 @@ namespace Nexus.AllenBradley
                     int i => Write(kv.Key, i),
                     uint ui => Write(kv.Key, ui),
                     long l => Write(kv.Key, l),
+                    ulong ul => Write(kv.Key, ul),
                     float f => Write(kv.Key, f),
                     double d => Write(kv.Key, d),
                     string s => Write(kv.Key, s),

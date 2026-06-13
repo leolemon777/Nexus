@@ -16,6 +16,7 @@ namespace Nexus.Siemens
         private Thread? _acceptThread;
         private volatile bool _running;
         private readonly int _port;
+        private int _connectionCount;
 
         // ── 数据存储 ─────────────────────────────
         private readonly byte[] _db = new byte[65536];   // DB 块数据
@@ -29,6 +30,8 @@ namespace Nexus.Siemens
         public SiemensFetchWriteVirtualServer(int port) => _port = port;
 
         public bool IsRunning => _running;
+
+        public int ConnectionCount => Volatile.Read(ref _connectionCount);
 
         // ── 数据设置 API ─────────────────────────
 
@@ -89,6 +92,7 @@ namespace Nexus.Siemens
                 try
                 {
                     var client = _listener!.AcceptTcpClient();
+                    Interlocked.Increment(ref _connectionCount);
                     var thread = new Thread(() => HandleClient(client)) { IsBackground = true };
                     thread.Start();
                 }

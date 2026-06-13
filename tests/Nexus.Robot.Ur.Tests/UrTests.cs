@@ -155,5 +155,125 @@ namespace Nexus.Robot.Ur.Tests
             var result = client.SendDashboardCommand("running\n");
             Assert.False(result.IsSuccess);
         }
+
+        #region 补强测试
+
+        [Fact]
+        public void UrClient_DoubleDispose_DoesNotThrow()
+        {
+            var client = new UrClient("127.0.0.1");
+            client.Dispose();
+            client.Dispose();
+        }
+
+        [Fact]
+        public void UrClient_WriteOperations_NotConnected_ReturnError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.Write("D100", (short)42).IsSuccess);
+            Assert.False(client.Write("D100", 3.14f).IsSuccess);
+            Assert.False(client.Write("D100", "hello").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadOperations_NotConnected_ReturnError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadInt16("D100").IsSuccess);
+            Assert.False(client.ReadFloat("D100").IsSuccess);
+            Assert.False(client.ReadString("D100", 10).IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_MoveL_NullPose_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            var result = client.MoveL(null!);
+            Assert.False(result.IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_MoveJ_ShortPose_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            var result = client.MoveJ(new double[] { 1, 2, 3 });
+            Assert.False(result.IsSuccess);
+        }
+
+        #endregion
+
+        #region 扩展覆盖
+
+        [Fact]
+        public void UrClient_ReadBool_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadBool("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadInt32_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadInt32("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadDouble_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadDouble("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_WriteBool_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.Write("D100", true).IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_WriteInt32_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.Write("D100", 42).IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_WriteDouble_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.Write("D100", 3.14).IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_WriteBytes_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.Write("D100", new byte[] { 1, 2 }).IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadUInt16_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadUInt16("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadUInt32_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadUInt32("D100").IsSuccess);
+        }
+
+        [Fact]
+        public void UrClient_ReadInt64_NotConnected_ReturnsError()
+        {
+            var client = new UrClient("127.0.0.1");
+            Assert.False(client.ReadInt64("D100").IsSuccess);
+        }
+
+        #endregion
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -53,6 +54,18 @@ namespace Nexus.Omron
         private static readonly FinsAddressParser _addressParser = new FinsAddressParser();
 
         // ── TcpDeviceBase 抽象实现 ───────────────
+
+        /// <summary>默认心跳：HostLink 读 D0 的 1 个 word。</summary>
+        protected override byte[] BuildHeartbeat()
+        {
+            try
+            {
+                var addr = new FinsAddress("D0", FinsMemoryArea.DM, 0);
+                var cmd = BuildFinsReadCommand(addr, 0, 1, isBit: false);
+                return PackCommand(cmd);
+            }
+            catch { return null; }
+        }
 
         /// <summary>HostLink 不使用固定长度的响应头。</summary>
         protected override int ResponseHeaderLength => 1; // 不使用基类 framing
@@ -490,8 +503,12 @@ namespace Nexus.Omron
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, object?>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, object?>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadInt16(addr);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
@@ -508,8 +525,12 @@ namespace Nexus.Omron
         /// <inheritdoc/>
         public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses)
         {
+            var addressList = addresses.ToList();
+            if (addressList.Count == 0)
+                return OperateResult<Dictionary<string, byte[]>>.Failed("地址列表不能为空");
+
             var result = new Dictionary<string, byte[]>();
-            foreach (string addr in addresses)
+            foreach (string addr in addressList)
             {
                 var r = ReadBytes(addr, 2);
                 if (!r.IsSuccess) return OperateResult<Dictionary<string, byte[]>>.Failed(r.Message, r.ErrorCode);
@@ -526,7 +547,11 @@ namespace Nexus.Omron
         /// <inheritdoc/>
         public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items)
         {
-            foreach (var kv in items)
+            var itemList = items.ToList();
+            if (itemList.Count == 0)
+                return OperateResult.Failed("写入列表不能为空");
+
+            foreach (var kv in itemList)
             {
                 OperateResult r = kv.Value switch
                 {
