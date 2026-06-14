@@ -74,8 +74,7 @@ namespace Nexus.Mitsubishi
                     if (b == 0x15) // NAK
                     {
                         byte[] errBytes = new byte[2];
-                        int deadline = Environment.TickCount + Timeout;
-                        if (!ReadExact2(errBytes, deadline))
+                        if (!ReadExact2(errBytes, Timeout))
                             return OperateResult<string>.Failed("NAK 错误码读取超时");
                         string errCode = Encoding.ASCII.GetString(errBytes);
                         return OperateResult<string>.Failed($"FX NAK 错误: {errCode}");
@@ -92,7 +91,7 @@ namespace Nexus.Mitsubishi
                             if (c == 0x03) // ETX
                             {
                                 sumBuf = new byte[2];
-                                if (!ReadExact2(sumBuf, Environment.TickCount + Timeout))
+                                if (!ReadExact2(sumBuf, Timeout))
                                     return OperateResult<string>.Failed("Sum check 读取超时");
                                 break;
                             }
@@ -128,8 +127,8 @@ namespace Nexus.Mitsubishi
 
         private int ReadByteWithTimeout()
         {
-            int deadline = Environment.TickCount + Timeout;
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
                 try { return _stream.ReadByte(); }
                 catch (TimeoutException) { return -1; }
@@ -137,10 +136,11 @@ namespace Nexus.Mitsubishi
             return -1;
         }
 
-        private bool ReadExact2(byte[] buf, int deadline)
+        private bool ReadExact2(byte[] buf, int remainingMs)
         {
+            int start = Environment.TickCount;
             int offset = 0;
-            while (offset < buf.Length && Environment.TickCount <= deadline)
+            while (offset < buf.Length && unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 int n = _stream.Read(buf, offset, buf.Length - offset);
                 if (n <= 0) return false;

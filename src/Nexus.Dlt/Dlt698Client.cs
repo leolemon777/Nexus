@@ -390,9 +390,9 @@ namespace Nexus.Dlt
 
                     var response = new List<byte>();
                     byte[] buf = new byte[1024];
-                    int deadline = Environment.TickCount + Timeout;
+                    int start = Environment.TickCount;
 
-                    while (Environment.TickCount < deadline)
+                    while (unchecked(Environment.TickCount - start) < Timeout)
                     {
                         int read = Port.Read(buf, 0, buf.Length);
                         if (read > 0)

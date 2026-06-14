@@ -268,10 +268,10 @@ namespace Nexus.LsElectric
         private int ReadExactSerial(byte[] buffer, int offset, int count)
         {
             int totalRead = 0;
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             while (totalRead < count)
             {
-                if (Environment.TickCount > deadline) return totalRead;
+                if (unchecked(Environment.TickCount - start) > Timeout) return totalRead;
                 try
                 {
                     int read = Port.Read(buffer, offset + totalRead, count - totalRead);

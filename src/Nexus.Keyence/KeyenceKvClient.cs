@@ -106,19 +106,22 @@ namespace Nexus.Keyence
 
         private string? ReadLine()
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             using var ms = new MemoryStream();
 
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                int b = ReadByteWithTimeout(deadline);
+                int remaining = Timeout - unchecked(Environment.TickCount - start);
+                if (remaining < 0) return null;
+                int b = ReadByteWithTimeout(remaining);
                 if (b < 0) return null;
                 if (b == '\r' || b == '\n')
                 {
                     // Consume optional \r\n pair
                     if (b == '\r')
                     {
-                        int next = ReadByteWithTimeout(Math.Min(deadline, Environment.TickCount + 200));
+                        int rem2 = Timeout - unchecked(Environment.TickCount - start);
+                        int next = ReadByteWithTimeout(Math.Min(rem2 < 0 ? 0 : rem2, 200));
                         if (next == '\n') { /* consumed */ }
                         else if (next >= 0) ms.WriteByte((byte)next);
                     }
@@ -129,9 +132,10 @@ namespace Nexus.Keyence
             return null;
         }
 
-        private int ReadByteWithTimeout(int deadline)
+        private int ReadByteWithTimeout(int remainingMs)
         {
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try { return _stream!.ReadByte(); }
                 catch (TimeoutException) { return -1; }

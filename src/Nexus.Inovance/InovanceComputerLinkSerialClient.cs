@@ -75,8 +75,7 @@ namespace Nexus.Inovance
                     if (b == 0x15)
                     {
                         byte[] errBytes = new byte[2];
-                        int deadline = Environment.TickCount + Timeout;
-                        if (!ReadExact2(errBytes, deadline))
+                        if (!ReadExact2(errBytes, Timeout))
                             return OperateResult<string>.Failed("NAK 错误码读取超时");
                         string errCode = Encoding.ASCII.GetString(errBytes);
                         RaiseError($"NAK: {errCode}");
@@ -94,8 +93,7 @@ namespace Nexus.Inovance
                             if (c == 0x03)
                             {
                                 sumBuf = new byte[2];
-                                int deadline = Environment.TickCount + Timeout;
-                                if (!ReadExact2(sumBuf, deadline))
+                                if (!ReadExact2(sumBuf, Timeout))
                                     return OperateResult<string>.Failed("Sum check 读取超时");
                                 break;
                             }
@@ -131,9 +129,9 @@ namespace Nexus.Inovance
 
         private int ReadByteWithTimeout()
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             byte[] buf = new byte[1];
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
                 try
                 {
@@ -145,10 +143,11 @@ namespace Nexus.Inovance
             return -1;
         }
 
-        private bool ReadExact2(byte[] buf, int deadline)
+        private bool ReadExact2(byte[] buf, int remainingMs)
         {
+            int start = Environment.TickCount;
             int offset = 0;
-            while (offset < buf.Length && Environment.TickCount <= deadline)
+            while (offset < buf.Length && unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try
                 {

@@ -98,21 +98,25 @@ namespace Nexus.Fuji
 
         private string? ReadFrame()
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             using var ms = new MemoryStream();
 
             // Wait for STX
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                int b = ReadByteWithTimeout(deadline);
+                int remaining = Timeout - unchecked(Environment.TickCount - start);
+                if (remaining < 0) return null;
+                int b = ReadByteWithTimeout(remaining);
                 if (b < 0) return null;
                 if (b == 0x02) { ms.WriteByte((byte)b); break; }
             }
 
             // Read until ETX
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                int b = ReadByteWithTimeout(deadline);
+                int remaining = Timeout - unchecked(Environment.TickCount - start);
+                if (remaining < 0) return null;
+                int b = ReadByteWithTimeout(remaining);
                 if (b < 0) return null;
                 ms.WriteByte((byte)b);
                 if (b == 0x03)
@@ -120,7 +124,9 @@ namespace Nexus.Fuji
                     // Read BCC (2 chars)
                     for (int i = 0; i < 2; i++)
                     {
-                        b = ReadByteWithTimeout(deadline);
+                        int rem2 = Timeout - unchecked(Environment.TickCount - start);
+                        if (rem2 < 0) return null;
+                        b = ReadByteWithTimeout(rem2);
                         if (b < 0) return null;
                         ms.WriteByte((byte)b);
                     }
@@ -130,9 +136,10 @@ namespace Nexus.Fuji
             return null;
         }
 
-        private int ReadByteWithTimeout(int deadline)
+        private int ReadByteWithTimeout(int remainingMs)
         {
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try { return _stream.ReadByte(); }
                 catch (TimeoutException) { return -1; }

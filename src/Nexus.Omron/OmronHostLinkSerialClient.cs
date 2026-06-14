@@ -76,9 +76,9 @@ namespace Nexus.Omron
                     // 等待并读取直到 CR (0x0D)
                     var response = new List<byte>();
                     byte[] buf = new byte[256];
-                    int globalDeadline = Environment.TickCount + Timeout;
+                int start = Environment.TickCount;
 
-                    while (Environment.TickCount < globalDeadline)
+                while (unchecked(Environment.TickCount - start) < Timeout)
                     {
                         int read = Port.Read(buf, 0, buf.Length);
                         if (read > 0)

@@ -189,8 +189,8 @@ namespace Nexus.LsElectric
 
                 // 读取数据直到 ETX
                 var dataBytes = new List<byte>();
-                int deadline = Environment.TickCount + Timeout;
-                while (Environment.TickCount <= deadline)
+                int start = Environment.TickCount;
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
                     byte[]? b = ReadExact(ns, 1);
                     if (b == null) return OperateResult<byte[]>.Failed("读取数据超时");

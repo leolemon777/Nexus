@@ -117,8 +117,8 @@ namespace Nexus.Mitsubishi
 
         private int ReadByteWithTimeout()
         {
-            int deadline = Environment.TickCount + Timeout;
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
                 try
                 {
@@ -133,8 +133,8 @@ namespace Nexus.Mitsubishi
         private int ReadExact(byte[] buffer, int count)
         {
             int offset = 0;
-            int deadline = Environment.TickCount + Timeout;
-            while (offset < count && Environment.TickCount <= deadline)
+            int start2 = Environment.TickCount;
+            while (offset < count && unchecked(Environment.TickCount - start2) <= Timeout)
             {
                 try
                 {

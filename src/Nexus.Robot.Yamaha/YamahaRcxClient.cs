@@ -54,9 +54,9 @@ namespace Nexus.Robot.Yamaha
                     // 读取响应直到 OK/NG/END + CRLF
                     var response = new System.Collections.Generic.List<byte>();
                     byte[] buf = new byte[4096];
-                    int deadline = Environment.TickCount + Timeout;
+                    int start = Environment.TickCount;
 
-                    while (Environment.TickCount < deadline)
+                    while (unchecked(Environment.TickCount - start) < Timeout)
                     {
                         if (_stream.DataAvailable)
                         {

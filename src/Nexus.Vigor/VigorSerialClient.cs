@@ -293,14 +293,14 @@ namespace Nexus.Vigor
         private byte[]? ReadVigorResponse()
         {
             var dataBytes = new List<byte>();
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             bool headerRead = false;
             int dataLen = 0;
             int headerIndex = 0;
             byte[] headerBuf = new byte[4];
             byte[] singleBuf = new byte[1];
 
-            while (Environment.TickCount < deadline)
+            while (unchecked(Environment.TickCount - start) < Timeout)
             {
                 int b = ReadOneByte(singleBuf);
                 if (b < 0) return null;

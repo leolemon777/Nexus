@@ -239,10 +239,10 @@ namespace Nexus.Modbus
         /// <summary>从 TCP 流读取完整 RTU 响应帧。</summary>
         private byte[]? ReadRtuResponse(NetworkStream ns)
         {
-            int deadline = Environment.TickCount + Timeout;
+            int remaining = Timeout;
 
             // 读取 Station(1) + FC(1)
-            byte[]? header = ReadExactTimeout(ns, 2, ref deadline);
+            byte[]? header = ReadExactTimeout(ns, 2, ref remaining);
             if (header == null) return null;
 
             byte fc = header[1];
@@ -250,7 +250,7 @@ namespace Nexus.Modbus
             if ((fc & 0x80) != 0)
             {
                 // 异常响应: [Station][FC|0x80][ExceptionCode][CRC16]
-                byte[]? tail = ReadExactTimeout(ns, 3, ref deadline);
+                byte[]? tail = ReadExactTimeout(ns, 3, ref remaining);
                 if (tail == null) return null;
                 byte[] full = new byte[5];
                 full[0] = header[0]; full[1] = header[1];
@@ -267,12 +267,12 @@ namespace Nexus.Modbus
                 case 0x17:
                 {
                     // 读响应: [Station][FC][ByteCount][Data(ByteCount)][CRC16]
-                    byte[]? bcBuf = ReadExactTimeout(ns, 1, ref deadline);
+                    byte[]? bcBuf = ReadExactTimeout(ns, 1, ref remaining);
                     if (bcBuf == null) return null;
                     byte byteCount = bcBuf[0];
 
                     int restLen = byteCount + 2; // Data + CRC(2)
-                    byte[]? rest = ReadExactTimeout(ns, restLen, ref deadline);
+                    byte[]? rest = ReadExactTimeout(ns, restLen, ref remaining);
                     if (rest == null) return null;
 
                     byte[] full = new byte[3 + restLen];
@@ -284,7 +284,7 @@ namespace Nexus.Modbus
                 default:
                 {
                     // 写响应 (FC05/06/15/16): [Station][FC][Addr(2)][Value/Count(2)][CRC16]
-                    byte[]? tail = ReadExactTimeout(ns, 6, ref deadline);
+                    byte[]? tail = ReadExactTimeout(ns, 6, ref remaining);
                     if (tail == null) return null;
                     byte[] full = new byte[8];
                     full[0] = header[0]; full[1] = header[1];
@@ -353,13 +353,14 @@ namespace Nexus.Modbus
             catch (OperationCanceledException) { return null; }
         }
 
-        private byte[]? ReadExactTimeout(NetworkStream ns, int count, ref int deadline)
+        private byte[]? ReadExactTimeout(NetworkStream ns, int count, ref int remainingMs)
         {
+            int start = Environment.TickCount;
             byte[] buf = new byte[count];
             int offset = 0;
             while (offset < count)
             {
-                if (Environment.TickCount > deadline) return null;
+                if (unchecked(Environment.TickCount - start) > remainingMs) return null;
                 try
                 {
                     int read = ns.Read(buf, offset, count - offset);
@@ -368,6 +369,8 @@ namespace Nexus.Modbus
                 }
                 catch (IOException) { return null; }
             }
+            // 更新剩余预算：扣除本次已用时间，供后续调用复用同一截止窗口。
+            remainingMs -= (int)unchecked(Environment.TickCount - start);
             return buf;
         }
 
@@ -974,11 +977,12 @@ namespace Nexus.Modbus
         /// </summary>
         private byte[]? ReadRawTcpResponse(NetworkStream ns)
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
+            int window = Timeout;
             var response = new System.Collections.Generic.List<byte>();
             byte[] buf = new byte[256];
 
-            while (Environment.TickCount < deadline)
+            while (unchecked(Environment.TickCount - start) < window)
             {
                 if (ns.DataAvailable)
                 {
@@ -986,7 +990,7 @@ namespace Nexus.Modbus
                     if (read > 0)
                     {
                         for (int i = 0; i < read; i++) response.Add(buf[i]);
-                        deadline = Environment.TickCount + 50;
+                        start = Environment.TickCount; window = 50;
                     }
                 }
                 else if (response.Count > 0)

@@ -304,10 +304,10 @@ namespace Nexus.Yamatake
         private byte[]? ReadUntilEtx()
         {
             var buf = new List<byte>(64);
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             byte[] readBuf = new byte[256];
 
-            while (Environment.TickCount < deadline)
+            while (unchecked(Environment.TickCount - start) < Timeout)
             {
                 try
                 {
@@ -321,7 +321,7 @@ namespace Nexus.Yamatake
                         if (etxPos >= 0)
                         {
                             int needed = etxPos + 1 + 2;
-                            while (buf.Count < needed && Environment.TickCount < deadline)
+                            while (buf.Count < needed && unchecked(Environment.TickCount - start) < Timeout)
                             {
                                 Thread.Sleep(5);
                                 if (Port.Read(readBuf, 0, 1) > 0)

@@ -68,11 +68,13 @@ namespace Nexus.Panasonic
                 ns.Write(request, 0, request.Length);
 
                 // Mewtocol 响应以 \r 结尾，逐字节读取
-                int deadline = Environment.TickCount + Timeout;
+                int start = Environment.TickCount;
                 using var ms = new MemoryStream();
-                while (Environment.TickCount <= deadline)
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
-                    int b = ReadByteWithTimeout(ns, deadline);
+                    int remaining = Timeout - unchecked(Environment.TickCount - start);
+                    if (remaining < 0) return OperateResult<byte[]>.Failed("读取响应超时");
+                    int b = ReadByteWithTimeout(ns, remaining);
                     if (b < 0) return OperateResult<byte[]>.Failed("读取响应超时");
                     ms.WriteByte((byte)b);
                     if (b == '\r') break;
@@ -101,12 +103,13 @@ namespace Nexus.Panasonic
             }
         }
 
-        private static int ReadByteWithTimeout(NetworkStream ns, int deadline)
+        private static int ReadByteWithTimeout(NetworkStream ns, int remainingMs)
         {
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try { return ns.ReadByte(); }
-                catch (TimeoutException) { /* retry until deadline */ }
+                catch (TimeoutException) { /* retry until timeout */ }
             }
             return -1;
         }

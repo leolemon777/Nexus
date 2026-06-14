@@ -208,8 +208,8 @@ namespace Nexus.AllenBradley
         {
             byte[] buffer = new byte[count];
             int offset = 0;
-            int deadline = Environment.TickCount + Timeout;
-            while (offset < count && Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (offset < count && unchecked(Environment.TickCount - start) <= Timeout)
             {
                 int n = _stream!.Read(buffer, offset, count - offset);
                 if (n <= 0) return null;

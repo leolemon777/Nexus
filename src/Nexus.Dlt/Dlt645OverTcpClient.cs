@@ -246,9 +246,9 @@ namespace Nexus.Dlt
 
                 var response = new System.Collections.Generic.List<byte>();
                 byte[] buf = new byte[256];
-                int deadline = Environment.TickCount + Timeout;
+                int start = Environment.TickCount;
 
-                while (Environment.TickCount < deadline)
+                while (unchecked(Environment.TickCount - start) < Timeout)
                 {
                     int read = ns.Read(buf, 0, buf.Length);
                     if (read > 0)

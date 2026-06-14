@@ -202,9 +202,9 @@ namespace Nexus.Yamatake
             {
                 var buf = new List<byte>(64);
                 byte[] readBuf = new byte[256];
-                int deadline = Environment.TickCount + Timeout;
+                int start = Environment.TickCount;
 
-                while (Environment.TickCount < deadline)
+                while (unchecked(Environment.TickCount - start) < Timeout)
                 {
                     if (_stream!.DataAvailable)
                     {
@@ -218,7 +218,7 @@ namespace Nexus.Yamatake
                             if (etxPos >= 0)
                             {
                                 int needed = etxPos + 1 + 2;
-                                while (buf.Count < needed && Environment.TickCount < deadline)
+                                while (buf.Count < needed && unchecked(Environment.TickCount - start) < Timeout)
                                 {
                                     Thread.Sleep(5);
                                     if (_stream.DataAvailable && _stream.Read(readBuf, 0, 1) > 0)

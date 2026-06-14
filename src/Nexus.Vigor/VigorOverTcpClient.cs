@@ -311,13 +311,13 @@ namespace Nexus.Vigor
             if (_stream == null) return null;
 
             var dataBytes = new List<byte>();
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             bool headerRead = false;
             int dataLen = 0;
             int headerIndex = 0;
             byte[] headerBuf = new byte[4];
 
-            while (Environment.TickCount < deadline)
+            while (unchecked(Environment.TickCount - start) < Timeout)
             {
                 int b = _stream.ReadByte();
                 if (b < 0) return null;

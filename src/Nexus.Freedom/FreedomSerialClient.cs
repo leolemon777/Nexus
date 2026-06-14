@@ -38,9 +38,9 @@ namespace Nexus.Freedom
 
                     var ms = new MemoryStream();
                     byte[] buf = new byte[4096];
-                    int deadline = Environment.TickCount + Timeout;
+                    int start = Environment.TickCount;
 
-                    while (Environment.TickCount < deadline)
+                    while (unchecked(Environment.TickCount - start) < Timeout)
                     {
                         int read;
                         try { read = Port.Read(buf, 0, buf.Length); }

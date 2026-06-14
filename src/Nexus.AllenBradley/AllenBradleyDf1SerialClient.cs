@@ -106,8 +106,8 @@ namespace Nexus.AllenBradley
         {
             try
             {
-                int deadline = Environment.TickCount + Timeout;
-                while (Environment.TickCount <= deadline)
+                int start = Environment.TickCount;
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
                     int b = ReadOneByte();
                     if (b < 0) return OperateResult<byte[]>.Failed("读取超时");
@@ -123,7 +123,7 @@ namespace Nexus.AllenBradley
 
                 using var ms = new MemoryStream();
                 bool lastWasDle = false;
-                while (Environment.TickCount <= deadline)
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
                     int b = ReadOneByte();
                     if (b < 0) return OperateResult<byte[]>.Failed("读取超时");

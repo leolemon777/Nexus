@@ -143,8 +143,8 @@ namespace Nexus.Omron
 
                     // 尝试读取剩余数据
                     byte[] buf = new byte[1024];
-                    int deadline = Environment.TickCount + 500; // 500ms 额外读取窗口
-                    while (Environment.TickCount < deadline)
+                    int start = Environment.TickCount; // 500ms 额外读取窗口
+                    while (unchecked(Environment.TickCount - start) < 500)
                     {
                         try
                         {

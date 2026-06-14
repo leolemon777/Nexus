@@ -180,12 +180,14 @@ namespace Nexus.Modbus
         /// <summary>从串口读取完整 ASCII 帧（从 ':' 到 LF）。</summary>
         private byte[]? ReadAsciiFrame()
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
 
             bool foundStart = false;
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                int b = ReadByteWithTimeout(deadline);
+                int remaining = Timeout - unchecked(Environment.TickCount - start);
+                if (remaining < 0) return null;
+                int b = ReadByteWithTimeout(remaining);
                 if (b < 0) return null;
                 if (b == ':') { foundStart = true; break; }
             }
@@ -196,9 +198,11 @@ namespace Nexus.Modbus
                 ms.WriteByte((byte)':');
 
                 bool sawCr = false;
-                while (Environment.TickCount <= deadline)
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
-                    int b = ReadByteWithTimeout(deadline);
+                    int remaining = Timeout - unchecked(Environment.TickCount - start);
+                    if (remaining < 0) return null;
+                    int b = ReadByteWithTimeout(remaining);
                     if (b < 0) return null;
                     ms.WriteByte((byte)b);
 
@@ -213,10 +217,11 @@ namespace Nexus.Modbus
             }
         }
 
-        private int ReadByteWithTimeout(int deadline)
+        private int ReadByteWithTimeout(int remainingMs)
         {
             byte[] buf = new byte[1];
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try
                 {

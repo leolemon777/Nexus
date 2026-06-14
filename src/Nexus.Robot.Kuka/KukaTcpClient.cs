@@ -301,9 +301,9 @@ namespace Nexus.Robot.Kuka
                     // 读取响应 — 纯文本，读到连接关闭或超时
                     var response = new System.Collections.Generic.List<byte>();
                     byte[] buf = new byte[4096];
-                    int deadline = Environment.TickCount + Timeout;
+                    int start = Environment.TickCount;
 
-                    while (Environment.TickCount < deadline)
+                    while (unchecked(Environment.TickCount - start) < Timeout)
                     {
                         if (_stream.DataAvailable)
                         {

@@ -183,8 +183,8 @@ namespace Nexus.Delta
 
         private void ReadExact(byte[] buffer, int offset, int count)
         {
-            int deadline = Environment.TickCount + Timeout;
-            while (count > 0 && Environment.TickCount <= deadline)
+        int start = Environment.TickCount;
+        while (count > 0 && unchecked(Environment.TickCount - start) <= Timeout)
             {
                 int n;
                 try

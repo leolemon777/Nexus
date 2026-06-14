@@ -127,12 +127,14 @@ namespace Nexus.Panasonic
 
         private string? ReadFrame()
         {
-            int deadline = Environment.TickCount + Timeout;
+            int start = Environment.TickCount;
             using var ms = new MemoryStream();
 
-            while (Environment.TickCount <= deadline)
+            while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                int b = ReadByteWithTimeout(deadline);
+                int remaining = Timeout - unchecked(Environment.TickCount - start);
+                if (remaining < 0) return null;
+                int b = ReadByteWithTimeout(remaining);
                 if (b < 0) return null;
                 ms.WriteByte((byte)b);
                 if (b == '\r') return Encoding.ASCII.GetString(ms.ToArray());
@@ -140,9 +142,10 @@ namespace Nexus.Panasonic
             return null;
         }
 
-        private int ReadByteWithTimeout(int deadline)
+        private int ReadByteWithTimeout(int remainingMs)
         {
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try { return _stream.ReadByte(); }
                 catch (TimeoutException) { return -1; }

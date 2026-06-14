@@ -116,8 +116,8 @@ namespace Nexus.AllenBradley
             try
             {
                 // 查找 DLE+STX 起始标记
-                int deadline = Environment.TickCount + Timeout;
-                while (Environment.TickCount <= deadline)
+                int start = Environment.TickCount;
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
                     int b = _stream!.ReadByte();
                     if (b < 0) return OperateResult<byte[]>.Failed("读取超时");
@@ -132,7 +132,7 @@ namespace Nexus.AllenBradley
                 // 读取数据（处理 DLE 转义）
                 using var ms = new MemoryStream();
                 bool lastWasDle = false;
-                while (Environment.TickCount <= deadline)
+                while (unchecked(Environment.TickCount - start) <= Timeout)
                 {
                     int b = _stream!.ReadByte();
                     if (b < 0) return OperateResult<byte[]>.Failed("读取超时");

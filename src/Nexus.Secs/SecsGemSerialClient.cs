@@ -154,8 +154,7 @@ namespace Nexus.Secs
                         RaiseMessageSent("EOT");
 
                         // Wait for ENQ from receiver (indicating ready to receive)
-                        int deadline = Environment.TickCount + Timeout;
-                        int response = ReadByte(deadline);
+                        int response = ReadByte(Timeout);
                         if (response != ENQ)
                             return OperateResult.Failed($"SECS-I 发送等待 ENQ 超时或收到 0x{response:X2}");
 
@@ -171,8 +170,7 @@ namespace Nexus.Secs
                         RaiseMessageSent($"Block {blockNum}/{totalBlocks} [{blockLen} bytes]");
 
                         // Wait for ACK
-                        deadline = Environment.TickCount + Timeout;
-                        response = ReadByte(deadline);
+                        response = ReadByte(Timeout);
                         if (response != ACK)
                             return OperateResult.Failed($"SECS-I 发送等待 ACK 失败: 0x{response:X2}");
 
@@ -203,10 +201,8 @@ namespace Nexus.Secs
                             Port.Write(new byte[] { ENQ }, 0, 1);
                             RaiseMessageSent("ENQ");
 
-                            int deadline = Environment.TickCount + Timeout;
-
                             // Wait for EOT or data
-                            int firstByte = ReadByte(deadline);
+                            int firstByte = ReadByte(Timeout);
                             if (firstByte < 0)
                                 return OperateResult<byte[]>.Failed("SECS-I 接收超时");
 
@@ -217,8 +213,7 @@ namespace Nexus.Secs
                                 Port.Write(new byte[] { ENQ }, 0, 1);
                                 RaiseMessageSent("ENQ (request block)");
 
-                                deadline = Environment.TickCount + Timeout;
-                                firstByte = ReadByte(deadline);
+                                firstByte = ReadByte(Timeout);
                                 if (firstByte < 0)
                                     return OperateResult<byte[]>.Failed("SECS-I 接收块超时");
                             }
@@ -228,7 +223,7 @@ namespace Nexus.Secs
                             blockHeader[0] = (byte)firstByte;
                             for (int i = 1; i < 5; i++)
                             {
-                                int b = ReadByte(deadline);
+                                int b = ReadByte(Timeout);
                                 if (b < 0) return OperateResult<byte[]>.Failed("SECS-I 接收头超时");
                                 blockHeader[i] = (byte)b;
                             }
@@ -241,14 +236,14 @@ namespace Nexus.Secs
                             {
                                 while (true)
                                 {
-                                    int b = ReadByte(deadline);
+                                    int b = ReadByte(Timeout);
                                     if (b < 0) return OperateResult<byte[]>.Failed("SECS-I 接收数据超时");
                                     if (b == ETX) break;
                                     blockData.WriteByte((byte)b);
                                 }
 
                                 // Read checksum
-                                int checksumByte = ReadByte(deadline);
+                                int checksumByte = ReadByte(Timeout);
                                 if (checksumByte < 0) return OperateResult<byte[]>.Failed("SECS-I 接收校验超时");
 
                                 // Verify checksum
@@ -515,9 +510,10 @@ namespace Nexus.Secs
             lock (_counterLock) { return ++_systemBytesCounter; }
         }
 
-        private int ReadByte(int deadline)
+        private int ReadByte(int remainingMs)
         {
-            while (Environment.TickCount <= deadline)
+            int start = Environment.TickCount;
+            while (unchecked(Environment.TickCount - start) <= remainingMs)
             {
                 try
                 {
