@@ -70,71 +70,87 @@ namespace Nexus.Keyence
 
         // ── 通讯（重写以正确读取完整 ASCII 响应）──
 
-        protected new async Task<OperateResult<byte[]>> SendAndReceiveAsync(byte[] request, CancellationToken ct)
+        protected override async Task<OperateResult<byte[]>> SendAndReceiveAsync(byte[] request, CancellationToken ct)
         {
             try
             {
-                bool wasConnected;
-                lock (_lock) { wasConnected = IsConnected; }
-
-                if (!wasConnected)
+                if (!IsConnected)
                 {
                     var conn = await ConnectAsync().ConfigureAwait(false);
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                lock (_lock) { ns = _stream; }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                byte[] asciiFrame = BuildAsciiFrame(request);
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                RaiseMessageSent(DataConverter.ToHexString(request));
-
-                await ns.WriteAsync(asciiFrame, 0, asciiFrame.Length, ct).ConfigureAwait(false);
-
-                using (var ms = new MemoryStream())
+                // C1-R2 修复：用异步 IO 锁覆盖整段收发，消除原 lock(_lock)（lock 不可跨 await，
+                // 且与基类 _asyncLock 不互斥）导致的长连接多线程报文串台。
+                await AcquireIoLockAsync(ct).ConfigureAwait(false);
+                try
                 {
-                    byte[] buf = new byte[4096];
-                    int retryCount = 0;
-                    while (retryCount < 50)
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
+
+                    byte[] asciiFrame = BuildAsciiFrame(request);
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    RaiseMessageSent(DataConverter.ToHexString(request));
+
+                    await ns.WriteAsync(asciiFrame, 0, asciiFrame.Length, ct).ConfigureAwait(false);
+
+                    using (var ms = new MemoryStream())
                     {
-                        if (ns.DataAvailable)
+                        byte[] buf = new byte[4096];
+                        int retryCount = 0;
+                        while (retryCount < 50)
                         {
-                            int read = await ns.ReadAsync(buf, 0, buf.Length, ct).ConfigureAwait(false);
-                            if (read == 0) break;
-                            ms.Write(buf, 0, read);
-                            retryCount = 0;
+                            if (ns.DataAvailable)
+                            {
+                                int read = await ns.ReadAsync(buf, 0, buf.Length, ct).ConfigureAwait(false);
+                                if (read == 0) break;
+                                ms.Write(buf, 0, read);
+                                retryCount = 0;
+                            }
+                            else
+                            {
+                                retryCount++;
+                                if (ms.Length > 0 && retryCount > 3) break;
+                                await Task.Delay(10, ct).ConfigureAwait(false);
+                            }
                         }
-                        else
-                        {
-                            retryCount++;
-                            if (ms.Length > 0 && retryCount > 3) break;
-                            await Task.Delay(10, ct).ConfigureAwait(false);
-                        }
+
+                        if (ms.Length == 0)
+                            return OperateResult<byte[]>.Failed("MC-3E ASCII 响应为空");
+
+                        byte[] binaryResponse = ParseAsciiResponse(ms.ToArray());
+                        Log.Debug($"RX ← {DataConverter.ToHexString(binaryResponse)}");
+                        RaiseMessageReceived(DataConverter.ToHexString(binaryResponse));
+
+                        if (!_persistentMode) DisconnectCore();
+                        return OperateResult<byte[]>.Success(binaryResponse);
                     }
-
-                    if (ms.Length == 0)
-                        return OperateResult<byte[]>.Failed("MC-3E ASCII 响应为空");
-
-                    byte[] binaryResponse = ParseAsciiResponse(ms.ToArray());
-                    Log.Debug($"RX ← {DataConverter.ToHexString(binaryResponse)}");
-                    RaiseMessageReceived(DataConverter.ToHexString(binaryResponse));
-
-                    if (!_persistentMode) lock (_lock) DisconnectCore();
-                    return OperateResult<byte[]>.Success(binaryResponse);
+                }
+                finally
+                {
+                    ReleaseIoLockAsync();
                 }
             }
             catch (OperationCanceledException)
             {
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                if (!_persistentMode)
+                {
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
+                    try { DisconnectCore(); }
+                    finally { ReleaseIoLockAsync(); }
+                }
                 return OperateResult<byte[]>.Failed("操作已取消");
             }
             catch (Exception ex)
             {
                 Log.Error($"MC-3E ASCII 通讯异常 — {ex.Message}");
                 RaiseError(ex.Message);
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                if (!_persistentMode)
+                {
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
+                    try { DisconnectCore(); }
+                    finally { ReleaseIoLockAsync(); }
+                }
                 return OperateResult<byte[]>.Failed($"MC-3E ASCII 通讯异常: {ex.Message}");
             }
         }

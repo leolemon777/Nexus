@@ -84,67 +84,77 @@ namespace Nexus.Mitsubishi
 
         // ── 通讯（重写以正确处理 ASCII 响应）──
 
-        protected new OperateResult<byte[]> SendAndReceive(byte[] binaryRequest)
+        protected override OperateResult<byte[]> SendAndReceive(byte[] binaryRequest)
         {
             try
             {
-                bool wasConnected;
-                lock (_lock) { wasConnected = IsConnected; }
-
-                if (!wasConnected)
+                if (!IsConnected)
                 {
                     var conn = Connect();
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                lock (_lock) { ns = _stream; }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                byte[] asciiFrame = ToAsciiHex(binaryRequest);
-                Log.Debug($"TX → {DataConverter.ToHexString(binaryRequest)} (ASCII: {Encoding.ASCII.GetString(asciiFrame)})");
-                RaiseMessageSent(DataConverter.ToHexString(binaryRequest));
-
-                ns.Write(asciiFrame, 0, asciiFrame.Length);
-
-                using (var ms = new MemoryStream())
+                // C1-R2 修复：与基类走同一把 IO 锁，消除双锁串台。
+                AcquireIoLock();
+                try
                 {
-                    byte[] buf = new byte[4096];
-                    int retryCount = 0;
-                    while (retryCount < 50)
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
+
+                    byte[] asciiFrame = ToAsciiHex(binaryRequest);
+                    Log.Debug($"TX → {DataConverter.ToHexString(binaryRequest)} (ASCII: {Encoding.ASCII.GetString(asciiFrame)})");
+                    RaiseMessageSent(DataConverter.ToHexString(binaryRequest));
+
+                    ns.Write(asciiFrame, 0, asciiFrame.Length);
+
+                    using (var ms = new MemoryStream())
                     {
-                        if (ns.DataAvailable)
+                        byte[] buf = new byte[4096];
+                        int retryCount = 0;
+                        while (retryCount < 50)
                         {
-                            int read = ns.Read(buf, 0, buf.Length);
-                            if (read == 0) break;
-                            ms.Write(buf, 0, read);
-                            retryCount = 0;
+                            if (ns.DataAvailable)
+                            {
+                                int read = ns.Read(buf, 0, buf.Length);
+                                if (read == 0) break;
+                                ms.Write(buf, 0, read);
+                                retryCount = 0;
+                            }
+                            else
+                            {
+                                retryCount++;
+                                if (ms.Length > 0 && retryCount > 3) break;
+                                Thread.Sleep(10);
+                            }
                         }
-                        else
-                        {
-                            retryCount++;
-                            if (ms.Length > 0 && retryCount > 3) break;
-                            Thread.Sleep(10);
-                        }
+
+                        if (ms.Length == 0)
+                            return OperateResult<byte[]>.Failed("A1E ASCII 响应为空");
+
+                        byte[] binaryResponse = FromAsciiHex(ms.ToArray());
+                        Log.Debug($"RX ← {DataConverter.ToHexString(binaryResponse)}");
+                        RaiseMessageReceived(DataConverter.ToHexString(binaryResponse));
+
+                        if (!_persistentMode) DisconnectCore();
+
+                        return OperateResult<byte[]>.Success(binaryResponse);
                     }
-
-                    if (ms.Length == 0)
-                        return OperateResult<byte[]>.Failed("A1E ASCII 响应为空");
-
-                    byte[] binaryResponse = FromAsciiHex(ms.ToArray());
-                    Log.Debug($"RX ← {DataConverter.ToHexString(binaryResponse)}");
-                    RaiseMessageReceived(DataConverter.ToHexString(binaryResponse));
-
-                    if (!_persistentMode) lock (_lock) DisconnectCore();
-
-                    return OperateResult<byte[]>.Success(binaryResponse);
+                }
+                finally
+                {
+                    ReleaseIoLock();
                 }
             }
             catch (Exception ex)
             {
                 Log.Error($"A1E ASCII 通讯异常 — {ex.Message}");
                 RaiseError(ex.Message);
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                if (!_persistentMode)
+                {
+                    AcquireIoLock();
+                    try { DisconnectCore(); }
+                    finally { ReleaseIoLock(); }
+                }
                 return OperateResult<byte[]>.Failed($"A1E ASCII 通讯异常: {ex.Message}");
             }
         }
