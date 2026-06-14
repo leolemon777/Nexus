@@ -58,8 +58,13 @@ namespace Nexus
         // ── Async 写入 ────────────────────────────
         Task<OperateResult> WriteAsync(string address, bool value);
         Task<OperateResult> WriteAsync(string address, short value);
+        Task<OperateResult> WriteAsync(string address, ushort value);
         Task<OperateResult> WriteAsync(string address, int value);
+        Task<OperateResult> WriteAsync(string address, uint value);
+        Task<OperateResult> WriteAsync(string address, long value);
+        Task<OperateResult> WriteAsync(string address, ulong value);
         Task<OperateResult> WriteAsync(string address, float value);
+        Task<OperateResult> WriteAsync(string address, double value);
         Task<OperateResult> WriteAsync(string address, string value);
         Task<OperateResult> WriteAsync(string address, byte[] data);
     }

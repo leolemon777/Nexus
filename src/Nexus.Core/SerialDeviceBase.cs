@@ -528,8 +528,13 @@ namespace Nexus
 
         public virtual Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
 

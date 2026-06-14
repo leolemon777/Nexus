@@ -197,8 +197,12 @@ namespace Nexus
 
                 if (completed != receiveTask)
                 {
+                    // M3 修复：超时后孤儿 receiveTask 仍在后台运行，持有旧 UdpClient 并可能
+                    // 偷吃下一个响应包。重建 socket（Close 旧 client 让 receiveTask 终止），
+                    // 下次收发会重新连接。注意需在 _lock 内调用 DisconnectCore。
                     Log.Error($"UDP 接收超时 — {Ip}:{Port}");
                     OnError?.Invoke(this, "接收超时");
+                    lock (_lock) DisconnectCore();
                     return OperateResult<byte[]>.Failed("接收超时");
                 }
 
@@ -334,8 +338,13 @@ namespace Nexus
 
         public virtual Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
+        public virtual Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
 

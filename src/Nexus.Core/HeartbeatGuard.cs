@@ -14,6 +14,8 @@ namespace Nexus
         private readonly Func<Task<OperateResult>> _heartbeatCallback;
         private readonly ILogger _log;
         private readonly object _stateLock = new object();
+        /// <summary>心跳回调重入守卫 — 上一次回调未完成时跳过本次（m10 修复）。</summary>
+        private readonly SemaphoreSlim _callbackLock = new SemaphoreSlim(1, 1);
         private Timer? _heartbeatTimer;
         private int _consecutiveFailures;
         private bool _running;
@@ -106,82 +108,94 @@ namespace Nexus
 
         private async void HeartbeatCallback(object? state)
         {
-            // 防止重入：Timer 可能在上一次回调完成前再次触发
+            // 重入守卫（m10 修复）：原实现只检查 _running，无法阻止 Timer 在上一次回调
+            // 未完成时再次触发导致并发心跳（_consecutiveFailures 计数错乱、报文并发）。
+            // 用非阻塞 TryEnter：拿不到锁说明上一次心跳仍在进行，跳过本次。
             lock (_stateLock)
             {
                 if (!_running || _disposed) return;
             }
 
-            string errorMsg = string.Empty;
-            bool success = false;
-            bool timedOut = false;
+            if (!_callbackLock.Wait(0))
+                return;   // 上一次心跳回调尚未完成，跳过
 
             try
             {
-                // 使用 WhenAny 实现超时控制
-                // （netstandard2.0 无法使用 Task.WhenAsync 等高版本 API）
-                var heartbeatTask = _heartbeatCallback();
-                var completed = await Task.WhenAny(
-                    heartbeatTask,
-                    Task.Delay(TimeoutMs)).ConfigureAwait(false);
+                string errorMsg = string.Empty;
+                bool success = false;
+                bool timedOut = false;
 
-                if (completed == heartbeatTask)
+                try
                 {
-                    var result = await heartbeatTask.ConfigureAwait(false);
-                    if (result.IsSuccess)
+                    // 使用 WhenAny 实现超时控制
+                    // （netstandard2.0 无法使用 Task.WhenAsync 等高版本 API）
+                    var heartbeatTask = _heartbeatCallback();
+                    var completed = await Task.WhenAny(
+                        heartbeatTask,
+                        Task.Delay(TimeoutMs)).ConfigureAwait(false);
+
+                    if (completed == heartbeatTask)
                     {
-                        success = true;
+                        var result = await heartbeatTask.ConfigureAwait(false);
+                        if (result.IsSuccess)
+                        {
+                            success = true;
+                        }
+                        else
+                        {
+                            errorMsg = result.Message;
+                        }
                     }
                     else
                     {
-                        errorMsg = result.Message;
+                        timedOut = true;
+                        errorMsg = $"心跳超时 ({TimeoutMs}ms)";
                     }
                 }
-                else
+                catch (OperationCanceledException)
                 {
                     timedOut = true;
                     errorMsg = $"心跳超时 ({TimeoutMs}ms)";
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                timedOut = true;
-                errorMsg = $"心跳超时 ({TimeoutMs}ms)";
-            }
-            catch (Exception ex)
-            {
-                errorMsg = ex.Message;
-            }
-
-            lock (_stateLock)
-            {
-                if (!_running || _disposed) return;
-
-                if (success)
+                catch (Exception ex)
                 {
-                    _consecutiveFailures = 0;
-                    OnHeartbeatOk?.Invoke();
-                    _log.Debug("心跳成功");
+                    errorMsg = ex.Message;
                 }
-                else
+
+                lock (_stateLock)
                 {
-                    _consecutiveFailures++;
-                    _log.Warn($"心跳失败 ({_consecutiveFailures}/{MaxConsecutiveFailures}) — {errorMsg}");
+                    if (!_running || _disposed) return;
 
-                    if (timedOut)
-                        OnHeartbeatTimeout?.Invoke();
-
-                    if (_consecutiveFailures >= MaxConsecutiveFailures)
+                    if (success)
                     {
-                        _log.Error($"心跳连续失败 {MaxConsecutiveFailures} 次，停止心跳守护");
-                        OnHeartbeatFailed?.Invoke(_consecutiveFailures, errorMsg);
+                        _consecutiveFailures = 0;
+                        OnHeartbeatOk?.Invoke();
+                        _log.Debug("心跳成功");
+                    }
+                    else
+                    {
+                        _consecutiveFailures++;
+                        _log.Warn($"心跳失败 ({_consecutiveFailures}/{MaxConsecutiveFailures}) — {errorMsg}");
 
-                        // 停止定时器
-                        _running = false;
-                        _heartbeatTimer?.Dispose();
-                        _heartbeatTimer = null;
+                        if (timedOut)
+                            OnHeartbeatTimeout?.Invoke();
+
+                        if (_consecutiveFailures >= MaxConsecutiveFailures)
+                        {
+                            _log.Error($"心跳连续失败 {MaxConsecutiveFailures} 次，停止心跳守护");
+                            OnHeartbeatFailed?.Invoke(_consecutiveFailures, errorMsg);
+
+                            // 停止定时器
+                            _running = false;
+                            _heartbeatTimer?.Dispose();
+                            _heartbeatTimer = null;
+                        }
                     }
                 }
+            }
+            finally
+            {
+                _callbackLock.Release();
             }
         }
 
@@ -195,6 +209,7 @@ namespace Nexus
             }
 
             Stop();
+            _callbackLock.Dispose();
         }
     }
 

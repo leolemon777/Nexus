@@ -481,6 +481,11 @@ namespace Nexus.Core.Tests
             public Task<OperateResult> WriteAsync(string address, float value) => Task.FromResult(Write(address, value));
             public Task<OperateResult> WriteAsync(string address, string value) => Task.FromResult(Write(address, value));
             public Task<OperateResult> WriteAsync(string address, byte[] data) => Task.FromResult(Write(address, data));
+            public Task<OperateResult> WriteAsync(string address, ushort value) => Task.FromResult(OperateResult.Success());
+            public Task<OperateResult> WriteAsync(string address, uint value) => Task.FromResult(OperateResult.Success());
+            public Task<OperateResult> WriteAsync(string address, long value) => Task.FromResult(OperateResult.Success());
+            public Task<OperateResult> WriteAsync(string address, ulong value) => Task.FromResult(OperateResult.Success());
+            public Task<OperateResult> WriteAsync(string address, double value) => Task.FromResult(Write(address, value));
 
             public void Dispose() { IsConnected = false; }
         }

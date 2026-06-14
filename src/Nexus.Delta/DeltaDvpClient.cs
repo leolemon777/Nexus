@@ -520,6 +520,11 @@ namespace Nexus.Delta
         public Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
 
         /// <summary>批量读取位（异步）。</summary>
         public Task<OperateResult<bool[]>> ReadBoolsAsync(string address, ushort count) => Task.Run(() => ReadBools(address, count));

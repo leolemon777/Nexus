@@ -164,6 +164,11 @@ namespace Nexus.Xinje
         public Task<OperateResult> WriteAsync(string a, float v) => Task.Run(() => Write(a, v));
         public Task<OperateResult> WriteAsync(string a, string v) => Task.Run(() => Write(a, v));
         public Task<OperateResult> WriteAsync(string a, byte[] v) => Task.Run(() => Write(a, v));
+        public Task<OperateResult> WriteAsync(string a, ushort v) => Task.Run(() => Write(a, v));
+        public Task<OperateResult> WriteAsync(string a, uint v) => Task.Run(() => Write(a, v));
+        public Task<OperateResult> WriteAsync(string a, long v) => Task.Run(() => Write(a, v));
+        public Task<OperateResult> WriteAsync(string a, ulong v) => Task.Run(() => Write(a, v));
+        public Task<OperateResult> WriteAsync(string a, double v) => Task.Run(() => Write(a, v));
 
         private static string Incr(string address, int offset = 1) { var (a, _) = ParseAddress(address); return $"D{a + offset}"; }
 

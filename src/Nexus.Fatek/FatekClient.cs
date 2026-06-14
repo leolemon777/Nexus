@@ -585,6 +585,16 @@ namespace Nexus.Fatek
 
         public Task<OperateResult> WriteAsync(string address, byte[] data)
             => Task.Run(() => Write(address, data));
+        public Task<OperateResult> WriteAsync(string address, ushort value)
+            => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, uint value)
+            => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, long value)
+            => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, ulong value)
+            => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, double value)
+            => Task.Run(() => Write(address, value));
 
         // ═══════════════════════════════════════════
         //  辅助

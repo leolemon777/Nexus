@@ -284,6 +284,11 @@ namespace Nexus.Fanuc
         public Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
+        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
 
         private static string IncrAddr(string address, int offset)
         {

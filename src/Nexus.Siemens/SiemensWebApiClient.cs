@@ -832,6 +832,41 @@ namespace Nexus.Siemens
             return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
         }
 
+        public async Task<OperateResult> WriteAsync(string address, ushort value)
+        {
+            byte[] data = ApplyByteOrderWrite(DataConverter.GetBytes(value), 2);
+            var r = await WriteRawAsync(address, data, CancellationToken.None).ConfigureAwait(false);
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
+        public async Task<OperateResult> WriteAsync(string address, uint value)
+        {
+            byte[] data = ApplyByteOrderWrite(DataConverter.GetBytes(value), 4);
+            var r = await WriteRawAsync(address, data, CancellationToken.None).ConfigureAwait(false);
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
+        public async Task<OperateResult> WriteAsync(string address, long value)
+        {
+            byte[] data = ApplyByteOrderWrite(DataConverter.GetBytes(value), 8);
+            var r = await WriteRawAsync(address, data, CancellationToken.None).ConfigureAwait(false);
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
+        public async Task<OperateResult> WriteAsync(string address, ulong value)
+        {
+            byte[] data = ApplyByteOrderWrite(DataConverter.GetBytes(value), 8);
+            var r = await WriteRawAsync(address, data, CancellationToken.None).ConfigureAwait(false);
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
+        public async Task<OperateResult> WriteAsync(string address, double value)
+        {
+            byte[] data = ApplyByteOrderWrite(DataConverter.GetBytes(value), 8);
+            var r = await WriteRawAsync(address, data, CancellationToken.None).ConfigureAwait(false);
+            return r.IsSuccess ? OperateResult.Success() : OperateResult.Failed(r.Message, r.ErrorCode);
+        }
+
         // ── 批量读写 (IBatchReadWrite) ─────────────
 
         public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses)
