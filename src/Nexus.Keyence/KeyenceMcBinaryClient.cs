@@ -36,96 +36,106 @@ namespace Nexus.Keyence
             return BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x01, 0x00 });
         }
 
-        protected new OperateResult<byte[]> SendAndReceive(byte[] request)
+        protected override OperateResult<byte[]> SendAndReceive(byte[] request)
         {
             try
             {
-                bool wasConnected;
-                lock (_lock) { wasConnected = IsConnected; }
-
-                if (!wasConnected)
+                if (!IsConnected)
                 {
                     var conn = Connect();
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                lock (_lock) { ns = _stream; }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                RaiseMessageSent(DataConverter.ToHexString(request));
-
-                ns.Write(request, 0, request.Length);
-
-                byte[]? header = ReadExactNs(ns, 9);
-                if (header == null) return OperateResult<byte[]>.Failed("读取 MC-3E 响应头失败");
-
-                ushort completionCode = (ushort)((header[7] << 8) | header[8]);
-                if (completionCode != 0)
+                // C1-R2 修复：与基类走同一把 IO 锁，消除双锁串台。
+                AcquireIoLock();
+                try
                 {
-                    string errMsg = completionCode switch
-                    {
-                        0xC001 => "无法识别的指令",
-                        0xC002 => "无法识别的子指令",
-                        0xC051 => "超出同时连接数",
-                        0xD003 => "通信对象不存在",
-                        0xD004 => "通信对象被其他站占用",
-                        _ => $"MC-3E 错误码: 0x{completionCode:X4}"
-                    };
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
-                    Log.Debug($"RX ← {DataConverter.ToHexString(header)}");
-                    RaiseMessageReceived(DataConverter.ToHexString(header));
-                    if (!_persistentMode) lock (_lock) DisconnectCore();
-                    return OperateResult<byte[]>.Failed(errMsg, completionCode);
-                }
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    RaiseMessageSent(DataConverter.ToHexString(request));
 
-                byte[]? payload = null;
-                Thread.Sleep(10);
-                if (ns.DataAvailable)
-                {
-                    using (var ms = new MemoryStream())
+                    ns.Write(request, 0, request.Length);
+
+                    byte[]? header = ReadExactNs(ns, 9);
+                    if (header == null) return OperateResult<byte[]>.Failed("读取 MC-3E 响应头失败");
+
+                    ushort completionCode = (ushort)((header[7] << 8) | header[8]);
+                    if (completionCode != 0)
                     {
-                        byte[] buf = new byte[4096];
-                        int retryCount = 0;
-                        while (retryCount < 50)
+                        string errMsg = completionCode switch
                         {
-                            if (ns.DataAvailable)
-                            {
-                                int read = ns.Read(buf, 0, buf.Length);
-                                if (read == 0) break;
-                                ms.Write(buf, 0, read);
-                                retryCount = 0;
-                            }
-                            else
-                            {
-                                retryCount++;
-                                if (ms.Length > 0 && retryCount > 3) break;
-                                Thread.Sleep(10);
-                            }
-                        }
-                        if (ms.Length > 0)
-                            payload = ms.ToArray();
+                            0xC001 => "无法识别的指令",
+                            0xC002 => "无法识别的子命令",
+                            0xC051 => "超出同时连接数",
+                            0xD003 => "通信对象不存在",
+                            0xD004 => "通信对象被其他站占用",
+                            _ => $"MC-3E 错误码: 0x{completionCode:X4}"
+                        };
+
+                        Log.Debug($"RX ← {DataConverter.ToHexString(header)}");
+                        RaiseMessageReceived(DataConverter.ToHexString(header));
+                        if (!_persistentMode) DisconnectCore();
+                        return OperateResult<byte[]>.Failed(errMsg, completionCode);
                     }
+
+                    byte[]? payload = null;
+                    Thread.Sleep(10);
+                    if (ns.DataAvailable)
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            byte[] buf = new byte[4096];
+                            int retryCount = 0;
+                            while (retryCount < 50)
+                            {
+                                if (ns.DataAvailable)
+                                {
+                                    int read = ns.Read(buf, 0, buf.Length);
+                                    if (read == 0) break;
+                                    ms.Write(buf, 0, read);
+                                    retryCount = 0;
+                                }
+                                else
+                                {
+                                    retryCount++;
+                                    if (ms.Length > 0 && retryCount > 3) break;
+                                    Thread.Sleep(10);
+                                }
+                            }
+                            if (ms.Length > 0)
+                                payload = ms.ToArray();
+                        }
+                    }
+
+                    int payloadLen = payload?.Length ?? 0;
+                    byte[] full = new byte[9 + payloadLen];
+                    Buffer.BlockCopy(header, 0, full, 0, 9);
+                    if (payload != null && payload.Length > 0)
+                        Buffer.BlockCopy(payload, 0, full, 9, payload.Length);
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
+                    RaiseMessageReceived(DataConverter.ToHexString(full));
+
+                    if (!_persistentMode) DisconnectCore();
+                    return OperateResult<byte[]>.Success(full);
                 }
-
-                int payloadLen = payload?.Length ?? 0;
-                byte[] full = new byte[9 + payloadLen];
-                Buffer.BlockCopy(header, 0, full, 0, 9);
-                if (payload != null && payload.Length > 0)
-                    Buffer.BlockCopy(payload, 0, full, 9, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                RaiseMessageReceived(DataConverter.ToHexString(full));
-
-                if (!_persistentMode) lock (_lock) DisconnectCore();
-                return OperateResult<byte[]>.Success(full);
+                finally
+                {
+                    ReleaseIoLock();
+                }
             }
             catch (Exception ex)
             {
                 Log.Error($"MC-3E 通讯异常 — {ex.Message}");
                 RaiseError(ex.Message);
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                if (!_persistentMode)
+                {
+                    AcquireIoLock();
+                    try { DisconnectCore(); }
+                    finally { ReleaseIoLock(); }
+                }
                 return OperateResult<byte[]>.Failed($"MC-3E 通讯异常: {ex.Message}");
             }
         }
