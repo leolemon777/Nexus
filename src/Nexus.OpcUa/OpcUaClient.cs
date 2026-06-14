@@ -319,25 +319,40 @@ namespace Nexus.OpcUa
             WriteInt32(msg, 4, msgSize);
             WriteInt32(msg, 8, (int)_session.SecureChannelId);
             Buffer.BlockCopy(payloadBytes, 0, msg, 12, payloadBytes.Length);
-            SendMessage(msg);
-            OnMessageSent?.Invoke(this, renew ? "OPN → RenewSecureChannel" : "OPN → OpenSecureChannel");
 
-            var respHeader = ReadBytes(8);
-            if (respHeader == null) return OperateResult.Failed("未收到 OpenSecureChannel 响应");
-
-            if (respHeader[0] == 0x45 && respHeader[1] == 0x52 && respHeader[2] == 0x52)
+            // A8 修复：Send+Read 必须在同一 _lock 内原子完成。原 ReadBytes 在锁外，
+            // 当 keepalive 定时器触发续期时会与用户线程的 SendServiceRequest 并发读同一 _stream，
+            // 导致 OPC UA 报文串台。（Monitor 可重入，与 SendMessage 内部 lock 不冲突。）
+            byte[]? respHeader;
+            byte[]? respPayload = null;
+            bool isError = false;
+            int errSize = 0;
+            lock (_lock)
             {
-                int errSize = BitConverter.ToInt32(respHeader, 4);
-                ReadBytes(errSize - 8);
-                return OperateResult.Failed("OPC UA 错误响应");
+                SendMessage(msg);
+                OnMessageSent?.Invoke(this, renew ? "OPN → RenewSecureChannel" : "OPN → OpenSecureChannel");
+
+                respHeader = ReadBytes(8);
+                if (respHeader == null) return OperateResult.Failed("未收到 OpenSecureChannel 响应");
+
+                if (respHeader[0] == 0x45 && respHeader[1] == 0x52 && respHeader[2] == 0x52)
+                {
+                    errSize = BitConverter.ToInt32(respHeader, 4);
+                    ReadBytes(errSize - 8);
+                    isError = true;
+                }
+                else
+                {
+                    if (respHeader[0] != 0x4F || respHeader[1] != 0x50 || respHeader[2] != 0x4E)
+                        return OperateResult.Failed("无效的 OPN 响应");
+
+                    int respSize = BitConverter.ToInt32(respHeader, 4);
+                    respPayload = ReadBytes(respSize - 8);
+                    if (respPayload == null) return OperateResult.Failed("读取 OPN 响应失败");
+                }
             }
 
-            if (respHeader[0] != 0x4F || respHeader[1] != 0x50 || respHeader[2] != 0x4E)
-                return OperateResult.Failed("无效的 OPN 响应");
-
-            int respSize = BitConverter.ToInt32(respHeader, 4);
-            var respPayload = ReadBytes(respSize - 8);
-            if (respPayload == null) return OperateResult.Failed("读取 OPN 响应失败");
+            if (isError) return OperateResult.Failed("OPC UA 错误响应");
 
             int offset = 0;
             _session.SecureChannelId = ReadUInt32LE(respPayload, ref offset);

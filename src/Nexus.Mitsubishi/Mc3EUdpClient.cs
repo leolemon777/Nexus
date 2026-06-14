@@ -562,9 +562,10 @@ namespace Nexus.Mitsubishi
         public override OperateResult<bool> ReadBool(string address)
         {
             var (subLabel, addr) = Mc3EAddressParser.Parse(address);
-            var r = ReadWordsBatch(subLabel, addr, 1);
+            // A2 修复：位区域应使用位读取，原用字读取被 PLC 拒绝。
+            var r = ReadBitsBatch(subLabel, addr, 1);
             if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<bool>.Success((r.Content[1] & 0x01) != 0);
+            return OperateResult<bool>.Success(r.Content[0] != 0);
         }
 
         public override OperateResult<short> ReadInt16(string address)

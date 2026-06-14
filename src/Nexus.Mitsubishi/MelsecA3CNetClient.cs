@@ -147,7 +147,14 @@ namespace Nexus.Mitsubishi
             int start = Environment.TickCount;
             while (unchecked(Environment.TickCount - start) <= Timeout)
             {
-                try { return Port.Read(new byte[1], 0, 1) > 0 ? -1 : -1; }
+                // A1 修复：原 `Port.Read(...) > 0 ? -1 : -1` 两个分支都返回 -1 且丢弃读取的字节，
+                // 导致整个串口 A3C 客户端无法读取任何响应。改为正确返回读取到的字节。
+                try
+                {
+                    byte[] buf = new byte[1];
+                    int n = Port.Read(buf, 0, 1);
+                    return n > 0 ? buf[0] : -1;
+                }
                 catch (TimeoutException) { return -1; }
             }
             return -1;

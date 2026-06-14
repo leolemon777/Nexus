@@ -141,15 +141,20 @@ namespace Nexus.AllenBradley
                     {
                         if (b == ETX)
                         {
-                            // 帧结束 — 读取 BCC
+                            // 帧结束 — 读取 BCC（DF1 BCC 为单字节）
+                            // A6 修复：原读两个字节（BCC 仅 1 字节，多读的会吞下一帧首字节），
+                            // 且计算了 expectedBcc/actualBcc 却从不比较。
                             int bcc1 = _stream.ReadByte();
-                            int bcc2 = _stream.ReadByte();
-                            if (bcc1 < 0 || bcc2 < 0)
+                            if (bcc1 < 0)
                                 return OperateResult<byte[]>.Failed("读取 BCC 超时");
 
                             byte[] data = ms.ToArray();
                             byte expectedBcc = CalculateBcc(data, ETX);
                             byte actualBcc = (byte)(bcc1 == DLE ? DLE : (byte)bcc1);
+
+                            // A6 修复：校验 BCC，不匹配则返回失败（原静默接受坏帧）
+                            if (actualBcc != expectedBcc)
+                                return OperateResult<byte[]>.Failed($"BCC 校验失败: 期望 0x{expectedBcc:X2}, 实际 0x{actualBcc:X2}");
 
                             return OperateResult<byte[]>.Success(data);
                         }

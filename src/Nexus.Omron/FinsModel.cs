@@ -104,8 +104,8 @@ namespace Nexus.Omron
         /// <summary>连接数据发送（循环）。</summary>
         public const ushort CycleSend = 0x0201;
 
-        /// <summary>多地址读取 (NX/NJ)。</summary>
-        public const ushort MultiRead = 0x0401;
+        /// <summary>多地址读取 (NX/NJ)。A3 修复：原 0x0401 与 Run 撞值（会误发远程 RUN 指令），改为 0x0403。</summary>
+        public const ushort MultiRead = 0x0403;
 
         /// <summary>多地址写入 (NX/NJ)。</summary>
         public const ushort MultiWrite = 0x1401;

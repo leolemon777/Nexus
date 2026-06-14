@@ -84,8 +84,9 @@ namespace Nexus.Mitsubishi
         /// <summary>默认心跳：批量读字 D0 的 1 个 word（Command=0x0401, SubCommand=0x0000）。</summary>
         protected override byte[] BuildHeartbeat()
         {
-            // D0: sub-label=0x0A(D), start=0, count=1
-            return BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0x0A, 0x00, 0x00, 0x00, 0x00, 0x01 });
+            // A7 修复：D 软元件 sub-label 应为 0xA8（与 Mc3EAddressParser 一致），
+            // 原 0x0A 是未定义软元件代码，会被 PLC 以 0xC051/0xC002 拒绝，心跳永远失败。
+            return BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x00, 0x01 });
         }
 
         // ── 帧读取（重写）────────────────────────
@@ -838,9 +839,11 @@ namespace Nexus.Mitsubishi
         public override OperateResult<bool> ReadBool(string address)
         {
             var (subLabel, addr) = Mc3EAddressParser.Parse(address);
-            var r = ReadWordsBatch(subLabel, addr, 1);
+            // A2 修复：位区域（M/X/Y/B/L/S/F）应使用位读取（子命令 0x0001），原用字读取
+            // (0x0000) 会被 PLC 拒绝或返回错误数据。与 ReadBools 保持一致使用 ReadBitsBatch。
+            var r = ReadBitsBatch(subLabel, addr, 1);
             if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<bool>.Success((r.Content[1] & 0x01) != 0);
+            return OperateResult<bool>.Success(r.Content[0] != 0);
         }
 
         public override OperateResult<short> ReadInt16(string address)

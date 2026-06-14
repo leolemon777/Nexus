@@ -315,11 +315,12 @@ namespace Nexus.AllenBradley
         private static void WriteSymbolSegment(Stream ms, string name)
         {
             byte[] nameBytes = System.Text.Encoding.ASCII.GetBytes(name);
-            ms.WriteByte(0x91); // Symbolic segment
+            ms.WriteByte(0x91); // Symbolic Segment
             ms.WriteByte((byte)nameBytes.Length);
             ms.Write(nameBytes, 0, nameBytes.Length);
-            // Pad to word boundary
-            if (nameBytes.Length % 2 == 0)
+            // A5 修复：CIP 符号段需对齐到字边界（段总长 = 1+1+N 必须为偶数），
+            // 故当名字长度 N 为奇数时补 1 字节填充。原条件 % 2 == 0 反了（偶数补、奇数不补）。
+            if (nameBytes.Length % 2 != 0)
                 ms.WriteByte(0x00);
         }
 
@@ -919,8 +920,9 @@ namespace Nexus.AllenBradley
             if (r.Content.Length < 4)
                 return OperateResult<object?>.Failed("CIP 标签响应数据不足");
 
-            ushort dataType = (ushort)((r.Content[0] << 8) | r.Content[1]);
-            ushort status = (ushort)((r.Content[2] << 8) | r.Content[3]);
+            // A4 修复：CIP/罗克韦尔为 Little-Endian，原用大端解析导致 dataType/status/数值全部错位。
+            ushort dataType = (ushort)(r.Content[0] | (r.Content[1] << 8));
+            ushort status = (ushort)(r.Content[2] | (r.Content[3] << 8));
 
             if (status != 0 && status != 6) // 6 = partial transfer
                 return OperateResult<object?>.Failed($"CIP 标签读取错误: 0x{status:X4}");
@@ -936,8 +938,9 @@ namespace Nexus.AllenBradley
             {
                 CipTypeBool => tagData[0] != 0,
                 CipTypeSint => (sbyte)tagData[0],
-                CipTypeInt => tagData.Length >= 2 ? (short)((tagData[0] << 8) | tagData[1]) : null,
-                CipTypeDint => tagData.Length >= 4 ? (int)((tagData[0] << 24) | (tagData[1] << 16) | (tagData[2] << 8) | tagData[3]) : null,
+                // A4 修复：小端解析（与 ReadInt16 等基础方法一致）
+                CipTypeInt => tagData.Length >= 2 ? (short)(tagData[0] | (tagData[1] << 8)) : null,
+                CipTypeDint => tagData.Length >= 4 ? (int)(tagData[0] | (tagData[1] << 8) | (tagData[2] << 16) | (tagData[3] << 24)) : null,
                 CipTypeLint => tagData.Length >= 8 ? BitConverter.ToInt64(tagData, 0) : null,
                 _ => tagData // 返回原始字节
             };
@@ -1259,8 +1262,9 @@ namespace Nexus.AllenBradley
                     continue;
                 }
 
-                // CIP 响应包含 dataType(2) + status(2) + data
-                ushort dataType = (ushort)((d[0] << 8) | d[1]);
+                // CIP 响应包含 dataType(2) + status(2) + data（均为小端）
+                // A4 修复：原用大端解析，与 CIP 小端规范不符。
+                ushort dataType = (ushort)(d[0] | (d[1] << 8));
                 int dataOff = 4;
                 if (d.Length <= dataOff) { result[kv.Key] = null; continue; }
 
@@ -1271,9 +1275,9 @@ namespace Nexus.AllenBradley
                 {
                     CipTypeBool => tagData[0] != 0,
                     CipTypeSint => (sbyte)tagData[0],
-                    CipTypeInt => tagData.Length >= 2 ? (short)((tagData[0] << 8) | tagData[1]) : (object?)null,
-                    CipTypeUint => tagData.Length >= 2 ? (ushort)((tagData[0] << 8) | tagData[1]) : (object?)null,
-                    CipTypeDint => tagData.Length >= 4 ? (int)((tagData[0] << 24) | (tagData[1] << 16) | (tagData[2] << 8) | tagData[3]) : (object?)null,
+                    CipTypeInt => tagData.Length >= 2 ? (short)(tagData[0] | (tagData[1] << 8)) : (object?)null,
+                    CipTypeUint => tagData.Length >= 2 ? (ushort)(tagData[0] | (tagData[1] << 8)) : (object?)null,
+                    CipTypeDint => tagData.Length >= 4 ? (int)(tagData[0] | (tagData[1] << 8) | (tagData[2] << 16) | (tagData[3] << 24)) : (object?)null,
                     CipTypeLint => tagData.Length >= 8 ? BitConverter.ToInt64(tagData, 0) : (object?)null,
                     CipTypeReal => tagData.Length >= 4 ? BitConverter.ToSingle(tagData, 0) : (object?)null,
                     _ => tagData

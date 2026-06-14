@@ -136,6 +136,12 @@ namespace Nexus.AllenBradley
                             if (bcc1 < 0) return OperateResult<byte[]>.Failed("读取 BCC 超时");
 
                             byte[] data = ms.ToArray();
+                            // A6 修复：原计算了 BCC 却从不比较，坏帧被当有效数据。
+                            byte expectedBcc = CalculateBcc(data, ETX);
+                            byte actualBcc = (byte)(bcc1 == DLE ? DLE : (byte)bcc1);
+                            if (actualBcc != expectedBcc)
+                                return OperateResult<byte[]>.Failed($"BCC 校验失败: 期望 0x{expectedBcc:X2}, 实际 0x{actualBcc:X2}");
+
                             return OperateResult<byte[]>.Success(data);
                         }
                         else if (b == DLE)

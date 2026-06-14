@@ -83,7 +83,8 @@ namespace Nexus.Mitsubishi
         {
             try
             {
-                byte[] frame = BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0x0A, 0x00, 0x00, 0x00, 0x00, 0x01 });
+                // A7 修复：D 软元件 sub-label 应为 0xA8，原 0x0A 会被 PLC 拒绝。
+                byte[] frame = BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x00, 0x01 });
                 return BuildAsciiFrame(frame);
             }
             catch { return null; }
@@ -803,9 +804,10 @@ namespace Nexus.Mitsubishi
         public override OperateResult<bool> ReadBool(string address)
         {
             var (subLabel, addr) = Mc3EAddressParser.Parse(address);
-            var r = ReadWordsBatch(subLabel, addr, 1);
+            // A2 修复：位区域应使用位读取（子命令 0x0001），原用字读取被 PLC 拒绝。
+            var r = ReadBitsBatch(subLabel, addr, 1);
             if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message, r.ErrorCode);
-            return OperateResult<bool>.Success((r.Content[1] & 0x01) != 0);
+            return OperateResult<bool>.Success(r.Content[0] != 0);
         }
 
         public override OperateResult<short> ReadInt16(string address)

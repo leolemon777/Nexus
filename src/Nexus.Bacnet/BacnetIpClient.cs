@@ -18,8 +18,8 @@ namespace Nexus.Bacnet
         private const int NpduHeaderLength = 2;
 
         private int _invokeId;
-        private readonly Dictionary<byte, BacnetApduResponse> _pendingResponses = new Dictionary<byte, BacnetApduResponse>();
-        private readonly object _responseLock = new object();
+        // A9 修复：移除未使用的 _pendingResponses/_responseLock —— 该字典仅 ListenLoop 写入
+        // 却从未被任何代码读取/清理（死代码 + 内存泄漏）。响应匹配实际走 SendAndReceive。
         private UdpClient? _listenClient;
         private Thread? _listenThread;
         private volatile bool _listening;
@@ -226,17 +226,9 @@ namespace Nexus.Bacnet
                     {
                         HandleUnconfirmedRequest(response, remoteEp);
                     }
-                    else if (response.PduType == BacnetPduType.SimpleAck ||
-                             response.PduType == BacnetPduType.ComplexAck ||
-                             response.PduType == BacnetPduType.Error ||
-                             response.PduType == BacnetPduType.Reject ||
-                             response.PduType == BacnetPduType.Abort)
-                    {
-                        lock (_responseLock)
-                        {
-                            _pendingResponses[response.InvokeId] = response;
-                        }
-                    }
+                    // A9 修复：移除原 Ack/Error/Reject/Abort 分支 —— 它们写入已删除的
+                    // _pendingResponses 死字典。这些响应类型由同步 ReadProperty 经
+                    // SendAndReceive 独立收发处理，监听端口的副本是冗余的，正确丢弃。
                 }
                 catch (SocketException) when (!_listening)
                 {
