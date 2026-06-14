@@ -9,7 +9,7 @@ namespace Nexus
     /// <para>DTU 将串口数据通过 4G/以太网转发到 TCP 服务器，本客户端作为 TCP 主动连接方。</para>
     /// <para>适用于 PLC 通过 DTU 连接远端服务器的场景。</para>
     /// </summary>
-    public class DtuClient
+    public class DtuClient : IDisposable
     {
         // ── 属性 ─────────────────────────────────
         protected string Ip { get; }
@@ -136,6 +136,29 @@ namespace Nexus
             lock (_lock) DisconnectCore();
         }
 
+        // ── 资源释放 ──────────────────────────────
+        private bool _disposed;
+
+        /// <summary>
+        /// 释放 DTU 客户端占用的网络资源（socket/stream）。
+        /// 忘记调用 Disconnect 时由 Dispose 兜底，避免 socket 泄漏。
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            if (disposing)
+            {
+                lock (_lock) DisconnectCore();
+            }
+        }
+
         private void DisconnectCore()
         {
             try
@@ -187,9 +210,10 @@ namespace Nexus
                     EnsureConnected();
                     byte[] buffer = new byte[expectedLength];
                     int totalRead = 0;
-                    int deadline = Environment.TickCount + Timeout;
+                    // unchecked 差值比较，避免 Environment.TickCount 在连续运行约 24.8 天后 int 溢出导致超时失效。
+                    int start = Environment.TickCount;
 
-                    while (totalRead < expectedLength && Environment.TickCount < deadline)
+                    while (totalRead < expectedLength && unchecked(Environment.TickCount - start) < Timeout)
                     {
                         int remaining = expectedLength - totalRead;
                         int read = _stream!.Read(buffer, totalRead, remaining);
@@ -235,9 +259,10 @@ namespace Nexus
                     EnsureConnected();
                     var result = new System.Collections.Generic.List<byte>();
                     byte[] buf = new byte[256];
-                    int deadline = Environment.TickCount + Timeout;
+                    // unchecked 差值比较，避免 TickCount 在连续运行约 24.8 天后 int 溢出导致超时失效。
+                    int start = Environment.TickCount;
 
-                    while (Environment.TickCount < deadline && result.Count < maxBytes)
+                    while (unchecked(Environment.TickCount - start) < Timeout && result.Count < maxBytes)
                     {
                         int read = _stream!.Read(buf, 0, buf.Length);
                         if (read == 0)

@@ -60,6 +60,8 @@ namespace Nexus
         protected int Timeout { get; set; }
         protected ILogger Log { get; set; }
         protected readonly object _lock = new object();
+        /// <summary>异步收发互斥信号量 — 串口半双工，Write 与 Read 必须在一次完整收发期间独占端口。</summary>
+        protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
         protected bool _persistentMode;
 
         // ── 可配置属性 ──────────────────────────────
@@ -237,7 +239,12 @@ namespace Nexus
         {
             try
             {
-                lock (_lock)
+                // 异步锁覆盖整段 Write→Delay→Read（M2 修复）：串口半双工，一次完整收发必须独占端口。
+                // 原实现用 lock(_lock) 只保护了 Write，而 await ReadExactSerialAsync 在锁外
+                //（lock 不可跨 await），导致另一线程的 Write 可插入本次响应、响应被偷吃。
+                // 改用 SemaphoreSlim 贯穿整段收发，持锁期间的 await 会串行化其他调用方（符合半双工语义）。
+                await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
                     if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开");
 
@@ -245,34 +252,38 @@ namespace Nexus
                     OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
 
                     Port.Write(request, 0, request.Length);
+
+                    if (InterFrameDelay > 0)
+                        await Task.Delay(InterFrameDelay, cancellationToken).ConfigureAwait(false);
+
+                    byte[] header = new byte[ResponseHeaderLength];
+                    int headerRead = await ReadExactSerialAsync(header, 0, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
+                    if (headerRead < ResponseHeaderLength)
+                        return OperateResult<byte[]>.Failed("读取串口响应头失败");
+
+                    int payloadLen = GetResponsePayloadLength(header);
+                    byte[] payload = new byte[payloadLen];
+                    if (payloadLen > 0)
+                    {
+                        int payloadRead = await ReadExactSerialAsync(payload, 0, payloadLen, cancellationToken).ConfigureAwait(false);
+                        if (payloadRead < payloadLen)
+                            return OperateResult<byte[]>.Failed("读取串口响应数据失败");
+                    }
+
+                    byte[] full = new byte[header.Length + payload.Length];
+                    Buffer.BlockCopy(header, 0, full, 0, header.Length);
+                    if (payload.Length > 0)
+                        Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
+                    OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
+
+                    return OperateResult<byte[]>.Success(full);
                 }
-
-                if (InterFrameDelay > 0)
-                    await Task.Delay(InterFrameDelay, cancellationToken).ConfigureAwait(false);
-
-                byte[] header = new byte[ResponseHeaderLength];
-                int headerRead = await ReadExactSerialAsync(header, 0, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
-                if (headerRead < ResponseHeaderLength)
-                    return OperateResult<byte[]>.Failed("读取串口响应头失败");
-
-                int payloadLen = GetResponsePayloadLength(header);
-                byte[] payload = new byte[payloadLen];
-                if (payloadLen > 0)
+                finally
                 {
-                    int payloadRead = await ReadExactSerialAsync(payload, 0, payloadLen, cancellationToken).ConfigureAwait(false);
-                    if (payloadRead < payloadLen)
-                        return OperateResult<byte[]>.Failed("读取串口响应数据失败");
+                    _asyncLock.Release();
                 }
-
-                byte[] full = new byte[header.Length + payload.Length];
-                Buffer.BlockCopy(header, 0, full, 0, header.Length);
-                if (payload.Length > 0)
-                    Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                return OperateResult<byte[]>.Success(full);
             }
             catch (OperationCanceledException)
             {
@@ -449,10 +460,12 @@ namespace Nexus
         private int ReadExactSerial(byte[] buffer, int offset, int count)
         {
             int totalRead = 0;
-            int deadline = Environment.TickCount + Timeout;
+            // 用 unchecked 差值比较避免 Environment.TickCount 在连续运行约 24.8 天后 int 溢出导致超时失效。
+            // netstandard2.0 无 TickCount64；unchecked(TickCount - start) 在回绕时仍给出正确有符号差值。
+            int start = Environment.TickCount;
             while (totalRead < count)
             {
-                if (Environment.TickCount > deadline)
+                if (unchecked(Environment.TickCount - start) > Timeout)
                     return totalRead;
 
                 try

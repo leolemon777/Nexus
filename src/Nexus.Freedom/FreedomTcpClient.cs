@@ -30,43 +30,39 @@ namespace Nexus.Freedom
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                _asyncLock.Wait();
-                try { ns = _stream; }
-                finally { _asyncLock.Release(); }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                RaiseMessageSent(DataConverter.ToHexString(request));
-
-                ns.Write(request, 0, request.Length);
-
-                var ms = new MemoryStream();
-                ReadUntilTimeoutSync(ns, ms);
-                byte[] response = ms.ToArray();
-
-                if (response.Length == 0)
+                // IO 锁覆盖整段 Write+ReadUntilTimeout（C1 根治，原为假锁）。
+                AcquireIoLock();
+                try
                 {
-                    if (!_persistentMode)
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
+
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    RaiseMessageSent(DataConverter.ToHexString(request));
+
+                    ns.Write(request, 0, request.Length);
+
+                    var ms = new MemoryStream();
+                    ReadUntilTimeoutSync(ns, ms);
+                    byte[] response = ms.ToArray();
+
+                    if (response.Length == 0)
                     {
-                        _asyncLock.Wait();
-                        try { DisconnectCore(); }
-                        finally { _asyncLock.Release(); }
+                        if (!_persistentMode) DisconnectCore();
+                        return OperateResult<byte[]>.Failed("接收超时");
                     }
-                    return OperateResult<byte[]>.Failed("接收超时");
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(response)}");
+                    RaiseMessageReceived(DataConverter.ToHexString(response));
+
+                    if (!_persistentMode) DisconnectCore();
+
+                    return OperateResult<byte[]>.Success(response);
                 }
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(response)}");
-                RaiseMessageReceived(DataConverter.ToHexString(response));
-
-                if (!_persistentMode)
+                finally
                 {
-                    _asyncLock.Wait();
-                    try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    ReleaseIoLock();
                 }
-
-                return OperateResult<byte[]>.Success(response);
             }
             catch (Exception ex)
             {
@@ -74,15 +70,15 @@ namespace Nexus.Freedom
                 RaiseError(ex.Message);
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    AcquireIoLock();
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLock(); }
                 }
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
         }
 
-        protected new async Task<OperateResult<byte[]>> SendAndReceiveAsync(
+        protected override async Task<OperateResult<byte[]>> SendAndReceiveAsync(
             byte[] request, CancellationToken cancellationToken = default)
         {
             try
@@ -93,51 +89,47 @@ namespace Nexus.Freedom
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try { ns = _stream; }
-                finally { _asyncLock.Release(); }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                RaiseMessageSent(DataConverter.ToHexString(request));
-
-                await ns.WriteAsync(request, 0, request.Length, cancellationToken).ConfigureAwait(false);
-
-                var ms = new MemoryStream();
-                await ReadUntilTimeoutAsync(ns, ms, cancellationToken).ConfigureAwait(false);
-                byte[] response = ms.ToArray();
-
-                if (response.Length == 0)
+                // IO 锁覆盖整段 WriteAsync+ReadUntilTimeoutAsync（C1 根治，原为假锁）。
+                await AcquireIoLockAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    if (!_persistentMode)
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
+
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    RaiseMessageSent(DataConverter.ToHexString(request));
+
+                    await ns.WriteAsync(request, 0, request.Length, cancellationToken).ConfigureAwait(false);
+
+                    var ms = new MemoryStream();
+                    await ReadUntilTimeoutAsync(ns, ms, cancellationToken).ConfigureAwait(false);
+                    byte[] response = ms.ToArray();
+
+                    if (response.Length == 0)
                     {
-                        await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                        try { DisconnectCore(); }
-                        finally { _asyncLock.Release(); }
+                        if (!_persistentMode) DisconnectCore();
+                        return OperateResult<byte[]>.Failed("接收超时");
                     }
-                    return OperateResult<byte[]>.Failed("接收超时");
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(response)}");
+                    RaiseMessageReceived(DataConverter.ToHexString(response));
+
+                    if (!_persistentMode) DisconnectCore();
+
+                    return OperateResult<byte[]>.Success(response);
                 }
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(response)}");
-                RaiseMessageReceived(DataConverter.ToHexString(response));
-
-                if (!_persistentMode)
+                finally
                 {
-                    await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                    try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    ReleaseIoLockAsync();
                 }
-
-                return OperateResult<byte[]>.Success(response);
             }
             catch (OperationCanceledException)
             {
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLockAsync(); }
                 }
                 return OperateResult<byte[]>.Failed("操作已取消");
             }
@@ -147,9 +139,9 @@ namespace Nexus.Freedom
                 RaiseError(ex.Message);
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLockAsync(); }
                 }
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }

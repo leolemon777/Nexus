@@ -28,6 +28,7 @@ namespace Nexus
         protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
 
         protected volatile bool _persistentMode;
+        private bool _disposed;
         private AutoReconnectGuard? _autoReconnectGuard;
         private HeartbeatGuard? _heartbeatGuard;
         private Func<Task<OperateResult>>? _heartbeatCallback;
@@ -150,6 +151,19 @@ namespace Nexus
 
         /// <summary>构造心跳原始报文。子类可重写；默认表示未配置心跳。</summary>
         protected virtual byte[]? BuildHeartbeat() => null;
+
+        // ── IO 互斥锁钩子 ──────────────────────────
+        // 设计意图：SendAndReceive/SendAndReceiveAsync 必须在一次完整收发（Write+Read）期间
+        // 独占 _stream，否则长连接多线程并发会报文串台。基类默认用 _asyncLock（SemaphoreSlim）
+        // 串行化整段 IO；子类若用 new 隐藏 SendAndReceive 自行实现收发，也应使用同一把锁
+        // （直接调本钩子），保证 base 路径与子类路径走同一临界区。详见 C1/C5 修复。
+        // 注意：此锁不得与 Connect/Disconnect 的 _asyncLock 持有嵌套——两者关注点不同
+        // （连接生命周期 vs 单次收发），且 SemaphoreSlim 不可重入。
+        protected virtual void AcquireIoLock() => _asyncLock.Wait();
+        protected virtual void ReleaseIoLock() => _asyncLock.Release();
+        protected virtual Task AcquireIoLockAsync(CancellationToken cancellationToken)
+            => _asyncLock.WaitAsync(cancellationToken);
+        protected virtual void ReleaseIoLockAsync() => _asyncLock.Release();
 
         // ── 连接管理 ──────────────────────────────
 
@@ -372,38 +386,42 @@ namespace Nexus
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                _asyncLock.Wait();
-                try { ns = _stream; }
-                finally { _asyncLock.Release(); }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                ns.Write(request, 0, request.Length);
-
-                var headerBuf = ReadExact(ns, ResponseHeaderLength);
-                if (headerBuf == null) return OperateResult<byte[]>.Failed("读取响应头失败");
-
-                int payloadLen = GetResponsePayloadLength(headerBuf);
-                byte[] payload = payloadLen > 0 ? ReadExact(ns, payloadLen) ?? new byte[0] : new byte[0];
-
-                byte[] full = new byte[headerBuf.Length + payload.Length];
-                Buffer.BlockCopy(headerBuf, 0, full, 0, headerBuf.Length);
-                Buffer.BlockCopy(payload, 0, full, headerBuf.Length, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                if (!_persistentMode)
+                // IO 锁覆盖整段 Write+Read，保证单次收发原子性（C1 根治）。
+                // 内部 DisconnectCore 直调：IO 锁已保证单线程进入，无需再取连接锁，
+                // 且 SemaphoreSlim 不可重入——若此处再 Wait 会自死锁（C5 根治）。
+                AcquireIoLock();
+                try
                 {
-                    _asyncLock.Wait();
-                    try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
-                }
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
-                return OperateResult<byte[]>.Success(full);
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
+
+                    ns.Write(request, 0, request.Length);
+
+                    var headerBuf = ReadExact(ns, ResponseHeaderLength);
+                    if (headerBuf == null) return OperateResult<byte[]>.Failed("读取响应头失败");
+
+                    int payloadLen = GetResponsePayloadLength(headerBuf);
+                    byte[] payload = payloadLen > 0 ? ReadExact(ns, payloadLen) ?? new byte[0] : new byte[0];
+
+                    byte[] full = new byte[headerBuf.Length + payload.Length];
+                    Buffer.BlockCopy(headerBuf, 0, full, 0, headerBuf.Length);
+                    Buffer.BlockCopy(payload, 0, full, headerBuf.Length, payload.Length);
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
+                    OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
+
+                    if (!_persistentMode)
+                        DisconnectCore();
+
+                    return OperateResult<byte[]>.Success(full);
+                }
+                finally
+                {
+                    ReleaseIoLock();
+                }
             }
             catch (Exception ex)
             {
@@ -411,9 +429,9 @@ namespace Nexus
                 OnError?.Invoke(this, ex.Message);
                 if (!_persistentMode)
                 {
-                    _asyncLock.Wait();
+                    AcquireIoLock();
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLock(); }
                 }
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
@@ -429,7 +447,7 @@ namespace Nexus
         /// 异步发送请求并接收响应。使用 CancellationToken 控制超时和取消。
         /// 子类应优先使用此方法实现真正的 async 路径。
         /// </summary>
-        protected async Task<OperateResult<byte[]>> SendAndReceiveAsync(
+        protected virtual async Task<OperateResult<byte[]>> SendAndReceiveAsync(
             byte[] request, CancellationToken cancellationToken = default)
         {
             try
@@ -440,48 +458,50 @@ namespace Nexus
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                NetworkStream? ns;
-                await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try { ns = _stream; }
-                finally { _asyncLock.Release(); }
-                if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                await ns.WriteAsync(request, 0, request.Length, cancellationToken).ConfigureAwait(false);
-
-                var headerBuf = await ReadExactAsync(ns, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
-                if (headerBuf == null) return OperateResult<byte[]>.Failed("读取响应头失败");
-
-                int payloadLen = GetResponsePayloadLength(headerBuf);
-                byte[] payload = payloadLen > 0
-                    ? await ReadExactAsync(ns, payloadLen, cancellationToken).ConfigureAwait(false) ?? Array.Empty<byte>()
-                    : Array.Empty<byte>();
-
-                byte[] full = new byte[headerBuf.Length + payload.Length];
-                Buffer.BlockCopy(headerBuf, 0, full, 0, headerBuf.Length);
-                Buffer.BlockCopy(payload, 0, full, headerBuf.Length, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                if (!_persistentMode)
+                // IO 锁覆盖整段 WriteAsync+ReadAsync（C1 根治）。
+                await AcquireIoLockAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                    try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
-                }
+                    NetworkStream? ns = _stream;
+                    if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
 
-                return OperateResult<byte[]>.Success(full);
+                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                    OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
+
+                    await ns.WriteAsync(request, 0, request.Length, cancellationToken).ConfigureAwait(false);
+
+                    var headerBuf = await ReadExactAsync(ns, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
+                    if (headerBuf == null) return OperateResult<byte[]>.Failed("读取响应头失败");
+
+                    int payloadLen = GetResponsePayloadLength(headerBuf);
+                    byte[] payload = payloadLen > 0
+                        ? await ReadExactAsync(ns, payloadLen, cancellationToken).ConfigureAwait(false) ?? Array.Empty<byte>()
+                        : Array.Empty<byte>();
+
+                    byte[] full = new byte[headerBuf.Length + payload.Length];
+                    Buffer.BlockCopy(headerBuf, 0, full, 0, headerBuf.Length);
+                    Buffer.BlockCopy(payload, 0, full, headerBuf.Length, payload.Length);
+
+                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
+                    OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
+
+                    if (!_persistentMode)
+                        DisconnectCore();
+
+                    return OperateResult<byte[]>.Success(full);
+                }
+                finally
+                {
+                    ReleaseIoLockAsync();
+                }
             }
             catch (OperationCanceledException)
             {
                 if (!_persistentMode)
                 {
-                    await _asyncLock.WaitAsync().ConfigureAwait(false);
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLockAsync(); }
                 }
                 return OperateResult<byte[]>.Failed("操作已取消");
             }
@@ -491,9 +511,9 @@ namespace Nexus
                 OnError?.Invoke(this, ex.Message);
                 if (!_persistentMode)
                 {
-                    await _asyncLock.WaitAsync().ConfigureAwait(false);
+                    await AcquireIoLockAsync(CancellationToken.None).ConfigureAwait(false);
                     try { DisconnectCore(); }
-                    finally { _asyncLock.Release(); }
+                    finally { ReleaseIoLockAsync(); }
                 }
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
@@ -683,11 +703,14 @@ namespace Nexus
         public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
         protected virtual void Dispose(bool disposing)
         {
+            if (_disposed) return;   // 防重复 dispose：_asyncLock.Dispose() 二次调用会抛 ODE
+            _disposed = true;
+
             if (disposing)
             {
                 StopHeartbeatGuard();
                 StopAutoReconnectGuard();
-                Disconnect();
+                try { Disconnect(); } catch { /* 关闭期异常不应阻断 Dispose */ }
                 _asyncLock.Dispose();
             }
         }

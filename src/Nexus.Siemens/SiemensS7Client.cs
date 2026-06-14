@@ -75,20 +75,22 @@ namespace Nexus.Siemens
 
         private bool _isFirstPacket = true;
 
-        protected new OperateResult<byte[]> SendAndReceive(byte[] request)
+        protected override OperateResult<byte[]> SendAndReceive(byte[] request)
         {
             try
             {
-                bool wasConnected;
-                lock (_lock) { wasConnected = IsConnected; }
-
-                if (!wasConnected)
+                // IsConnected 无锁读取（基类实现），无需持锁。
+                if (!IsConnected)
                 {
                     var conn = Connect();
                     if (!conn.IsSuccess) return OperateResult<byte[]>.Failed(conn.Message, conn.ErrorCode);
                 }
 
-                lock (_lock)
+                // 与基类走同一把 IO 锁（_asyncLock），消除原 _lock/_asyncLock 双锁导致的
+                // 报文串台（C1）。DisconnectCore 直调：IO 锁已保证单线程，无需再取连接锁，
+                // 且 SemaphoreSlim 不可重入（C5）。
+                AcquireIoLock();
+                try
                 {
                     System.Net.Sockets.NetworkStream? ns = _stream;
                     if (ns == null) return OperateResult<byte[]>.Failed("连接已断开");
@@ -120,12 +122,21 @@ namespace Nexus.Siemens
 
                     return OperateResult<byte[]>.Success(full);
                 }
+                finally
+                {
+                    ReleaseIoLock();
+                }
             }
             catch (Exception ex)
             {
                 Log.Error($"通讯异常 — {ex.Message}");
                 RaiseError(ex.Message);
-                if (!_persistentMode) lock (_lock) DisconnectCore();
+                if (!_persistentMode)
+                {
+                    AcquireIoLock();
+                    try { DisconnectCore(); }
+                    finally { ReleaseIoLock(); }
+                }
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
         }

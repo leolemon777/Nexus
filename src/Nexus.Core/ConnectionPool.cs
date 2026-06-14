@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,7 +10,7 @@ namespace Nexus
     /// <summary>
     /// 线程安全的连接池实现，支持多设备连接管理、健康检查和空闲超时自动清理。
     /// </summary>
-    public class ConnectionPool<T> : IConnectionPool<T> where T : IReadWriteDevice
+    public class ConnectionPool<T> : IConnectionPool<T> where T : class, IReadWriteDevice
     {
         private readonly Func<T> _deviceFactory;
         private readonly int _maxPoolSize;
@@ -19,6 +20,19 @@ namespace Nexus
             new ConcurrentDictionary<string, DeviceBucket>();
         private readonly Timer _cleanupTimer;
         private volatile bool _disposed;
+
+        /// <summary>
+        /// 借出设备的租约信息 — 追踪设备实际所属的 bucket，使 Release 时即使传入的 key
+        /// 与借出时不一致（或为 null）也能归还正确的信号量配额（C4 根治）。
+        /// ConditionalWeakTable 保证设备被 GC 时租约自动清理，不会造成内存泄漏。
+        /// </summary>
+        private readonly ConditionalWeakTable<T, LeaseInfo> _leases = new ConditionalWeakTable<T, LeaseInfo>();
+
+        private sealed class LeaseInfo
+        {
+            public DeviceBucket Bucket;
+            public LeaseInfo(DeviceBucket bucket) { Bucket = bucket; }
+        }
 
         private class DeviceBucket
         {
@@ -107,10 +121,7 @@ namespace Nexus
                         {
                             // 已连接 → 先做健康检查
                             if (IsHealthy(pooled.Device))
-                            {
-                                Interlocked.Increment(ref bucket.ActiveCount);
-                                return pooled.Device;
-                            }
+                                return Lease(bucket, pooled.Device);
 
                             // 健康检查失败 → 淘汰（不断尝试重连不健康的设备）
                             TryDisposeDevice(pooled.Device);
@@ -121,10 +132,7 @@ namespace Nexus
                         {
                             var reconnect = pooled.Device.Connect();
                             if (reconnect.IsSuccess && pooled.Device.IsConnected)
-                            {
-                                Interlocked.Increment(ref bucket.ActiveCount);
-                                return pooled.Device;
-                            }
+                                return Lease(bucket, pooled.Device);
                         }
 
                         catch
@@ -152,8 +160,7 @@ namespace Nexus
                         throw;
                     }
 
-                    Interlocked.Increment(ref bucket.ActiveCount);
-                    return device;
+                    return Lease(bucket, device);
                 }
             }
             catch
@@ -161,6 +168,17 @@ namespace Nexus
                 bucket.Semaphore.Release();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 标记一台设备为"已借出"：递增活跃计数、记录租约（设备→bucket），并返回设备。
+        /// 租约用于 Release 时定位设备真正所属的 bucket，即使调用方传入错误 key 也能归还配额（C4）。
+        /// </summary>
+        private T Lease(DeviceBucket bucket, T device)
+        {
+            Interlocked.Increment(ref bucket.ActiveCount);
+            _leases.GetValue(device, _ => new LeaseInfo(bucket));
+            return device;
         }
 
         /// <summary>
@@ -188,16 +206,12 @@ namespace Nexus
                     }
                     else if (healthy)
                     {
-                        Interlocked.Increment(ref bucket.ActiveCount);
-                        return pooled.Device;
+                        return Lease(bucket, pooled.Device);
                     }
                     else if (await TryReconnectAsync(pooled.Device).ConfigureAwait(false))
                     {
                         if (IsHealthy(pooled.Device))
-                        {
-                            Interlocked.Increment(ref bucket.ActiveCount);
-                            return pooled.Device;
-                        }
+                            return Lease(bucket, pooled.Device);
                         TryDisposeDevice(pooled.Device);
                     }
                     else
@@ -222,8 +236,7 @@ namespace Nexus
                     throw;
                 }
 
-                Interlocked.Increment(ref bucket.ActiveCount);
-                return device;
+                return Lease(bucket, device);
             }
             catch
             {
@@ -261,18 +274,33 @@ namespace Nexus
         {
             if (device == null) return;
 
-            if (key != null && _pools.TryGetValue(key, out var bucket))
+            // C4 根治：优先用借出时记录的租约定位设备真正所属的 bucket，而非依赖调用方传入的 key。
+            // 这样即使 Release 传入 null/错误的 key，也能归还正确 bucket 的信号量配额，
+            // 避免配额永久耗尽导致后续 Acquire 死锁。
+            DeviceBucket? bucket = null;
+            if (_leases.TryGetValue(device, out var lease))
             {
-                if (bucket.IdleDevices.Count < _maxPoolSize && device.IsConnected)
-                {
-                    bucket.IdleDevices.Push(new PooledDevice(device));
-                    Interlocked.Decrement(ref bucket.ActiveCount);
-                    bucket.Semaphore.Release();
-                    return;
-                }
+                bucket = lease.Bucket;
+                _leases.Remove(device);
+            }
+            else if (key != null)
+            {
+                _pools.TryGetValue(key, out bucket);
+            }
 
+            // 归还配额（必须在 dispose 之前，确保 Acquire 不会因配额耗尽而永久阻塞）。
+            if (bucket != null)
+            {
                 Interlocked.Decrement(ref bucket.ActiveCount);
-                bucket.Semaphore.Release();
+                try { bucket.Semaphore.Release(); }
+                catch (SemaphoreFullException) { /* 池已被 Clear/Remove，配额已无效，忽略 */ }
+            }
+
+            // 再决定：回填空闲池，还是直接 dispose。
+            if (bucket != null && bucket.IdleDevices.Count < _maxPoolSize && device.IsConnected)
+            {
+                bucket.IdleDevices.Push(new PooledDevice(device));
+                return;
             }
 
             TryDisposeDevice(device);

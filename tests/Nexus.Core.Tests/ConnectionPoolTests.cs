@@ -135,6 +135,63 @@ namespace Nexus.Core.Tests
             await pool.ReleaseAsync("plc-a", second);
         }
 
+        // ── C4 回归：Release 配额泄漏修复 ──────────────────────────
+        // 原缺陷：Release(key, device) 当 key==null 或 TryGetValue 失败时，
+        // 跳过 ActiveCount/Semaphore 归还，导致信号量配额永久耗尽、Acquire 永久阻塞。
+
+        [Fact]
+        public void Release_WithNullKey_StillReturnsQuota_AllowsSubsequentAcquire()
+        {
+            using var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 1);
+
+            var device = pool.Acquire("plc-a");
+            Assert.Equal(1, pool.ActiveCount);
+
+            // 用 null key 释放（曾导致配额泄漏）。
+            pool.Release(null!, device);
+
+            // 关键断言：配额已归还，下一次 Acquire 不会永久阻塞。
+            var next = pool.Acquire("plc-a");
+            Assert.NotNull(next);
+            Assert.Equal(1, pool.ActiveCount);
+            pool.Release("plc-a", next);
+        }
+
+        [Fact]
+        public void Release_WithUnknownKey_StillReturnsQuota_AllowsSubsequentAcquire()
+        {
+            using var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 1);
+
+            var device = pool.Acquire("plc-a");
+
+            // 用一个不存在的 key 释放（TryGetValue 失败，曾导致配额泄漏）。
+            pool.Release("wrong-key", device);
+
+            // 关键断言：原 key 的配额已归还，Acquire 不阻塞。
+            var next = pool.Acquire("plc-a");
+            Assert.NotNull(next);
+            pool.Release("plc-a", next);
+        }
+
+        [Fact]
+        public async Task Release_WithWrongKey_DoesNotStarvePool_UnderRepeatedMisuse()
+        {
+            using var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 1);
+
+            // 反复用错误 key 释放，模拟调用方误用场景。
+            for (int i = 0; i < 5; i++)
+            {
+                var device = pool.Acquire("plc-a");
+                pool.Release("typo-key", device);
+            }
+
+            // 池不应被饿死：仍能在合理时间内 Acquire 成功。
+            var acquired = await Task.Run(() => pool.Acquire("plc-a"));
+            Assert.NotNull(acquired);
+            pool.Release("plc-a", acquired);
+            Assert.Equal(0, pool.ActiveCount);
+        }
+
         private sealed class TestDevice : IReadWriteDevice
         {
             private readonly int _id;
