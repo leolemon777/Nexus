@@ -123,6 +123,12 @@ namespace Nexus.Dnp3
                         {
                             requestData = ReadExact(stream, userDataLen);
                             if (requestData == null) break;
+
+                            // 客户端 BuildLinkHeader 在 userData 块后追加了 2 字节 CRC。
+                            // 若不读掉，这 2 字节会残留到流中，导致下一次请求帧头错位
+                            //（连接复用时报文串台）。读掉并丢弃。
+                            var reqCrc = ReadExact(stream, 2);
+                            if (reqCrc == null) break;
                         }
 
                         // 构建并发送响应

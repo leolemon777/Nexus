@@ -65,12 +65,11 @@ namespace Nexus
         {
             get
             {
-                // 无锁读取：_client 和 _stream 只在 _asyncLock 内赋值，
-                // 此处只做原子性读取，不需要互斥。
+                // 仅检查 TCP 层连接状态（M1 修复）。原 Poll(0) 探测对刚收完数据、
+                // 缓冲区空的健康连接会误判为断开，导致连接池复用时误触发重连、
+                // 第二次操作连接超时。对端正常关闭由下次收发失败处理（OperateResult 模式）。
                 var client = _client;
-                return client?.Connected == true &&
-                       (client.Client?.Poll(0, SelectMode.SelectRead) != true ||
-                        client.Available > 0);
+                return client?.Connected == true;
             }
         }
 
