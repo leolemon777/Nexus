@@ -208,9 +208,12 @@ namespace Nexus.Dlt
             for (int i = 0; i < dataLen; i++)
                 encrypted[i] = (byte)(dataField[i] + DATA_OFFSET);
 
-            byte cs = (byte)(control ^ dataLen);
-            for (int i = 0; i < 6; i++) cs ^= MeterAddress[i];
-            for (int i = 0; i < dataLen; i++) cs ^= encrypted[i];
+            // C1 修复：算术累加和（非 XOR）
+            byte cs = 0;
+            for (int i = 0; i < 6; i++) cs += MeterAddress[i];
+            cs += control;
+            cs += (byte)dataLen;
+            for (int i = 0; i < dataLen; i++) cs += encrypted[i];
 
             byte[] frame = new byte[] { FRAME_HEADER, 0, 0, 0, 0, 0, 0, FRAME_HEADER, control, (byte)dataLen };
             Array.Copy(MeterAddress, 0, frame, 1, 6);

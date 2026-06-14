@@ -170,7 +170,19 @@ namespace Nexus.Xinje
         public Task<OperateResult> WriteAsync(string a, ulong v) => Task.Run(() => Write(a, v));
         public Task<OperateResult> WriteAsync(string a, double v) => Task.Run(() => Write(a, v));
 
-        private static string Incr(string address, int offset = 1) { var (a, _) = ParseAddress(address); return $"D{a + offset}"; }
+        private static string Incr(string address, int offset = 1)
+        {
+            // C7 修复：原固定拼 "D{addr+offset}"，丢弃了原始区域前缀（HD/SD/M/Y 等），
+            // 导致非 D 区域的 32/64 位读和 ReadBytes 读到错误地址。现保留原前缀。
+            int i = 0;
+            while (i < address.Length && !char.IsDigit(address[i])) i++;
+            string prefix = address.Substring(0, i);
+            if (int.TryParse(address.Substring(i), out int num))
+                return $"{prefix}{num + offset}";
+            // 无法解析数字时回退到 D（保持旧行为，避免完全失败）
+            var (a, _) = ParseAddress(address);
+            return $"D{a + offset}";
+        }
 
         // ═══════════════════════════════════════════
         //  批量位操作 — ReadBools / WriteBools

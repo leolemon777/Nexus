@@ -93,11 +93,12 @@ namespace Nexus.Panasonic
                     if (respStation != stationStr)
                         return OperateResult<string>.Failed($"响应站号不匹配: 期望={stationStr}, 实际={respStation}");
 
-                    // 检查错误响应: %SS!CC...
-                    string respCmd = response.Substring(3, 2);
-                    if (respCmd == "!")
+                    // 检查错误响应: %SS!CC...（位置3为 '!' 表示错误，位置4为异常码）
+                    // M1 修复：原 Substring(3,2) 取 2 字符与单字符 "!" 比较，永远不等，
+                    // 导致所有错误响应（站号错/地址错/命令错）都无法识别。
+                    if (response.Length > 3 && response[3] == '!')
                     {
-                        string errCode = response.Length > 5 ? response.Substring(5) : "??";
+                        string errCode = response.Length > 4 ? response.Substring(4, 1) : "?";
                         return OperateResult<string>.Failed($"PLC 错误: {ParseErrorCode(errCode)}");
                     }
 

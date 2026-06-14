@@ -353,10 +353,14 @@ namespace Nexus.Dlt
             for (int i = 0; i < dataLen; i++)
                 encrypted[i] = (byte)(dataField[i] + DATA_OFFSET);
 
-            // 计算校验
-            byte cs = (byte)(control ^ dataLen);
-            for (int i = 0; i < 6; i++) cs ^= MeterAddress[i];
-            for (int i = 0; i < dataLen; i++) cs ^= encrypted[i];
+            // 计算校验 CS = 从地址域起各字节算术累加和模 256（DL/T 645-2007 规范，
+            // 非异或）。范围: A0..A5 + C + L + DATA。
+            // C1 修复：原用 XOR(^=)，与规范不符，真实电表会拒收。
+            byte cs = 0;
+            for (int i = 0; i < 6; i++) cs += MeterAddress[i];
+            cs += control;
+            cs += (byte)dataLen;
+            for (int i = 0; i < dataLen; i++) cs += encrypted[i];
 
             // 组帧: 68H + A(6) + 68H + C + L + DATA + CS + 16H
             var frame = new byte[] { FRAME_HEADER, 0, 0, 0, 0, 0, 0, FRAME_HEADER, control, (byte)dataLen };
@@ -395,12 +399,13 @@ namespace Nexus.Dlt
             if (response.Length < 10 + dataLen + 2)
                 return OperateResult<byte[]>.Failed("响应数据长度不足");
 
-            // 校验和
+            // 校验和（算术累加和，与构建侧一致）
+            // C1 修复：原用 XOR，与 DL/T 645-2007 规范不符。
             byte cs = 0;
-            for (int i = 0; i < 6; i++) cs ^= response[1 + i];
-            cs ^= ctrl;
-            cs ^= dataLen;
-            for (int i = 0; i < dataLen; i++) cs ^= response[10 + i];
+            for (int i = 0; i < 6; i++) cs += response[1 + i];
+            cs += ctrl;
+            cs += dataLen;
+            for (int i = 0; i < dataLen; i++) cs += response[10 + i];
 
             if (cs != response[10 + dataLen])
                 return OperateResult<byte[]>.Failed($"校验和不匹配: 计算 0x{cs:X2}, 接收 0x{response[10 + dataLen]:X2}");

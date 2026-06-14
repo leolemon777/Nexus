@@ -439,6 +439,9 @@ namespace Nexus.Dlt
 
         private static ushort Crc16(byte[] data, int offset, int count)
         {
+            // C2 修复：DL/T 698.45 使用多项式 x16+x12+x5+1 反射形式 0x8408（CCITT/X.25），
+            // 初值 0xFFFF，XorOut 0xFFFF。原用 0xA001(Modbus) 且无 XorOut，导致所有 698 帧
+            // HCS/FCS 校验错误，无法对接标准 698 设备。
             ushort crc = 0xFFFF;
             for (int i = offset; i < offset + count; i++)
             {
@@ -446,12 +449,12 @@ namespace Nexus.Dlt
                 for (int j = 0; j < 8; j++)
                 {
                     if ((crc & 0x0001) != 0)
-                        crc = (ushort)((crc >> 1) ^ 0xA001);
+                        crc = (ushort)((crc >> 1) ^ 0x8408);
                     else
                         crc >>= 1;
                 }
             }
-            return crc;
+            return (ushort)(crc ^ 0xFFFF);
         }
     }
 }

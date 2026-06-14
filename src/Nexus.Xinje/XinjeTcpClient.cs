@@ -326,9 +326,11 @@ namespace Nexus.Xinje
         {
             try
             {
+                // C8 修复：原返回裸 PDU（5字节），但所有正常请求都经 BuildMbapFrame（7字节
+                // MBAP 头+PDU），心跳发裸 PDU PLC 无法识别，触发误断连。现包 MBAP 头。
                 ushort addr = 0;
                 byte fc = 0x03;
-                return BuildReadPdu(addr, fc, 1);
+                return BuildMbapFrame(BuildReadPdu(addr, fc, 1));
             }
             catch { return null; }
         }
