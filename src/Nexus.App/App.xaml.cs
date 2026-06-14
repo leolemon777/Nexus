@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,25 +28,39 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // 全局异常捕获 — 防止未处理异常导致闪退
+        // 全局异常捕获 — 防止未处理异常导致闪退（C2 加固）
+        // 设计原则：普通异常弹窗 + 写日志后 Handled=true 让 UI 继续运行；
+        //           致命异常（OOM 等，状态已损坏）不吞，让进程正常终止，避免损坏状态被持久化。
+
         DispatcherUnhandledException += (s, args) =>
         {
-            MessageBox.Show($"UI 线程异常:\n\n{args.Exception.Message}\n\n{args.Exception.StackTrace}",
-                "Nexus 错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            WriteCrashLog("DispatcherUnhandledException", args.Exception);
+            // 致命异常：状态已不可恢复，吞掉会让 UI 在损坏状态下继续运行（工业场景可能误写设备）。
+            if (IsFatal(args.Exception))
+            {
+                ShowErrorSafely($"致命错误，应用将退出:\n\n{args.Exception.Message}");
+                args.Handled = false;   // 让默认崩溃流程走完
+                return;
+            }
+            ShowErrorSafely($"UI 线程异常:\n\n{args.Exception.Message}\n\n{args.Exception.StackTrace}");
             args.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (s, args) =>
         {
-            var ex = args.ExceptionObject as Exception;
-            MessageBox.Show($"应用异常:\n\n{ex?.Message}\n\n{ex?.StackTrace}",
-                "Nexus 致命错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            // ExceptionObject 可能不是 Exception（非托管异常），用 ToString() 兜底。
+            string detail = args.ExceptionObject is Exception ex
+                ? $"{ex.Message}\n\n{ex.StackTrace}"
+                : args.ExceptionObject?.ToString() ?? "(null)";
+            WriteCrashLog("AppDomain.UnhandledException (terminating)", args.ExceptionObject);
+            // 进程即将被 CLR 终止，仅写日志，不依赖可能无响应的 MessageBox。
+            ShowErrorSafely($"应用发生致命错误:\n\n{detail}");
         };
 
         TaskScheduler.UnobservedTaskException += (s, args) =>
         {
-            MessageBox.Show($"后台任务异常:\n\n{args.Exception?.Message}",
-                "Nexus 错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            WriteCrashLog("TaskScheduler.UnobservedTaskException", args.Exception);
+            ShowErrorSafely($"后台任务异常:\n\n{args.Exception?.Message}");
             args.SetObserved();
         };
 
@@ -140,5 +155,52 @@ public partial class App : Application
     {
         _host?.Dispose();
         base.OnExit(e);
+    }
+
+    // ── 全局异常处理辅助方法 ──────────────────────────
+
+    /// <summary>判断异常是否为"状态已损坏、不应继续运行"的致命异常。</summary>
+    private static bool IsFatal(Exception ex)
+    {
+        // OOM / StackOverflow / 访问违规 / 程序集损坏等。
+        // 这些情况下进程状态已不可信，吞掉会让损坏状态被持久化或误写设备。
+        // 注：ExecutionEngineException 已废弃且运行时不再抛出，故不再列入。
+        return ex is OutOfMemoryException
+            || ex is StackOverflowException
+            || ex is AccessViolationException
+            || ex is InvalidProgramException
+            || ex is BadImageFormatException
+            || ex is System.Runtime.InteropServices.SEHException;
+    }
+
+    /// <summary>安全弹窗 — UI 线程可能已损坏，弹窗本身也可能抛异常，故包 try/catch。</summary>
+    private static void ShowErrorSafely(string message)
+    {
+        try
+        {
+            MessageBox.Show(message, "Nexus 错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch
+        {
+            // UI 线程已无法响应，忽略；崩溃日志已在 WriteCrashLog 落盘。
+        }
+    }
+
+    /// <summary>把崩溃信息写入 crash.log（应用所在目录），供事后排查。</summary>
+    private static void WriteCrashLog(string source, object? errorObject)
+    {
+        try
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "crash.log");
+            string detail = errorObject is Exception ex
+                ? $"{ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}"
+                : errorObject?.ToString() ?? "(null)";
+            string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{source}]\n{detail}\n{new string('-', 60)}\n";
+            File.AppendAllText(path, entry);
+        }
+        catch
+        {
+            // 连写日志都失败（磁盘满/无权限）则彻底放弃；不可在此再抛异常。
+        }
     }
 }

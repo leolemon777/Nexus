@@ -946,6 +946,10 @@ namespace Nexus.App.ViewModels
             _eventEngine.OnDataChanged -= OnEventEngineDataChanged;
             _eventEngine.OnAlarm -= OnEventEngineAlarm;
             _eventEngine.Dispose();
+            // M4: 解绑 _service 事件，避免 Stop 等待窗口内最后一次轮询回调
+            // 入队到已关闭的 Dispatcher。
+            _service.TagValueChanged -= OnTagValueChanged;
+            _service.OnDataPoint -= OnDataPointReceived;
             _service.Dispose();
             GC.SuppressFinalize(this);
         }

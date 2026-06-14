@@ -171,6 +171,8 @@ namespace Nexus.App.Services
         public int TagCount => _tags.Count;
         public event EventHandler<TagEntry>? TagValueChanged;
         public event EventHandler<(MonitoredAddress Address, DataPoint Point)>? OnDataPoint;
+        /// <summary>轮询或数据更新发生未预期错误时触发（M7：替代静默吞异常）。</summary>
+        public event EventHandler<string>? OnError;
 
         public AdvancedTagEngine AdvancedTags => _advancedTagEngine;
 
@@ -255,10 +257,30 @@ namespace Nexus.App.Services
 
         public void Stop()
         {
-            _cts?.Cancel();
-            _cts?.Dispose();
+            var cts = _cts;
             _cts = null;
+            var pollLoop = _pollLoop;
             _pollLoop = null;
+
+            cts?.Cancel();
+
+            // 同步等待轮询任务结束（M4 修复）：原实现只 Cancel 不等待，
+            // 导致进程退出/Dispose 时在途的设备 I/O 可能引发 ObjectDisposedException 或残留 socket。
+            // 限时 2 秒等待，超时则放弃（任务随进程退出自然终止），避免无限阻塞。
+            if (pollLoop is not null)
+            {
+                try
+                {
+                    // 限时 2 秒等待轮询结束，超时则放弃（任务随进程退出自然终止），避免无限阻塞。
+                    if (Task.WaitAny(pollLoop, Task.Delay(2000)).Equals(0))
+                    {
+                        try { pollLoop.Wait(); } catch (OperationCanceledException) { } catch (AggregateException) { }
+                    }
+                }
+                catch { /* 忽略等待期间的异常 */ }
+            }
+
+            cts?.Dispose();
         }
 
         // ── Tag management ────────────────────────────────
@@ -388,7 +410,12 @@ namespace Nexus.App.Services
                     _advancedTagEngine.UpdateSourceValues(sourceValues);
                 }
                 catch (OperationCanceledException) { break; }
-                catch { }
+                catch (Exception ex)
+                {
+                    // M7 修复：原 catch { } 静默吞掉所有异常，导致监控"看起来健康"实际已停摆。
+                    // 现在通过 OnError 事件暴露错误，供 UI/日志诊断。
+                    OnError?.Invoke(this, ex.Message);
+                }
             }
         }
 
