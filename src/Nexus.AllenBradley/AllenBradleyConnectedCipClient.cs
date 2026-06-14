@@ -273,23 +273,16 @@ namespace Nexus.AllenBradley
             return ms.ToArray();
         }
 
-        /// <summary>构建 Connected Message ENIP 数据（SendUnitData）。</summary>
+        /// <summary>构建 Connected Message ENIP 数据（SendUnitData 的 payload，不含 ENIP 头）。</summary>
         private byte[] BuildConnectedMessageData(byte[] cipData)
         {
+            // B1 修复：原方法手工写入了 24 字节 ENIP 头，但调用方 SendEnip 还会再前置一个头，
+            // 导致双重 ENIP 头（48 字节），Connected CIP 通讯必然失败。
+            // 正确做法：只返回 SendUnitData 的 payload（InterfaceHandle + Timeout + Items + CIP）。
             int totalLen = 2 + cipData.Length;
 
-            byte[] result = new byte[24 + 4 + 2 + 2 + totalLen];
+            byte[] result = new byte[4 + 2 + 2 + 2 + 4 + 2 + totalLen];
             int i = 0;
-            // ENIP Header: SendUnitData (0x0070)
-            result[i++] = 0x70; result[i++] = 0x00;
-            int enipDataLen = 4 + 2 + 2 + 2 + 4 + 2 + totalLen;
-            result[i++] = (byte)(enipDataLen & 0xFF);
-            result[i++] = (byte)((enipDataLen >> 8) & 0xFF);
-            // Session handle (0 for SendUnitData after ForwardOpen)
-            result[i++] = 0; result[i++] = 0; result[i++] = 0; result[i++] = 0;
-            // Status, SenderContext, Options = 0
-            for (int j = 0; j < 12; j++) result[i++] = 0;
-
             // Interface Handle = 0
             result[i++] = 0; result[i++] = 0; result[i++] = 0; result[i++] = 0;
             // Timeout = 0

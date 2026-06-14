@@ -294,8 +294,10 @@ namespace Nexus.Omron
 
             if (addr.Area == FinsMemoryArea.EM)
             {
-                cmdDataFull[1] = 0x00;
-                cmdDataFull[2] = addr.EmBank;
+                // B4 修复：FINS EM 区域地址字段为 3 字节 bank(1)+address(2,big-endian)，
+                // 原代码 bank 位置错（[2]应为[1]）且地址高字节丢弃（[3]只放低字节）。
+                cmdDataFull[1] = addr.EmBank;
+                cmdDataFull[2] = (byte)(addr.WordAddress >> 8);
                 cmdDataFull[3] = (byte)(addr.WordAddress & 0xFF);
             }
             else
@@ -572,8 +574,9 @@ namespace Nexus.Omron
 
             if (addr.Area == FinsMemoryArea.EM)
             {
-                cmdData[1] = 0x00;
-                cmdData[2] = addr.EmBank;
+                // B4 修复：EM 地址字段 bank(1)+address(2,big-endian)。
+                cmdData[1] = addr.EmBank;
+                cmdData[2] = (byte)(addr.WordAddress >> 8);
                 cmdData[3] = (byte)(addr.WordAddress & 0xFF);
             }
             else

@@ -126,8 +126,9 @@ namespace Nexus.Omron
 
             if (addr.Area == FinsMemoryArea.EM)
             {
-                cmdDataFull[1] = 0x00;
-                cmdDataFull[2] = addr.EmBank;
+                // B4 修复：EM 地址字段 bank(1)+address(2,big-endian)。
+                cmdDataFull[1] = addr.EmBank;
+                cmdDataFull[2] = (byte)(addr.WordAddress >> 8);
                 cmdDataFull[3] = (byte)(addr.WordAddress & 0xFF);
             }
             else
@@ -404,8 +405,9 @@ namespace Nexus.Omron
 
             if (addr.Area == FinsMemoryArea.EM)
             {
-                cmdData[1] = 0x00;
-                cmdData[2] = addr.EmBank;
+                // B4 修复：EM 地址字段 bank(1)+address(2,big-endian)。
+                cmdData[1] = addr.EmBank;
+                cmdData[2] = (byte)(addr.WordAddress >> 8);
                 cmdData[3] = (byte)(addr.WordAddress & 0xFF);
             }
             else
