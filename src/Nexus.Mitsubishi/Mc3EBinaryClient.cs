@@ -725,17 +725,37 @@ namespace Nexus.Mitsubishi
                 uint maxAddr = items[items.Count - 1].address;
                 ushort count = (ushort)(maxAddr - minAddr + 1);
 
-                var r = ReadWordsBatch(kv.Key, minAddr, count);
-                if (!r.IsSuccess)
-                    return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+                // 后续3 修复：位区域（M/X/Y/B/L/S/F）应使用位读取，字区域（D/W/R/Z）用字读取。
+                // 原统一用 ReadWordsBatch 对位区域会被 PLC 拒绝（位区域不支持字读取）。
+                bool isBit = Mc3EAddressParser.IsBitAddress(items[0].original);
 
-                foreach (var item in items)
+                if (isBit)
                 {
-                    int offset = (int)(item.address - minAddr) * 2;
-                    if (offset + 1 < r.Content.Length)
+                    var r = ReadBitsBatch(kv.Key, minAddr, count);
+                    if (!r.IsSuccess)
+                        return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+
+                    foreach (var item in items)
                     {
-                        ushort val = (ushort)((r.Content[offset] << 8) | r.Content[offset + 1]);
-                        result[item.original] = val;
+                        int offset = (int)(item.address - minAddr);
+                        if (offset < r.Content.Length)
+                            result[item.original] = r.Content[offset] != 0;
+                    }
+                }
+                else
+                {
+                    var r = ReadWordsBatch(kv.Key, minAddr, count);
+                    if (!r.IsSuccess)
+                        return OperateResult<Dictionary<string, object?>>.Failed(r.Message, r.ErrorCode);
+
+                    foreach (var item in items)
+                    {
+                        int offset = (int)(item.address - minAddr) * 2;
+                        if (offset + 1 < r.Content.Length)
+                        {
+                            ushort val = (ushort)((r.Content[offset] << 8) | r.Content[offset + 1]);
+                            result[item.original] = val;
+                        }
                     }
                 }
             }

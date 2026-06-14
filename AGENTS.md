@@ -117,6 +117,6 @@ Full plan in `OVERTAKE_HSL_PLAN.md` — 6-phase plan to surpass HslCommunication
 
 **Deep implementations (A-tier)**: Modbus TCP, Siemens S7 (with S7String/WString, batch read/write, PLC control commands)
 
-**Solid implementations (B-tier)**: Modbus RTU/ASCII/UDP/RtuOverTcp, Mitsubishi MC3E Binary, Omron FINS TCP, AllenBradley CIP + PCCC
+**Solid implementations (B-tier)**: Modbus RTU/ASCII/UDP/RtuOverTcp, Mitsubishi MC3E Binary/Ascii/UDP, Omron FINS TCP, AllenBradley CIP + PCCC
 
-**Partial/stub implementations**: Mitsubishi MC3E Ascii (all reads throw NotImplementedException), MC3E UDP (all methods throw), FX Serial (partial), Siemens PPI (partial) — see `OVERTAKE_HSL_PLAN.md` Phase 0 for the full list of 65 stubs to fill.
+**Partial/stub implementations**: FX Serial (partial), Siemens PPI (partial) — see `OVERTAKE_HSL_PLAN.md` Phase 0 for the full list of 65 stubs to fill. *(Note: MC3E Ascii and MC3E UDP, previously listed as stubs, are now fully implemented.)*
