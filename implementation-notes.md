@@ -487,13 +487,15 @@
 - Aligned `FxSerialClient` address parsing with the TCP wrapper by accepting `C` and `R` device codes.
 - Serialized the full FX programming-port transaction with the inherited serial async lock, covering ENQ, ACK, command, and response as one half-duplex operation.
 - Converted invalid FX serial addresses into failed `OperateResult` values before any serial write.
+- Added frame-builder bounds checks for FX address range, read word count, and write payload shape.
+- Converted FX frame construction failures into failed `OperateResult` values before serial I/O, so invalid lengths or payloads do not write partial traffic.
 
 ## Verification
-- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 33/33.
-- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore` passed: 342/342.
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 37/37.
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-build` passed: 346/346.
 - `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 0 warnings.
 - `dotnet test tests/Nexus.MitsubishiFx.Tests --configuration Release --no-restore` could not run because that project is not present on the current branch; `rg --files tests | rg "MitsubishiFx|Fx"` found only `tests/Nexus.Mitsubishi.Tests/FxSerialFrameTests.cs`.
 
 ## Risks
 - FX Serial remains fake-serial verified only; real FX hardware validation is still required before production readiness claims.
-- Address area semantics for bit devices versus word devices still need a dedicated audit after this checksum/address cleanup.
+- Address area semantics for bit devices versus word devices still need a dedicated audit after this checksum/address/bounds cleanup.

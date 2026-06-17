@@ -103,14 +103,30 @@ namespace Nexus.Mitsubishi
         {
             var addr = TryParseAddress(address);
             if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
-            return OperateResult<byte[]>.Success(FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, words));
+
+            try
+            {
+                return OperateResult<byte[]>.Success(FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, words));
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<byte[]>.Failed(ex.Message);
+            }
         }
 
         private static OperateResult<byte[]> BuildWriteFrame(string address, byte[] data)
         {
             var addr = TryParseAddress(address);
             if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
-            return OperateResult<byte[]>.Success(FxFrameBuilder.BuildWriteCommand(addr.Content.DeviceCode, addr.Content.Address, data));
+
+            try
+            {
+                return OperateResult<byte[]>.Success(FxFrameBuilder.BuildWriteCommand(addr.Content.DeviceCode, addr.Content.Address, data));
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<byte[]>.Failed(ex.Message);
+            }
         }
 
         public async Task<OperateResult<short>> ReadInt16Async(string address, CancellationToken ct = default)

@@ -199,6 +199,24 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
+    public void FxFrameBuilder_BuildReadCommand_RejectsOutOfRangeFields()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', -1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 10000, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0, 256));
+    }
+
+    [Fact]
+    public void FxFrameBuilder_BuildWriteCommand_RejectsInvalidData()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildWriteCommand('D', 10000, new byte[] { 0x12, 0x34 }));
+        Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, null!));
+        Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, Array.Empty<byte>()));
+        Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, new byte[] { 0x12 }));
+    }
+
+    [Fact]
     public void FxFrameBuilder_VerifyResponse_AcceptsAckOnly()
     {
         bool ok = FxFrameBuilder.VerifyResponse(new byte[] { 0x06 }, out byte[] data);
@@ -470,6 +488,34 @@ public sealed class FxSerialFrameTests
 
         Assert.False(result.IsSuccess);
         Assert.Contains("无效的 FX 地址格式", result.Message);
+        Assert.Empty(port.Writes);
+    }
+
+    [Fact]
+    public void FxSerialClient_ReadBytes_TooLargeLength_ReturnsFailureWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.ReadBytes("D0", 512);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FX 读取字数必须在", result.Message);
+        Assert.Empty(port.Writes);
+    }
+
+    [Fact]
+    public void FxSerialClient_WriteBytes_EmptyPayload_ReturnsFailureWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.Write("D100", Array.Empty<byte>());
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FX 写入数据不能为空", result.Message);
         Assert.Empty(port.Writes);
     }
 

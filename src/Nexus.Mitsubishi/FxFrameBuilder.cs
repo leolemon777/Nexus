@@ -14,6 +14,8 @@ namespace Nexus.Mitsubishi
         private const byte NAK = 0x15;
         private const byte STX = 0x02;
         private const byte ETX = 0x03;
+        private const int MaxAddress = 9999;
+        private const int MaxWordCount = 0xFF;
 
         /// <summary>
         /// 构建 FX 读取命令帧 (Command '0')。
@@ -23,10 +25,13 @@ namespace Nexus.Mitsubishi
         /// <param name="wordCount">读取字数 (1 word = 2 bytes)。</param>
         public static byte[] BuildReadCommand(char deviceCode, int address, int wordCount)
         {
+            ValidateAddress(address);
+            ValidateWordCount(wordCount);
+
             string addrStr = address.ToString("D4");
             string countStr = wordCount.ToString("X2"); // 2位十六进制
 
-            string cmd = $"0{deviceCode}{addrStr}{countStr}";
+            string cmd = $"0{char.ToUpperInvariant(deviceCode)}{addrStr}{countStr}";
             byte[] data = Encoding.ASCII.GetBytes(cmd);
             
             byte[] frame = new byte[1 + data.Length + 1 + 2]; // STX + Data + ETX + SUM
@@ -49,10 +54,13 @@ namespace Nexus.Mitsubishi
         /// <param name="data">要写入的字节数据 (必须是偶数长度)。</param>
         public static byte[] BuildWriteCommand(char deviceCode, int address, byte[] data)
         {
+            ValidateAddress(address);
+            ValidateWriteData(data);
+
             string addrStr = address.ToString("D4");
             string dataStr = BitConverter.ToString(data).Replace("-", ""); // 转为十六进制字符串
             
-            string cmd = $"1{deviceCode}{addrStr}{dataStr}";
+            string cmd = $"1{char.ToUpperInvariant(deviceCode)}{addrStr}{dataStr}";
             byte[] cmdBytes = Encoding.ASCII.GetBytes(cmd);
             
             byte[] frame = new byte[1 + cmdBytes.Length + 1 + 2]; // STX + Data + ETX + SUM
@@ -65,6 +73,26 @@ namespace Nexus.Mitsubishi
             frame[frame.Length - 1] = sumBytes[1];
 
             return frame;
+        }
+
+        private static void ValidateAddress(int address)
+        {
+            if (address < 0 || address > MaxAddress)
+                throw new ArgumentOutOfRangeException(nameof(address), $"FX 地址必须在 0..{MaxAddress} 范围内");
+        }
+
+        private static void ValidateWordCount(int wordCount)
+        {
+            if (wordCount < 1 || wordCount > MaxWordCount)
+                throw new ArgumentOutOfRangeException(nameof(wordCount), $"FX 读取字数必须在 1..{MaxWordCount} 范围内");
+        }
+
+        private static void ValidateWriteData(byte[] data)
+        {
+            if (data == null || data.Length == 0)
+                throw new ArgumentException("FX 写入数据不能为空", nameof(data));
+            if ((data.Length % 2) != 0)
+                throw new ArgumentException("FX 写入数据长度必须为偶数字节", nameof(data));
         }
 
         /// <summary>
