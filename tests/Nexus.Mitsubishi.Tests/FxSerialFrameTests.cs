@@ -492,6 +492,64 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
+    public void FxSerialClient_ReadBool_BitAddress_UsesBitDeviceFrame()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(WithHandshakeAck(BuildFxResponse("01")));
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.ReadBool("M100");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True(result.Content);
+        Assert.Equal(new byte[] { 0x05 }, port.Writes[0]);
+        Assert.Equal(FxFrameBuilder.BuildReadCommand('M', 100, 1), port.Writes[1]);
+    }
+
+    [Fact]
+    public void FxSerialClient_ReadBool_WordAddress_ReturnsFailureWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.ReadBool("D100");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FX Bool 读取只支持位设备地址", result.Message);
+        Assert.Empty(port.Writes);
+    }
+
+    [Fact]
+    public void FxSerialClient_WriteBool_BitAddressRejectsUnverifiedForceWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.Write("M100", true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("拒绝执行未验证写入", result.Message);
+        Assert.Empty(port.Writes);
+    }
+
+    [Fact]
+    public void FxSerialClient_WriteBool_WordAddress_ReturnsFailureWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.Write("D100", true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FX Bool 写入只支持位设备地址", result.Message);
+        Assert.Empty(port.Writes);
+    }
+
+    [Fact]
     public void FxSerialClient_ReadBytes_TooLargeLength_ReturnsFailureWithoutWriting()
     {
         using var port = new FxFakeSerialPort();

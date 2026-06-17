@@ -82,7 +82,7 @@ namespace Nexus.Mitsubishi
         }
 
         private static readonly Regex _fxAddrRegex = new Regex(@"^([DMXYTSRC])(\d+)$", RegexOptions.IgnoreCase);
-        private class FxAddress { public char DeviceCode; public int Address; }
+        private class FxAddress { public char DeviceCode; public int Address; public bool IsBitDevice; }
         private static OperateResult<FxAddress> TryParseAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
@@ -96,7 +96,29 @@ namespace Nexus.Mitsubishi
             if (!int.TryParse(match.Groups[2].Value, out int parsedAddress))
                 return OperateResult<FxAddress>.Failed($"无效的 FX 地址编号: {address}");
 
-            return OperateResult<FxAddress>.Success(new FxAddress { DeviceCode = match.Groups[1].Value[0], Address = parsedAddress });
+            char deviceCode = match.Groups[1].Value[0];
+            return OperateResult<FxAddress>.Success(new FxAddress
+            {
+                DeviceCode = deviceCode,
+                Address = parsedAddress,
+                IsBitDevice = IsBitDevice(deviceCode)
+            });
+        }
+
+        private static bool IsBitDevice(char deviceCode)
+        {
+            switch (char.ToUpperInvariant(deviceCode))
+            {
+                case 'M':
+                case 'X':
+                case 'Y':
+                case 'T':
+                case 'S':
+                case 'C':
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static OperateResult<byte[]> BuildReadFrame(string address, int words)
@@ -229,11 +251,23 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<bool>> ReadBoolAsync(string address, CancellationToken ct = default)
         {
-            var command = BuildReadFrame(address, 1);
-            if (!command.IsSuccess) return OperateResult<bool>.Failed(command.Message, command.ErrorCode);
-            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<bool>.Failed(addr.Message, addr.ErrorCode);
+            if (!addr.Content.IsBitDevice) return OperateResult<bool>.Failed($"FX Bool 读取只支持位设备地址: {address}");
+
+            byte[] command;
+            try
+            {
+                command = FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, 1);
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<bool>.Failed(ex.Message);
+            }
+
+            var result = await SendFxAsync(command, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
-            return result.Content.Length >= 1 ? OperateResult<bool>.Success((result.Content[0] & 0x01) != 0) : OperateResult<bool>.Failed("FX 读取 Bool 响应数据不足");
+            return result.Content.Length >= 1 ? OperateResult<bool>.Success(result.Content[0] != 0) : OperateResult<bool>.Failed("FX 读取 Bool 响应数据不足");
         }
         public override OperateResult<bool> ReadBool(string address) => ReadBoolAsync(address, CancellationToken.None).GetAwaiter().GetResult();
 
@@ -275,12 +309,13 @@ namespace Nexus.Mitsubishi
 
         // ── 补全类型写入 ──────────────────────────
 
-        public async Task<OperateResult> WriteAsync(string address, bool value, CancellationToken ct = default)
+        public Task<OperateResult> WriteAsync(string address, bool value, CancellationToken ct = default)
         {
-            var command = BuildWriteFrame(address, new byte[] { (byte)(value ? 1 : 0), 0x00 });
-            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
-            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
-            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return Task.FromResult(OperateResult.Failed(addr.Message, addr.ErrorCode));
+            if (!addr.Content.IsBitDevice) return Task.FromResult(OperateResult.Failed($"FX Bool 写入只支持位设备地址: {address}"));
+
+            return Task.FromResult(OperateResult.Failed("FX Serial Bool 写入需要编程口强制位命令和地址映射验证，当前拒绝执行未验证写入"));
         }
         public override OperateResult Write(string address, bool value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
 
