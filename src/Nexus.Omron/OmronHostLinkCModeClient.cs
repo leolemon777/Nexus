@@ -217,7 +217,7 @@ namespace Nexus.Omron
         /// <summary>将 C-Mode 命令打包为完整帧。</summary>
         public byte[] PackFrame(byte[] headerCode, byte[] text)
         {
-            int bodyLen = 1 + 4 + headerCode.Length + text.Length; // @ + station(4) + header(2) + text
+            int bodyLen = 1 + 2 + headerCode.Length + text.Length; // @ + station(2) + header(2) + text
             int totalLen = bodyLen + 2 + 1 + 1; // + FCS(2) + *(1) + CR(1)
             var frame = new byte[totalLen];
 
@@ -245,28 +245,40 @@ namespace Nexus.Omron
         /// <summary>解析 C-Mode 响应帧，提取数据。</summary>
         public static OperateResult<byte[]> ParseResponse(byte[] response)
         {
-            if (response == null || response.Length < 11)
+            if (response == null || response.Length < 13)
                 return OperateResult<byte[]>.Failed($"C-Mode 响应过短 ({response?.Length ?? 0} 字节)");
 
             try
             {
-                // @ + station(4) + headerCode(2) + responseCode(2) + text + FCS(2) + * + CR
-                // 响应码在 [5..8]（4 个 ASCII hex 字符）
-                if (response.Length < 11)
-                    return OperateResult<byte[]>.Failed("C-Mode 响应不完整");
+                if (response[0] != STX)
+                    return OperateResult<byte[]>.Failed($"C-Mode 响应帧头错误: 0x{response[0]:X2}");
 
-                string respCodeStr = Encoding.ASCII.GetString(response, 5, 4);
-                int respCode = Convert.ToInt32(respCodeStr, 16);
+                if (response[response.Length - 2] != ETX || response[response.Length - 1] != CR)
+                    return OperateResult<byte[]>.Failed("C-Mode 响应帧尾错误");
 
-                // 数据区域 [9..length-4]（ASCII hex）
-                byte[] data = new byte[0];
+                if (!TryParseAsciiHexByte(response[response.Length - 4], response[response.Length - 3], out byte actualFcs))
+                    return OperateResult<byte[]>.Failed("C-Mode 响应 FCS 格式错误");
+
+                byte expectedFcs = 0;
+                for (int i = 0; i < response.Length - 4; i++)
+                    expectedFcs ^= response[i];
+
+                if (actualFcs != expectedFcs)
+                    return OperateResult<byte[]>.Failed($"C-Mode FCS 校验失败: expected 0x{expectedFcs:X2}, actual 0x{actualFcs:X2}");
+
+                // @ + unit(2) + headerCode(2) + responseCode(4) + text + FCS(2) + * + CR
+                // 响应码在 [5..8]，数据区域在 [9..^4]。
+                if (!TryParseAsciiHexWord(response, 5, out int respCode))
+                    return OperateResult<byte[]>.Failed("C-Mode 响应码格式错误");
+
                 int dataStart = 9;
                 int dataEnd = response.Length - 4; // FCS(2) + *(1) + CR(1) = 4
-                if (dataEnd > dataStart)
-                {
-                    string dataHex = Encoding.ASCII.GetString(response, dataStart, dataEnd - dataStart);
-                    data = OmronHostLinkClient.AsciiHexToBytes(dataHex);
-                }
+                int dataHexLength = dataEnd - dataStart;
+                if (dataHexLength % 2 != 0)
+                    return OperateResult<byte[]>.Failed("C-Mode 响应数据十六进制长度错误");
+
+                if (!TryAsciiHexToBytes(response, dataStart, dataHexLength, out byte[] data))
+                    return OperateResult<byte[]>.Failed("C-Mode 响应数据包含非法十六进制字符");
 
                 if (respCode != 0x0000 && respCode != 0x00)
                     return OperateResult<byte[]>.Failed($"C-Mode 错误码: 0x{respCode:X4}");
@@ -277,6 +289,79 @@ namespace Nexus.Omron
             {
                 return OperateResult<byte[]>.Failed($"C-Mode 响应解析失败: {ex.Message}");
             }
+        }
+
+        private static bool TryAsciiHexToBytes(byte[] data, int offset, int length, out byte[] result)
+        {
+            result = Array.Empty<byte>();
+            if (offset < 0 || length < 0 || offset + length > data.Length || length % 2 != 0)
+                return false;
+
+            result = new byte[length / 2];
+            for (int i = 0; i < result.Length; i++)
+            {
+                if (!TryParseAsciiHexByte(data[offset + i * 2], data[offset + i * 2 + 1], out result[i]))
+                {
+                    result = Array.Empty<byte>();
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryParseAsciiHexWord(byte[] data, int offset, out int value)
+        {
+            value = 0;
+            if (offset < 0 || offset + 4 > data.Length)
+                return false;
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (!TryHexCharToInt(data[offset + i], out int nibble))
+                    return false;
+
+                value = (value << 4) | nibble;
+            }
+
+            return true;
+        }
+
+        private static bool TryParseAsciiHexByte(byte high, byte low, out byte value)
+        {
+            value = 0;
+            if (!TryHexCharToInt(high, out int highNibble) ||
+                !TryHexCharToInt(low, out int lowNibble))
+            {
+                return false;
+            }
+
+            value = (byte)((highNibble << 4) | lowNibble);
+            return true;
+        }
+
+        private static bool TryHexCharToInt(byte c, out int value)
+        {
+            if (c >= '0' && c <= '9')
+            {
+                value = c - '0';
+                return true;
+            }
+
+            if (c >= 'A' && c <= 'F')
+            {
+                value = c - 'A' + 10;
+                return true;
+            }
+
+            if (c >= 'a' && c <= 'f')
+            {
+                value = c - 'a' + 10;
+                return true;
+            }
+
+            value = 0;
+            return false;
         }
 
         // ═══════════════════════════════════════════

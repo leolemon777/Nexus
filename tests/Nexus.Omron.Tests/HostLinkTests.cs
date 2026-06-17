@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Nexus;
 using Nexus.Omron;
 
 namespace Nexus.Omron.Tests;
@@ -26,6 +27,41 @@ public class HostLinkTests
             fcs ^= 0x01;
 
         return Encoding.ASCII.GetBytes(raw + fcs.ToString("X2") + "*\r");
+    }
+
+    private static byte[] BuildCModeResponse(string headerCode, string responseCode, string text = "", bool badFcs = false)
+    {
+        string raw = "@00" + headerCode + responseCode + text;
+
+        byte fcs = 0;
+        byte[] rawBytes = Encoding.ASCII.GetBytes(raw);
+        foreach (byte b in rawBytes)
+            fcs ^= b;
+
+        if (badFcs)
+            fcs ^= 0x01;
+
+        return Encoding.ASCII.GetBytes(raw + fcs.ToString("X2") + "*\r");
+    }
+
+    private sealed class CModeFakeSerialPort : ISerialPort
+    {
+        public string PortName { get; set; } = "COM_CMODE_TEST";
+        public int BaudRate { get; set; } = 9600;
+        public int DataBits { get; set; } = 7;
+        public StopBits StopBits { get; set; } = StopBits.Two;
+        public Parity Parity { get; set; } = Parity.Even;
+        public int ReadTimeout { get; set; } = 5000;
+        public int WriteTimeout { get; set; } = 5000;
+        public bool IsOpen { get; private set; }
+        public bool DtrEnable { get; set; }
+        public bool RtsEnable { get; set; }
+
+        public void Open() => IsOpen = true;
+        public void Close() => IsOpen = false;
+        public int Read(byte[] buffer, int offset, int count) => 0;
+        public void Write(byte[] buffer, int offset, int count) { }
+        public void Dispose() => Close();
     }
 
     #region ASCII Hex 辅助方法
@@ -288,6 +324,144 @@ public class HostLinkTests
 
         Assert.False(result.IsSuccess);
         Assert.Contains("长度", result.Message);
+    }
+
+    #endregion
+
+    #region C-Mode ParseResponse 响应解析
+
+    [Fact]
+    public void CMode_PackFrame_UsesTwoDigitStationAndNoTrailingNulls()
+    {
+        using var client = new OmronHostLinkCModeClient(new CModeFakeSerialPort());
+        byte[] frame = client.PackFrame(Encoding.ASCII.GetBytes("RD"), Encoding.ASCII.GetBytes("ABC"));
+
+        Assert.Equal(12, frame.Length);
+        Assert.Equal((byte)'@', frame[0]);
+        Assert.Equal((byte)'0', frame[1]);
+        Assert.Equal((byte)'0', frame[2]);
+        Assert.Equal((byte)'R', frame[3]);
+        Assert.Equal((byte)'D', frame[4]);
+        Assert.Equal((byte)'*', frame[frame.Length - 2]);
+        Assert.Equal(0x0D, frame[frame.Length - 1]);
+
+        byte expectedFcs = 0;
+        for (int i = 0; i < frame.Length - 4; i++)
+            expectedFcs ^= frame[i];
+
+        byte actualFcs = Convert.ToByte(Encoding.ASCII.GetString(frame, frame.Length - 4, 2), 16);
+        Assert.Equal(expectedFcs, actualFcs);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_Success_WithData()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1234");
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(new byte[] { 0x12, 0x34 }, result.Content);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_Success_NoData()
+    {
+        byte[] response = BuildCModeResponse("WD", "0000");
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Empty(result.Content);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_ErrorCode_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0301");
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("0x0301", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_InvalidStart_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1234");
+        response[0] = (byte)'#';
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("帧头", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_InvalidTrailer_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1234");
+        response[response.Length - 2] = (byte)'!';
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("帧尾", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_BadFcs_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1234", badFcs: true);
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FCS", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_InvalidFcsHex_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1234");
+        response[response.Length - 4] = (byte)'Z';
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FCS 格式", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_InvalidDataHex_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "ZZ");
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("非法十六进制", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_OddDataHexLength_ReturnsFailure()
+    {
+        byte[] response = BuildCModeResponse("RD", "0000", "1");
+
+        var result = OmronHostLinkCModeClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("长度", result.Message);
+    }
+
+    [Fact]
+    public void CMode_ParseResponse_TooShort_ReturnsFailure()
+    {
+        var result = OmronHostLinkCModeClient.ParseResponse(new byte[12]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("过短", result.Message);
     }
 
     #endregion
