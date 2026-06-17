@@ -184,6 +184,53 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
+    public void FxFrameBuilder_BuildReadCommand_SumIncludesEtx()
+    {
+        byte[] frame = FxFrameBuilder.BuildReadCommand('D', 100, 2);
+
+        int sum = 0;
+        for (int i = 0; i < frame.Length - 2; i++)
+            sum += frame[i];
+
+        string expected = (sum & 0xFF).ToString("X2");
+        string actual = Encoding.ASCII.GetString(frame, frame.Length - 2, 2);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void FxFrameBuilder_VerifyResponse_AcceptsAckOnly()
+    {
+        bool ok = FxFrameBuilder.VerifyResponse(new byte[] { 0x06 }, out byte[] data);
+
+        Assert.True(ok);
+        Assert.Empty(data);
+    }
+
+    [Fact]
+    public void FxFrameBuilder_VerifyResponse_RejectsEmptyWithoutThrowing()
+    {
+        bool nullOk = FxFrameBuilder.VerifyResponse(null!, out byte[] nullData);
+        bool emptyOk = FxFrameBuilder.VerifyResponse(Array.Empty<byte>(), out byte[] emptyData);
+
+        Assert.False(nullOk);
+        Assert.Empty(nullData);
+        Assert.False(emptyOk);
+        Assert.Empty(emptyData);
+    }
+
+    [Fact]
+    public void FxFrameBuilder_VerifyResponse_RejectsInvalidHexPayloadWithoutThrowing()
+    {
+        byte[] response = BuildFxResponse("ZZ");
+
+        bool ok = FxFrameBuilder.VerifyResponse(response, out byte[] data);
+
+        Assert.False(ok);
+        Assert.Empty(data);
+    }
+
+    [Fact]
     public void FxFrameBuilder_VerifyResponse_RejectsNak()
     {
         byte[] response = { 0x15 }; // NAK
@@ -395,6 +442,35 @@ public sealed class FxSerialFrameTests
         Assert.Equal((short)0x1234, result.Content);
         Assert.Equal(new byte[] { 0x05 }, port.Writes[0]);
         Assert.Equal(FxFrameBuilder.BuildReadCommand('D', 100, 1), port.Writes[1]);
+    }
+
+    [Fact]
+    public void FxSerialClient_ReadInt16_CounterAddress_UsesCDeviceCode()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(WithHandshakeAck(BuildFxResponse("3412")));
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.ReadInt16("C100");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((short)0x1234, result.Content);
+        Assert.Equal(FxFrameBuilder.BuildReadCommand('C', 100, 1), port.Writes[1]);
+    }
+
+    [Fact]
+    public void FxSerialClient_ReadInt16_InvalidAddress_ReturnsFailureWithoutWriting()
+    {
+        using var port = new FxFakeSerialPort();
+        port.Open();
+        using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
+
+        var result = client.ReadInt16("Q100");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("无效的 FX 地址格式", result.Message);
+        Assert.Empty(port.Writes);
     }
 
     [Fact]

@@ -34,7 +34,7 @@ namespace Nexus.Mitsubishi
             Buffer.BlockCopy(data, 0, frame, 1, data.Length);
             frame[frame.Length - 3] = ETX;
             
-            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 3);
+            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 2);
             frame[frame.Length - 2] = sumBytes[0];
             frame[frame.Length - 1] = sumBytes[1];
 
@@ -60,7 +60,7 @@ namespace Nexus.Mitsubishi
             Buffer.BlockCopy(cmdBytes, 0, frame, 1, cmdBytes.Length);
             frame[frame.Length - 3] = ETX;
             
-            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 3);
+            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 2);
             frame[frame.Length - 2] = sumBytes[0];
             frame[frame.Length - 1] = sumBytes[1];
 
@@ -90,11 +90,7 @@ namespace Nexus.Mitsubishi
         public static bool VerifyResponse(byte[] response, out byte[] data)
         {
             data = Array.Empty<byte>();
-            if (response.Length < 4) return false;
-
-            // 检查是否以 ACK 或 NAK 开头 (握手阶段)
-            if (response[0] == NAK) return false;
-            if (response[0] != ACK && response[0] != STX) return false;
+            if (response == null || response.Length == 0) return false;
 
             // 如果是纯 ACK (无数据返回，如写入成功)
             if (response[0] == ACK && response.Length == 1)
@@ -102,6 +98,12 @@ namespace Nexus.Mitsubishi
                 data = Array.Empty<byte>();
                 return true;
             }
+
+            if (response.Length < 4) return false;
+
+            // 检查是否以 ACK 或 NAK 开头 (握手阶段)
+            if (response[0] == NAK) return false;
+            if (response[0] != ACK && response[0] != STX) return false;
 
             // 查找 STX 和 ETX
             int stxIndex = Array.IndexOf(response, STX);
@@ -129,7 +131,15 @@ namespace Nexus.Mitsubishi
             if (dataLen > 0)
             {
                 string hexData = Encoding.ASCII.GetString(response, stxIndex + 7, dataLen);
-                data = HexStringToByteArray(hexData);
+                try
+                {
+                    data = HexStringToByteArray(hexData);
+                }
+                catch (Exception)
+                {
+                    data = Array.Empty<byte>();
+                    return false;
+                }
             }
 
             return true;

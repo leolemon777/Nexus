@@ -474,3 +474,26 @@
 - Left mixed-boundary files, independent tracked fixes, `NuGet.Config`, `NEXUS_COMPLETION_PLAN.md`, and all experimental scaffolds unstaged.
 - Post-staging verification: `git diff --cached --check` passed.
 - Post-staging verification: `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed with 0 errors and 0 warnings.
+
+---
+
+# Mitsubishi FX Serial Hardening Notes
+
+## Decisions
+- Started FX Serial hardening with protocol-frame correctness rather than broad UI/scaffold work.
+- Corrected FX programming-port command SUM generation to include ETX, matching the public verifier and existing response-frame test helper.
+- Made `FxFrameBuilder.VerifyResponse` accept pure ACK responses as documented.
+- Hardened `FxFrameBuilder.VerifyResponse` so empty responses and invalid hex payloads return `false` instead of throwing.
+- Aligned `FxSerialClient` address parsing with the TCP wrapper by accepting `C` and `R` device codes.
+- Serialized the full FX programming-port transaction with the inherited serial async lock, covering ENQ, ACK, command, and response as one half-duplex operation.
+- Converted invalid FX serial addresses into failed `OperateResult` values before any serial write.
+
+## Verification
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 33/33.
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore` passed: 342/342.
+- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 0 warnings.
+- `dotnet test tests/Nexus.MitsubishiFx.Tests --configuration Release --no-restore` could not run because that project is not present on the current branch; `rg --files tests | rg "MitsubishiFx|Fx"` found only `tests/Nexus.Mitsubishi.Tests/FxSerialFrameTests.cs`.
+
+## Risks
+- FX Serial remains fake-serial verified only; real FX hardware validation is still required before production readiness claims.
+- Address area semantics for bit devices versus word devices still need a dedicated audit after this checksum/address cleanup.

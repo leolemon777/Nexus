@@ -8,8 +8,6 @@ namespace Nexus.Mitsubishi
 {
     public class FxSerialClient : SerialDeviceBase, IBatchReadWrite, ISubscribeDevice
     {
-        private readonly object _fxLock = new object();
-
         public FxSerialClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
 
         // FX 使用自定义 ENQ/ACK/STX+ETX 帧协议，不走 SendAndReceive 基类路径
@@ -18,34 +16,56 @@ namespace Nexus.Mitsubishi
 
         protected async Task<OperateResult<byte[]>> SendFxAsync(byte[] commandFrame, CancellationToken ct)
         {
-            lock (_fxLock) { if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开"); Port.Write(new byte[] { 0x05 }, 0, 1); }
-            byte[] ackBuf = new byte[1];
-            if (await ReadExactSerialAsync(ackBuf, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("等待 FX ACK 超时");
-            if (ackBuf[0] == 0x15) return OperateResult<byte[]>.Failed("FX PLC 返回 NAK");
-            if (ackBuf[0] != 0x06) return OperateResult<byte[]>.Failed($"FX 握手失败: 0x{ackBuf[0]:X2}");
-
-            lock (_fxLock) { Port.Write(commandFrame, 0, commandFrame.Length); }
-            byte[] respHeader = new byte[1];
-            if (await ReadExactSerialAsync(respHeader, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("读取 FX 响应头超时");
-            if (respHeader[0] == 0x06) return OperateResult<byte[]>.Success(Array.Empty<byte>());
-            if (respHeader[0] != 0x02) return OperateResult<byte[]>.Failed($"FX 响应格式错误: 0x{respHeader[0]:X2}");
-
-            using var ms = new System.IO.MemoryStream();
-            ms.WriteByte(0x02);
-            bool etxFound = false;
-            while (!etxFound)
+            bool lockTaken = false;
+            try
             {
-                byte[] buf = new byte[1];
-                if (await ReadExactSerialAsync(buf, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("读取 FX 响应数据超时");
-                ms.WriteByte(buf[0]);
-                if (buf[0] == 0x03) etxFound = true;
-            }
-            byte[] sumBuf = new byte[2];
-            if (await ReadExactSerialAsync(sumBuf, 0, 2, ct).ConfigureAwait(false) < 2) return OperateResult<byte[]>.Failed("读取 FX SUM 校验和超时");
-            ms.Write(sumBuf, 0, 2);
+                await _asyncLock.WaitAsync(ct).ConfigureAwait(false);
+                lockTaken = true;
 
-            if (!FxFrameBuilder.VerifyResponse(ms.ToArray(), out byte[] data)) return OperateResult<byte[]>.Failed("FX 响应 SUM 校验失败");
-            return OperateResult<byte[]>.Success(data);
+                if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开");
+
+                Port.Write(new byte[] { 0x05 }, 0, 1);
+                byte[] ackBuf = new byte[1];
+                if (await ReadExactSerialAsync(ackBuf, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("等待 FX ACK 超时");
+                if (ackBuf[0] == 0x15) return OperateResult<byte[]>.Failed("FX PLC 返回 NAK");
+                if (ackBuf[0] != 0x06) return OperateResult<byte[]>.Failed($"FX 握手失败: 0x{ackBuf[0]:X2}");
+
+                Port.Write(commandFrame, 0, commandFrame.Length);
+                byte[] respHeader = new byte[1];
+                if (await ReadExactSerialAsync(respHeader, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("读取 FX 响应头超时");
+                if (respHeader[0] == 0x06) return OperateResult<byte[]>.Success(Array.Empty<byte>());
+                if (respHeader[0] != 0x02) return OperateResult<byte[]>.Failed($"FX 响应格式错误: 0x{respHeader[0]:X2}");
+
+                using var ms = new System.IO.MemoryStream();
+                ms.WriteByte(0x02);
+                bool etxFound = false;
+                while (!etxFound)
+                {
+                    byte[] buf = new byte[1];
+                    if (await ReadExactSerialAsync(buf, 0, 1, ct).ConfigureAwait(false) < 1) return OperateResult<byte[]>.Failed("读取 FX 响应数据超时");
+                    ms.WriteByte(buf[0]);
+                    if (buf[0] == 0x03) etxFound = true;
+                }
+                byte[] sumBuf = new byte[2];
+                if (await ReadExactSerialAsync(sumBuf, 0, 2, ct).ConfigureAwait(false) < 2) return OperateResult<byte[]>.Failed("读取 FX SUM 校验和超时");
+                ms.Write(sumBuf, 0, 2);
+
+                if (!FxFrameBuilder.VerifyResponse(ms.ToArray(), out byte[] data)) return OperateResult<byte[]>.Failed("FX 响应 SUM 校验失败");
+                return OperateResult<byte[]>.Success(data);
+            }
+            catch (OperationCanceledException)
+            {
+                return OperateResult<byte[]>.Failed("FX 串口通讯已取消");
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<byte[]>.Failed($"FX 串口通讯异常: {ex.Message}");
+            }
+            finally
+            {
+                if (lockTaken)
+                    _asyncLock.Release();
+            }
         }
 
         private async Task<int> ReadExactSerialAsync(byte[] buffer, int offset, int count, CancellationToken ct)
@@ -61,19 +81,43 @@ namespace Nexus.Mitsubishi
             return totalRead;
         }
 
-        private static readonly Regex _fxAddrRegex = new Regex(@"^([DMXYTS])(\d+)$", RegexOptions.IgnoreCase);
+        private static readonly Regex _fxAddrRegex = new Regex(@"^([DMXYTSRC])(\d+)$", RegexOptions.IgnoreCase);
         private class FxAddress { public char DeviceCode; public int Address; }
-        private static FxAddress ParseAddress(string address)
+        private static OperateResult<FxAddress> TryParseAddress(string address)
         {
-            var match = _fxAddrRegex.Match(address.ToUpper());
-            if (!match.Success) throw new ArgumentException($"无效的 FX 地址格式: {address}");
-            return new FxAddress { DeviceCode = match.Groups[1].Value[0], Address = int.Parse(match.Groups[2].Value) };
+            if (string.IsNullOrWhiteSpace(address))
+                return OperateResult<FxAddress>.Failed("FX 地址不能为空");
+
+            string normalized = address.Trim().ToUpperInvariant();
+            var match = _fxAddrRegex.Match(normalized);
+            if (!match.Success)
+                return OperateResult<FxAddress>.Failed($"无效的 FX 地址格式: {address}");
+
+            if (!int.TryParse(match.Groups[2].Value, out int parsedAddress))
+                return OperateResult<FxAddress>.Failed($"无效的 FX 地址编号: {address}");
+
+            return OperateResult<FxAddress>.Success(new FxAddress { DeviceCode = match.Groups[1].Value[0], Address = parsedAddress });
+        }
+
+        private static OperateResult<byte[]> BuildReadFrame(string address, int words)
+        {
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            return OperateResult<byte[]>.Success(FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, words));
+        }
+
+        private static OperateResult<byte[]> BuildWriteFrame(string address, byte[] data)
+        {
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            return OperateResult<byte[]>.Success(FxFrameBuilder.BuildWriteCommand(addr.Content.DeviceCode, addr.Content.Address, data));
         }
 
         public async Task<OperateResult<short>> ReadInt16Async(string address, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 1), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, 1);
+            if (!command.IsSuccess) return OperateResult<short>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
             return result.Content.Length >= 2 ? OperateResult<short>.Success((short)((result.Content[1] << 8) | result.Content[0])) : OperateResult<short>.Failed("FX 读取响应数据不足");
         }
@@ -81,8 +125,9 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<int>> ReadInt32Async(string address, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 2), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, 2);
+            if (!command.IsSuccess) return OperateResult<int>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<int>.Failed(result.Message, result.ErrorCode);
             return result.Content.Length >= 4 ? OperateResult<int>.Success((result.Content[3] << 24) | (result.Content[2] << 16) | (result.Content[1] << 8) | result.Content[0]) : OperateResult<int>.Failed("FX 读取响应数据不足");
         }
@@ -97,9 +142,10 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<string>> ReadStringAsync(string address, ushort length, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
             int words = (length + 1) / 2;
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, words), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, words);
+            if (!command.IsSuccess) return OperateResult<string>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<string>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < length) return OperateResult<string>.Failed("FX 读取字符串响应数据不足");
             return OperateResult<string>.Success(Encoding.ASCII.GetString(result.Content, 0, length).TrimEnd('\0'));
@@ -108,9 +154,10 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<byte[]>> ReadBytesAsync(string address, ushort length, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
             int words = (length + 1) / 2;
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, words), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, words);
+            if (!command.IsSuccess) return OperateResult<byte[]>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < length) return OperateResult<byte[]>.Failed("FX 读取字节响应数据不足");
             byte[] data = new byte[length];
@@ -121,16 +168,18 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult> WriteAsync(string address, short value, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, new byte[] { (byte)(value & 0xFF), (byte)(value >> 8) }), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, new byte[] { (byte)(value & 0xFF), (byte)(value >> 8) });
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, short value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
 
         public async Task<OperateResult> WriteAsync(string address, int value, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, BitConverter.GetBytes(value)), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, BitConverter.GetBytes(value));
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, int value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
@@ -140,10 +189,11 @@ namespace Nexus.Mitsubishi
         public async Task<OperateResult> WriteAsync(string address, string value, CancellationToken ct = default)
         {
             if (value == null) return OperateResult.Failed("写入字符串不能为空");
-            var addr = ParseAddress(address);
             byte[] data = Encoding.ASCII.GetBytes(value);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, string value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
@@ -151,9 +201,10 @@ namespace Nexus.Mitsubishi
         public async Task<OperateResult> WriteAsync(string address, byte[] data, CancellationToken ct = default)
         {
             if (data == null) return OperateResult.Failed("写入数据不能为空");
-            var addr = ParseAddress(address);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, byte[] data) => WriteAsync(address, data, CancellationToken.None).GetAwaiter().GetResult();
@@ -162,8 +213,9 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<bool>> ReadBoolAsync(string address, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 1), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, 1);
+            if (!command.IsSuccess) return OperateResult<bool>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
             return result.Content.Length >= 1 ? OperateResult<bool>.Success((result.Content[0] & 0x01) != 0) : OperateResult<bool>.Failed("FX 读取 Bool 响应数据不足");
         }
@@ -183,8 +235,9 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult<long>> ReadInt64Async(string address, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 4), ct).ConfigureAwait(false);
+            var command = BuildReadFrame(address, 4);
+            if (!command.IsSuccess) return OperateResult<long>.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             if (!result.IsSuccess) return OperateResult<long>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < 8) return OperateResult<long>.Failed("FX 读取长整型响应数据不足");
             return OperateResult<long>.Success(BitConverter.ToInt64(result.Content, 0));
@@ -208,8 +261,9 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult> WriteAsync(string address, bool value, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, new byte[] { (byte)(value ? 1 : 0), 0x00 }), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, new byte[] { (byte)(value ? 1 : 0), 0x00 });
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, bool value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
@@ -219,11 +273,12 @@ namespace Nexus.Mitsubishi
 
         public async Task<OperateResult> WriteAsync(string address, long value, CancellationToken ct = default)
         {
-            var addr = ParseAddress(address);
             byte[] data = new byte[8];
             Buffer.BlockCopy(BitConverter.GetBytes((int)(value & 0xFFFFFFFF)), 0, data, 0, 4);
             Buffer.BlockCopy(BitConverter.GetBytes((int)(value >> 32)), 0, data, 4, 4);
-            var result = await SendFxAsync(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data), ct).ConfigureAwait(false);
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+            var result = await SendFxAsync(command.Content, ct).ConfigureAwait(false);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
         public override OperateResult Write(string address, long value) => WriteAsync(address, value, CancellationToken.None).GetAwaiter().GetResult();
@@ -235,11 +290,11 @@ namespace Nexus.Mitsubishi
 
         public override Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
         public override Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public override Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
 
         // ═══════════════════════════════════════════
         //  IBatchReadWrite — 批量读写接口
