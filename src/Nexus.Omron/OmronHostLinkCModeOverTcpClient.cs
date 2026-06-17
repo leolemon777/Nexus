@@ -147,6 +147,9 @@ namespace Nexus.Omron
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var addr = _addressParser.Parse(address);
             var frame = BuildWriteCommand(addr, data);
             var recv = SendAndReceive(frame);

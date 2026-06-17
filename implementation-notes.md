@@ -514,11 +514,13 @@
 - Corrected C-Mode serial and TCP `ReadBool` so bit addresses test the requested bit in the returned word instead of only checking the high byte.
 - Corrected C-Mode serial and TCP `Write(bool)` for bit addresses to read-modify-write the target word, preserving other bits in the same word.
 - Adjusted the C-Mode fake serial port to return one CR-terminated frame per read so multi-step public API round trips are testable.
+- Padded odd-length C-Mode byte/string writes to a word boundary before frame construction, matching the rest of the word-oriented protocol clients.
+- Tightened the C-Mode virtual server so `WD` rejects mismatched wordCount/data lengths instead of accepting malformed test frames.
 
 ## Verification
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~CMode"` passed: 21/21.
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build --filter "FullyQualifiedName~HostLinkTests"` passed: 62/62.
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 163/163.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~CMode"` passed: 23/23.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build --filter "FullyQualifiedName~HostLinkTests"` passed: 64/64.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 165/165.
 - `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 92 warnings.
 - `dotnet test Nexus.slnx --configuration Release --no-build --verbosity minimal` passed across the solution with 0 failures.
 

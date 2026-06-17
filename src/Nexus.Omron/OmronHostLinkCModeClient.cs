@@ -107,8 +107,10 @@ namespace Nexus.Omron
 
         public override OperateResult Write(string address, byte[] data)
         {
+            if (data == null)
+                return OperateResult.Failed("写入数据不能为空");
+
             var addr = _addressParser.Parse(address);
-            ushort wordCount = (ushort)(data.Length / 2);
             var frame = BuildWriteCommand(addr, data);
             var recv = SendAndReceiveSerial(frame);
             if (!recv.IsSuccess) return OperateResult.Failed(recv.Message);
@@ -236,12 +238,13 @@ namespace Nexus.Omron
         /// <summary>构建 WD（写入）命令帧。</summary>
         public byte[] BuildWriteCommand(OmronHostLinkCModeAddress addr, byte[] data)
         {
+            byte[] writeData = PadToWordLength(data);
             byte[] areaCode = addr.GetAreaCode();
             byte bitSpec = (byte)(addr.BitOffset >= 0 ? addr.BitOffset : 0x00);
-            ushort wordCount = (ushort)(data.Length / 2);
+            ushort wordCount = (ushort)(writeData.Length / 2);
 
             byte[] headerCode = new byte[] { (byte)'W', (byte)'D' };
-            byte[] dataHex = OmronHostLinkClient.BytesToAsciiHex(data);
+            byte[] dataHex = OmronHostLinkClient.BytesToAsciiHex(writeData);
             byte[] text = new byte[7 + dataHex.Length];
             text[0] = areaCode[0];
             text[1] = areaCode[1];
@@ -253,6 +256,19 @@ namespace Nexus.Omron
             Array.Copy(dataHex, 0, text, 7, dataHex.Length);
 
             return PackFrame(headerCode, text);
+        }
+
+        private static byte[] PadToWordLength(byte[] data)
+        {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            if (data.Length % 2 == 0)
+                return data;
+
+            byte[] padded = new byte[data.Length + 1];
+            Array.Copy(data, 0, padded, 0, data.Length);
+            return padded;
         }
 
         /// <summary>将 C-Mode 命令打包为完整帧。</summary>

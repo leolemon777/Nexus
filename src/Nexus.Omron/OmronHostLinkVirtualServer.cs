@@ -348,12 +348,16 @@ namespace Nexus.Omron
                 return false;
 
             ushort wordAddr = (ushort)((frame[7] << 8) | frame[8]);
+            ushort length = (ushort)(((frame[10] & 0x7F) << 8) | frame[11]);
             int dataOffset = 12;
             int dataHexLength = frame.Length - dataOffset - 4;
             if (dataHexLength < 0 || dataHexLength % 2 != 0)
                 return false;
 
             if (!TryAsciiHexToBytes(frame, dataOffset, dataHexLength, out byte[] data))
+                return false;
+
+            if (data.Length != length * 2)
                 return false;
 
             lock (_dataLock)

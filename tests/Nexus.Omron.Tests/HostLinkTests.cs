@@ -434,6 +434,26 @@ public class HostLinkTests
     }
 
     [Fact]
+    public void CModeClient_WriteString_OddLength_PadsToWordBoundary()
+    {
+        using var port = new CModeFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(BuildCModeResponse("WD", "0000"));
+        using var client = new OmronHostLinkCModeClient(port, timeout: 100);
+
+        var result = client.Write("D100", "A");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Single(port.Writes);
+
+        byte[] request = port.Writes[0];
+        Assert.Equal(20, request.Length);
+        Assert.Equal(0x00, request[10]);
+        Assert.Equal(0x01, request[11]);
+        Assert.Equal("4100", Encoding.ASCII.GetString(request, 12, 4));
+    }
+
+    [Fact]
     public void CModeClient_ReadBool_BitAddress_UsesRequestedBit()
     {
         using var port = new CModeFakeSerialPort();
@@ -1133,6 +1153,33 @@ public class HostLinkTests
             var readClear = client.ReadUInt16("D130");
             Assert.True(readClear.IsSuccess, readClear.Message);
             Assert.Equal((ushort)0x00A0, readClear.Content);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CModeOverTcpClient_WriteString_OddLength_PadsAndReadsBack()
+    {
+        int port = PortBase + 44;
+        var server = new OmronHostLinkVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var client = new OmronHostLinkCModeOverTcpClient("127.0.0.1", port, timeout: 1000);
+            client.SetPersistentConnection();
+            Assert.True(client.Connect().IsSuccess);
+
+            var write = client.Write("D140", "A");
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = client.ReadString("D140", 2);
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal("A", read.Content);
         }
         finally
         {
