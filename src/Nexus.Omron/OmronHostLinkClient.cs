@@ -381,27 +381,41 @@ namespace Nexus.Omron
             if (response == null || response.Length < 10)
                 return OperateResult<byte[]>.Failed($"HostLink 响应过短 ({response?.Length ?? 0} 字节)");
 
-            // 查找响应中的 FINS 数据起点（跳过 HostLink 头）
-            // HostLink 头: @ + unit(2) + FA(2) + wait(2) + ICF(2) + DA2(2) + SA2(2) + SID(2) = 15
-            // 注：wait 字段为 2 字符 hex（与测试契约一致），故命令码从 [15] 开始。
             if (response.Length < 27)
                 return OperateResult<byte[]>.Failed("HostLink 响应不完整");
 
+            if (response[0] != STX)
+                return OperateResult<byte[]>.Failed($"HostLink 响应帧头错误: 0x{response[0]:X2}");
+
+            if (response[response.Length - 2] != ETX || response[response.Length - 1] != CR)
+                return OperateResult<byte[]>.Failed("HostLink 响应帧尾错误");
+
+            if (!TryParseAsciiHexByte(response[response.Length - 4], response[response.Length - 3], out byte actualFcs))
+                return OperateResult<byte[]>.Failed("HostLink 响应 FCS 格式错误");
+
+            byte expectedFcs = 0;
+            for (int i = 0; i < response.Length - 4; i++)
+                expectedFcs ^= response[i];
+
+            if (actualFcs != expectedFcs)
+                return OperateResult<byte[]>.Failed($"HostLink FCS 校验失败: expected 0x{expectedFcs:X2}, actual 0x{actualFcs:X2}");
+
             try
             {
-                // 命令码在 response[15..18]
-                string cmdCode = Encoding.ASCII.GetString(response, 15, 4);
-                // 结束码在 response[19..22]
-                string endCodeStr = Encoding.ASCII.GetString(response, 19, 4);
-                int endCode = Convert.ToInt32(endCodeStr, 16);
+                // HostLink 头: @ + unit(2) + FA(2) + wait(2) + ICF(2) + DA2(2) + SA2(2) + SID(2) = 15
+                // 命令码在 [15..18]，结束码在 [19..22]，数据在 [23..^4]。
+                if (!IsAsciiHexRange(response, 15, 4))
+                    return OperateResult<byte[]>.Failed("HostLink 响应命令码格式错误");
 
-                // 数据区域 [23..length-4]（ASCII hex），转为字节
-                byte[] data = new byte[0];
-                if (response.Length > 27)
-                {
-                    string dataHex = Encoding.ASCII.GetString(response, 23, response.Length - 27);
-                    data = AsciiHexToBytes(dataHex);
-                }
+                if (!TryParseAsciiHexWord(response, 19, out int endCode))
+                    return OperateResult<byte[]>.Failed("HostLink 响应结束码格式错误");
+
+                int dataHexLength = response.Length - 27;
+                if (dataHexLength % 2 != 0)
+                    return OperateResult<byte[]>.Failed("HostLink 响应数据十六进制长度错误");
+
+                if (!TryAsciiHexToBytes(response, 23, dataHexLength, out byte[] data))
+                    return OperateResult<byte[]>.Failed("HostLink 响应数据包含非法十六进制字符");
 
                 if (endCode > 0)
                     return OperateResult<byte[]>.Failed($"FINS 错误码: 0x{endCode:X4}");
@@ -412,6 +426,92 @@ namespace Nexus.Omron
             {
                 return OperateResult<byte[]>.Failed($"HostLink 响应解析失败: {ex.Message}");
             }
+        }
+
+        private static bool IsAsciiHexRange(byte[] data, int offset, int length)
+        {
+            if (offset < 0 || length < 0 || offset + length > data.Length)
+                return false;
+
+            for (int i = 0; i < length; i++)
+            {
+                if (!TryHexCharToInt(data[offset + i], out _))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool TryAsciiHexToBytes(byte[] data, int offset, int length, out byte[] result)
+        {
+            result = Array.Empty<byte>();
+            if (offset < 0 || length < 0 || offset + length > data.Length || length % 2 != 0)
+                return false;
+
+            result = new byte[length / 2];
+            for (int i = 0; i < result.Length; i++)
+            {
+                if (!TryParseAsciiHexByte(data[offset + i * 2], data[offset + i * 2 + 1], out result[i]))
+                {
+                    result = Array.Empty<byte>();
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryParseAsciiHexWord(byte[] data, int offset, out int value)
+        {
+            value = 0;
+            if (offset < 0 || offset + 4 > data.Length)
+                return false;
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (!TryHexCharToInt(data[offset + i], out int nibble))
+                    return false;
+
+                value = (value << 4) | nibble;
+            }
+
+            return true;
+        }
+
+        private static bool TryParseAsciiHexByte(byte high, byte low, out byte value)
+        {
+            value = 0;
+            if (!TryHexCharToInt(high, out int highNibble) ||
+                !TryHexCharToInt(low, out int lowNibble))
+            {
+                return false;
+            }
+
+            value = (byte)((highNibble << 4) | lowNibble);
+            return true;
+        }
+
+        private static bool TryHexCharToInt(byte c, out int value)
+        {
+            if (c >= '0' && c <= '9')
+            {
+                value = c - '0';
+                return true;
+            }
+
+            if (c >= 'A' && c <= 'F')
+            {
+                value = c - 'A' + 10;
+                return true;
+            }
+
+            if (c >= 'a' && c <= 'f')
+            {
+                value = c - 'a' + 10;
+                return true;
+            }
+
+            value = 0;
+            return false;
         }
 
         // ═══════════════════════════════════════════

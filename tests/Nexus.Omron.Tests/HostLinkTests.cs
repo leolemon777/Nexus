@@ -12,6 +12,22 @@ public class HostLinkTests
 {
     private const int PortBase = 19700;
 
+    private static byte[] BuildHostLinkResponse(string body, bool badFcs = false)
+    {
+        string header = "@00FA30" + "00000000";
+        string raw = header + body;
+
+        byte fcs = 0;
+        byte[] rawBytes = Encoding.ASCII.GetBytes(raw);
+        foreach (byte b in rawBytes)
+            fcs ^= b;
+
+        if (badFcs)
+            fcs ^= 0x01;
+
+        return Encoding.ASCII.GetBytes(raw + fcs.ToString("X2") + "*\r");
+    }
+
     #region ASCII Hex 辅助方法
 
     [Fact]
@@ -203,6 +219,75 @@ public class HostLinkTests
     {
         var r = OmronHostLinkClient.ParseResponse(null!);
         Assert.False(r.IsSuccess);
+    }
+
+    [Fact]
+    public void ParseResponse_InvalidStart_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("010100001234");
+        response[0] = (byte)'#';
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("帧头", result.Message);
+    }
+
+    [Fact]
+    public void ParseResponse_InvalidTrailer_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("010100001234");
+        response[response.Length - 2] = (byte)'!';
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("帧尾", result.Message);
+    }
+
+    [Fact]
+    public void ParseResponse_BadFcs_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("010100001234", badFcs: true);
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FCS", result.Message);
+    }
+
+    [Fact]
+    public void ParseResponse_InvalidFcsHex_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("010100001234");
+        response[response.Length - 4] = (byte)'Z';
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("FCS 格式", result.Message);
+    }
+
+    [Fact]
+    public void ParseResponse_InvalidDataHex_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("01010000ZZ");
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("非法十六进制", result.Message);
+    }
+
+    [Fact]
+    public void ParseResponse_OddDataHexLength_ReturnsFailure()
+    {
+        byte[] response = BuildHostLinkResponse("010100001");
+
+        var result = OmronHostLinkClient.ParseResponse(response);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("长度", result.Message);
     }
 
     #endregion

@@ -477,6 +477,27 @@
 
 ---
 
+# Omron HostLink Response Parsing Hardening Notes
+
+## Decisions
+- Hardened shared HostLink FINS response parsing in `OmronHostLinkClient.ParseResponse`, which is reused by both TCP and serial HostLink clients.
+- Required the response envelope to match `@ ... FCS * CR` before extracting FINS command, end code, or data bytes.
+- Added FCS verification using the existing HostLink XOR contract already used by `PackCommand` and `OmronHostLinkVirtualServer`.
+- Rejected non-hex command codes, end codes, FCS bytes, odd-length response data, and invalid response data hex instead of silently converting invalid nibbles to zero.
+- Kept this scoped to FINS-over-HostLink parsing; C-Mode parsing remains separate and should get its own audit.
+
+## Verification
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~HostLinkTests"` passed: 43/43.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 144/144.
+- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 92 warnings. Warnings are existing cross-project nullable/member-hiding/analyzer warnings outside this HostLink parsing change.
+- `dotnet test Nexus.slnx --configuration Release --no-build --verbosity minimal` passed across the solution with 0 failures.
+
+## Risks
+- HostLink FINS parsing now rejects frames with bad envelope or bad FCS. This is the correct protocol boundary, but any external fake server that was returning unchecked frames will now fail visibly.
+- HostLink C-Mode still needs the same level of envelope/FCS verification in a separate pass.
+
+---
+
 # Mitsubishi FX Serial Hardening Notes
 
 ## Decisions
