@@ -506,16 +506,18 @@
 - Added FCS verification using the same XOR contract as C-Mode request frame construction.
 - Rejected non-hex response codes, malformed FCS bytes, odd-length text payloads, and invalid text hex instead of silently converting invalid nibbles to zero.
 - Fixed C-Mode request frame sizing so `PackFrame` emits `station(2)` frames without trailing null bytes.
+- Added fake-serial round-trip coverage for C-Mode `ReadInt16` and word writes through the public serial client API.
+- Recorded request frames in the fake serial port to lock the station(2) frame sizing on real send paths, not just direct `PackFrame` tests.
 
 ## Verification
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~HostLinkTests"` passed: 54/54.
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 155/155.
-- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 0 warnings.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~HostLinkTests"` passed: 56/56.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 157/157.
+- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 92 warnings.
 - `dotnet test Nexus.slnx --configuration Release --no-build --verbosity minimal` passed across the solution with 0 failures.
 
 ## Risks
 - C-Mode parsing now rejects bad envelopes and bad FCS. This is the intended protocol boundary, but external simulators returning unchecked frames must be fixed.
-- C-Mode still has no virtual server or transport-level integration test; this pass covers offline parser behavior.
+- C-Mode now has fake serial client round-trip coverage, but still lacks a TCP virtual server and real PLC/gateway validation.
 
 ---
 

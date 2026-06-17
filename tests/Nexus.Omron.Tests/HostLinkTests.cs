@@ -46,6 +46,8 @@ public class HostLinkTests
 
     private sealed class CModeFakeSerialPort : ISerialPort
     {
+        private readonly Queue<byte> _readQueue = new Queue<byte>();
+
         public string PortName { get; set; } = "COM_CMODE_TEST";
         public int BaudRate { get; set; } = 9600;
         public int DataBits { get; set; } = 7;
@@ -56,11 +58,35 @@ public class HostLinkTests
         public bool IsOpen { get; private set; }
         public bool DtrEnable { get; set; }
         public bool RtsEnable { get; set; }
+        public List<byte[]> Writes { get; } = new List<byte[]>();
+
+        public void LoadReadBytes(params byte[] data)
+        {
+            foreach (byte b in data)
+                _readQueue.Enqueue(b);
+        }
 
         public void Open() => IsOpen = true;
         public void Close() => IsOpen = false;
-        public int Read(byte[] buffer, int offset, int count) => 0;
-        public void Write(byte[] buffer, int offset, int count) { }
+
+        public int Read(byte[] buffer, int offset, int count)
+        {
+            if (_readQueue.Count == 0) return 0;
+
+            int read = 0;
+            while (read < count && _readQueue.Count > 0)
+                buffer[offset + read++] = _readQueue.Dequeue();
+
+            return read;
+        }
+
+        public void Write(byte[] buffer, int offset, int count)
+        {
+            byte[] data = new byte[count];
+            Buffer.BlockCopy(buffer, offset, data, 0, count);
+            Writes.Add(data);
+        }
+
         public void Dispose() => Close();
     }
 
@@ -351,6 +377,55 @@ public class HostLinkTests
 
         byte actualFcs = Convert.ToByte(Encoding.ASCII.GetString(frame, frame.Length - 4, 2), 16);
         Assert.Equal(expectedFcs, actualFcs);
+    }
+
+    [Fact]
+    public void CModeClient_ReadInt16_UsesSerialFrameAndParsesResponse()
+    {
+        using var port = new CModeFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(BuildCModeResponse("RD", "0000", "1234"));
+        using var client = new OmronHostLinkCModeClient(port, timeout: 100);
+
+        var result = client.ReadInt16("D100");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((short)0x1234, result.Content);
+        Assert.Single(port.Writes);
+
+        byte[] request = port.Writes[0];
+        Assert.Equal(16, request.Length);
+        Assert.Equal((byte)'@', request[0]);
+        Assert.Equal((byte)'0', request[1]);
+        Assert.Equal((byte)'0', request[2]);
+        Assert.Equal((byte)'R', request[3]);
+        Assert.Equal((byte)'D', request[4]);
+        Assert.Equal((byte)'*', request[request.Length - 2]);
+        Assert.Equal(0x0D, request[request.Length - 1]);
+    }
+
+    [Fact]
+    public void CModeClient_WriteInt16_UsesSerialFrameAndAcceptsSuccessResponse()
+    {
+        using var port = new CModeFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(BuildCModeResponse("WD", "0000"));
+        using var client = new OmronHostLinkCModeClient(port, timeout: 100);
+
+        var result = client.Write("D100", (short)0x1234);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Single(port.Writes);
+
+        byte[] request = port.Writes[0];
+        Assert.Equal(20, request.Length);
+        Assert.Equal((byte)'@', request[0]);
+        Assert.Equal((byte)'0', request[1]);
+        Assert.Equal((byte)'0', request[2]);
+        Assert.Equal((byte)'W', request[3]);
+        Assert.Equal((byte)'D', request[4]);
+        Assert.Equal((byte)'*', request[request.Length - 2]);
+        Assert.Equal(0x0D, request[request.Length - 1]);
     }
 
     [Fact]
