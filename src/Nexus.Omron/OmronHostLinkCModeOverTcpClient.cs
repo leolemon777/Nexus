@@ -30,7 +30,7 @@ namespace Nexus.Omron
             try
             {
                 var addr = new OmronHostLinkCModeAddress("D0", CModeArea.DM, 0);
-                return _cModeClientInstance.BuildReadCommand(addr, 0, 1);
+                return BuildReadCommand(addr, 0, 1);
             }
             catch { return null; }
         }
@@ -93,10 +93,22 @@ namespace Nexus.Omron
             : base(ip, port, timeout) { }
 
         // 内部辅助实例，仅用于 BuildReadCommand 等帧构建方法
-        private static readonly OmronHostLinkCModeClient _cModeClientInstance = CreateDummyInstance();
+        private readonly OmronHostLinkCModeClient _cModeClientInstance = CreateDummyInstance();
         private static OmronHostLinkCModeClient CreateDummyInstance()
         {
             return new OmronHostLinkCModeClient(new DummySerialPort(), 0);
+        }
+
+        private byte[] BuildReadCommand(OmronHostLinkCModeAddress addr, ushort startWord, ushort wordCount)
+        {
+            _cModeClientInstance.UnitNumber = UnitNumber;
+            return _cModeClientInstance.BuildReadCommand(addr, startWord, wordCount);
+        }
+
+        private byte[] BuildWriteCommand(OmronHostLinkCModeAddress addr, byte[] data)
+        {
+            _cModeClientInstance.UnitNumber = UnitNumber;
+            return _cModeClientInstance.BuildWriteCommand(addr, data);
         }
 
         public override OperateResult<byte[]> ReadBytes(string address, ushort length)
@@ -111,7 +123,7 @@ namespace Nexus.Omron
             while (remaining > 0)
             {
                 int chunk = Math.Min(remaining, ReadSplits);
-                var frame = _cModeClientInstance.BuildReadCommand(addr, currentWord, (ushort)chunk);
+                var frame = BuildReadCommand(addr, currentWord, (ushort)chunk);
                 var recv = SendAndReceive(frame);
                 if (!recv.IsSuccess) return OperateResult<byte[]>.Failed(recv.Message);
 
@@ -136,7 +148,7 @@ namespace Nexus.Omron
         public override OperateResult Write(string address, byte[] data)
         {
             var addr = _addressParser.Parse(address);
-            var frame = _cModeClientInstance.BuildWriteCommand(addr, data);
+            var frame = BuildWriteCommand(addr, data);
             var recv = SendAndReceive(frame);
             if (!recv.IsSuccess) return OperateResult.Failed(recv.Message);
 

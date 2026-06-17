@@ -976,6 +976,93 @@ public class HostLinkTests
     }
 
     [Fact]
+    public void CModeOverTcpClient_ReadInt16_DM()
+    {
+        int port = PortBase + 40;
+        var server = new OmronHostLinkVirtualServer(port);
+        server.SetDmWord(120, 0x2468);
+        server.Start();
+
+        try
+        {
+            using var client = new OmronHostLinkCModeOverTcpClient("127.0.0.1", port, timeout: 1000);
+            client.SetPersistentConnection();
+            Assert.True(client.Connect().IsSuccess);
+
+            var result = client.ReadInt16("D120");
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)0x2468, result.Content);
+            Assert.True(WaitForConnections(server, 1));
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CModeOverTcpClient_WriteReadInt16_DM()
+    {
+        int port = PortBase + 41;
+        var server = new OmronHostLinkVirtualServer(port);
+        server.Start();
+
+        try
+        {
+            using var client = new OmronHostLinkCModeOverTcpClient("127.0.0.1", port, timeout: 1000);
+            client.SetPersistentConnection();
+            Assert.True(client.Connect().IsSuccess);
+
+            var write = client.Write("D121", unchecked((short)0xBEEF));
+            Assert.True(write.IsSuccess, write.Message);
+
+            var read = client.ReadInt16("D121");
+            Assert.True(read.IsSuccess, read.Message);
+            Assert.Equal(unchecked((short)0xBEEF), read.Content);
+            Assert.True(WaitForConnections(server, 1));
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CModeOverTcpClient_CustomUnitNumber_UsesStationInRequest()
+    {
+        int port = PortBase + 42;
+        var server = new OmronHostLinkVirtualServer(port);
+        server.SetDmWord(0, 0x1357);
+        server.Start();
+
+        try
+        {
+            using var client = new OmronHostLinkCModeOverTcpClient("127.0.0.1", port, timeout: 1000)
+            {
+                UnitNumber = 5
+            };
+            string? sentHex = null;
+            client.OnMessageSent += (_, hex) => sentHex = hex;
+            client.SetPersistentConnection();
+            Assert.True(client.Connect().IsSuccess);
+
+            var result = client.ReadInt16("D0");
+
+            Assert.True(result.IsSuccess, result.Message);
+            Assert.Equal((short)0x1357, result.Content);
+            Assert.StartsWith("40 30 35 52 44", sentHex ?? string.Empty);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
     public void ConnectionPool_ReadInt16_ReusesPersistentConnection()
     {
         int port = PortBase + 30;

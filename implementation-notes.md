@@ -508,16 +508,19 @@
 - Fixed C-Mode request frame sizing so `PackFrame` emits `station(2)` frames without trailing null bytes.
 - Added fake-serial round-trip coverage for C-Mode `ReadInt16` and word writes through the public serial client API.
 - Recorded request frames in the fake serial port to lock the station(2) frame sizing on real send paths, not just direct `PackFrame` tests.
+- Extended `OmronHostLinkVirtualServer` with minimal C-Mode `RD`/`WD` support, including request FCS validation and C-Mode response FCS generation.
+- Added C-Mode over TCP end-to-end tests for `ReadInt16` and word write/read round trips through `OmronHostLinkCModeOverTcpClient`.
+- Fixed C-Mode over TCP request construction so `UnitNumber` is applied to read, write, and heartbeat frames instead of always using station `00`.
 
 ## Verification
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~HostLinkTests"` passed: 56/56.
-- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 157/157.
-- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 92 warnings.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-restore --filter "FullyQualifiedName~HostLinkTests"` passed: 59/59.
+- `dotnet test tests/Nexus.Omron.Tests --configuration Release --no-build` passed: 160/160.
+- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 0 warnings.
 - `dotnet test Nexus.slnx --configuration Release --no-build --verbosity minimal` passed across the solution with 0 failures.
 
 ## Risks
 - C-Mode parsing now rejects bad envelopes and bad FCS. This is the intended protocol boundary, but external simulators returning unchecked frames must be fixed.
-- C-Mode now has fake serial client round-trip coverage, but still lacks a TCP virtual server and real PLC/gateway validation.
+- C-Mode now has fake serial and TCP virtual-server round-trip coverage, but the virtual server only covers `RD`/`WD` word paths and still lacks real PLC/gateway validation.
 
 ---
 

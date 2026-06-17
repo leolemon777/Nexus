@@ -27,6 +27,9 @@ namespace Nexus.Omron
         private readonly byte[] _wr  = new byte[16384];
         private readonly byte[] _hr  = new byte[16384];
         private readonly byte[] _ar  = new byte[16384];
+        private readonly byte[] _lr  = new byte[16384];
+        private readonly byte[] _tc  = new byte[16384];
+        private readonly byte[] _em  = new byte[16384];
 
         private readonly object _dataLock = new object();
 
@@ -217,6 +220,9 @@ namespace Nexus.Omron
 
         private byte[] ProcessHostLinkFrame(byte[] frame)
         {
+            if (IsCModeFrame(frame))
+                return ProcessCModeFrame(frame);
+
             // 最小请求帧: @ + unit(2) + FA(2) + wait(1) + ICF(2) + DA2(2) + SA2(2) + SID(2) + cmd(4) + FCS(2) + * + CR = 24
             if (frame.Length < 24) return BuildErrorResponse(frame, 0x01);
 
@@ -253,6 +259,214 @@ namespace Nexus.Omron
             {
                 return BuildErrorResponse(frame, 0xFF);
             }
+        }
+
+        // ═══════════════════════════════════════════
+        //  HostLink C-Mode 命令处理
+        // ═══════════════════════════════════════════
+
+        private static bool IsCModeFrame(byte[] frame)
+        {
+            return frame.Length >= 5
+                && frame[0] == (byte)'@'
+                && ((frame[3] == (byte)'R' && frame[4] == (byte)'D')
+                    || (frame[3] == (byte)'W' && frame[4] == (byte)'D'));
+        }
+
+        private byte[] ProcessCModeFrame(byte[] frame)
+        {
+            byte[] headerCode = frame.Length >= 5
+                ? new byte[] { frame[3], frame[4] }
+                : new byte[] { (byte)'R', (byte)'D' };
+
+            if (frame.Length < 13
+                || frame[0] != (byte)'@'
+                || frame[frame.Length - 2] != (byte)'*'
+                || frame[frame.Length - 1] != 0x0D)
+            {
+                return BuildCModeResponse(frame, headerCode, "0101", Array.Empty<byte>());
+            }
+
+            if (!TryParseAsciiHexByte(frame[frame.Length - 4], frame[frame.Length - 3], out byte actualFcs))
+                return BuildCModeResponse(frame, headerCode, "0101", Array.Empty<byte>());
+
+            byte expectedFcs = CalculateFcs(frame, frame.Length - 4);
+            if (actualFcs != expectedFcs)
+                return BuildCModeResponse(frame, headerCode, "0101", Array.Empty<byte>());
+
+            if (frame[3] == (byte)'R' && frame[4] == (byte)'D')
+            {
+                byte[]? data = ProcessCModeRead(frame);
+                return data == null
+                    ? BuildCModeResponse(frame, headerCode, "0301", Array.Empty<byte>())
+                    : BuildCModeResponse(frame, headerCode, "0000", data);
+            }
+
+            if (frame[3] == (byte)'W' && frame[4] == (byte)'D')
+            {
+                bool writeOk = ProcessCModeWrite(frame);
+                return BuildCModeResponse(frame, headerCode, writeOk ? "0000" : "0301", Array.Empty<byte>());
+            }
+
+            return BuildCModeResponse(frame, headerCode, "0101", Array.Empty<byte>());
+        }
+
+        private byte[]? ProcessCModeRead(byte[] frame)
+        {
+            // @ + unit(2) + RD + area(2) + word(2) + bit + count(2) + FCS + * + CR
+            if (frame.Length != 16)
+                return null;
+
+            byte[]? storage = GetCModeStorage(frame[5], frame[6]);
+            if (storage == null)
+                return null;
+
+            ushort wordAddr = (ushort)((frame[7] << 8) | frame[8]);
+            ushort length = (ushort)(((frame[10] & 0x7F) << 8) | frame[11]);
+            int byteOffset = wordAddr * 2;
+            int byteCount = length * 2;
+            var data = new byte[byteCount];
+
+            lock (_dataLock)
+            {
+                int copyLen = Math.Min(byteCount, Math.Max(0, storage.Length - byteOffset));
+                if (copyLen > 0)
+                    Array.Copy(storage, byteOffset, data, 0, copyLen);
+            }
+
+            return data;
+        }
+
+        private bool ProcessCModeWrite(byte[] frame)
+        {
+            // @ + unit(2) + WD + area(2) + word(2) + bit + count(2) + data_ascii_hex + FCS + * + CR
+            if (frame.Length < 16)
+                return false;
+
+            byte[]? storage = GetCModeStorage(frame[5], frame[6]);
+            if (storage == null)
+                return false;
+
+            ushort wordAddr = (ushort)((frame[7] << 8) | frame[8]);
+            int dataOffset = 12;
+            int dataHexLength = frame.Length - dataOffset - 4;
+            if (dataHexLength < 0 || dataHexLength % 2 != 0)
+                return false;
+
+            if (!TryAsciiHexToBytes(frame, dataOffset, dataHexLength, out byte[] data))
+                return false;
+
+            lock (_dataLock)
+            {
+                int byteOffset = wordAddr * 2;
+                int copyLen = Math.Min(data.Length, Math.Max(0, storage.Length - byteOffset));
+                if (copyLen > 0)
+                    Array.Copy(data, 0, storage, byteOffset, copyLen);
+            }
+
+            return true;
+        }
+
+        private byte[]? GetCModeStorage(byte areaHigh, byte areaLow)
+        {
+            if (areaHigh == 0x82 && areaLow == 0x00) return _dm;
+            if (areaHigh == 0x83 && areaLow == 0x00) return _ar;
+            if (areaHigh == 0x82 && areaLow == 0x01) return _hr;
+            if (areaHigh == 0x82 && areaLow == 0x02) return _lr;
+            if (areaHigh == 0x82 && areaLow == 0x03) return _tc;
+            if (areaHigh == 0x82 && areaLow == 0x20) return _em;
+            return null;
+        }
+
+        private byte[] BuildCModeResponse(byte[] request, byte[] headerCode, string responseCode, byte[] data)
+        {
+            byte[] dataAscii = OmronHostLinkClient.BytesToAsciiHex(data);
+            byte[] responseCodeAscii = Encoding.ASCII.GetBytes(responseCode);
+            int totalLen = 1 + 2 + 2 + 4 + dataAscii.Length + 4;
+            var frame = new byte[totalLen];
+
+            int pos = 0;
+            frame[pos++] = (byte)'@';
+            frame[pos++] = request.Length > 1 ? request[1] : (byte)'0';
+            frame[pos++] = request.Length > 2 ? request[2] : (byte)'0';
+            frame[pos++] = headerCode.Length > 0 ? headerCode[0] : (byte)'R';
+            frame[pos++] = headerCode.Length > 1 ? headerCode[1] : (byte)'D';
+            Array.Copy(responseCodeAscii, 0, frame, pos, 4);
+            pos += 4;
+            Array.Copy(dataAscii, 0, frame, pos, dataAscii.Length);
+            pos += dataAscii.Length;
+
+            byte fcs = CalculateFcs(frame, pos);
+            frame[pos++] = OmronHostLinkClient.ToAsciiHexHigh(fcs);
+            frame[pos++] = OmronHostLinkClient.ToAsciiHexLow(fcs);
+            frame[pos++] = (byte)'*';
+            frame[pos++] = 0x0D;
+
+            return frame;
+        }
+
+        private static bool TryAsciiHexToBytes(byte[] data, int offset, int length, out byte[] result)
+        {
+            result = Array.Empty<byte>();
+            if (offset < 0 || length < 0 || offset + length > data.Length || length % 2 != 0)
+                return false;
+
+            result = new byte[length / 2];
+            for (int i = 0; i < result.Length; i++)
+            {
+                if (!TryParseAsciiHexByte(data[offset + i * 2], data[offset + i * 2 + 1], out result[i]))
+                {
+                    result = Array.Empty<byte>();
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryParseAsciiHexByte(byte high, byte low, out byte value)
+        {
+            value = 0;
+            if (!TryHexCharToInt(high, out int highNibble) ||
+                !TryHexCharToInt(low, out int lowNibble))
+            {
+                return false;
+            }
+
+            value = (byte)((highNibble << 4) | lowNibble);
+            return true;
+        }
+
+        private static bool TryHexCharToInt(byte c, out int value)
+        {
+            if (c >= '0' && c <= '9')
+            {
+                value = c - '0';
+                return true;
+            }
+
+            if (c >= 'A' && c <= 'F')
+            {
+                value = c - 'A' + 10;
+                return true;
+            }
+
+            if (c >= 'a' && c <= 'f')
+            {
+                value = c - 'a' + 10;
+                return true;
+            }
+
+            value = 0;
+            return false;
+        }
+
+        private static byte CalculateFcs(byte[] frame, int length)
+        {
+            byte fcs = 0;
+            for (int i = 0; i < length; i++)
+                fcs ^= frame[i];
+            return fcs;
         }
 
         // ═══════════════════════════════════════════
