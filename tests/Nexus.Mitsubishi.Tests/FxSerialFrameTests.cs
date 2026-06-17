@@ -95,7 +95,7 @@ public sealed class FxSerialFrameTests
 
     private static byte[] BuildFxResponse(string hexData)
     {
-        string body = "0D0000" + hexData;
+        string body = hexData;
         byte[] bodyBytes = Encoding.ASCII.GetBytes(body);
         byte[] frame = new byte[1 + bodyBytes.Length + 1 + 2];
         frame[0] = 0x02;
@@ -157,7 +157,7 @@ public sealed class FxSerialFrameTests
         byte[] frame = FxFrameBuilder.BuildReadCommand('D', 100, 2);
         Assert.Equal(0x02, frame[0]); // STX
         Assert.Equal((byte)'0', frame[1]); // Read command
-        Assert.Equal((byte)'D', frame[2]); // Device code
+        Assert.Equal((byte)'0', frame[2]); // Address high nibble
         Assert.True(frame.Length >= 8);
     }
 
@@ -167,20 +167,28 @@ public sealed class FxSerialFrameTests
         byte[] frame = FxFrameBuilder.BuildWriteCommand('D', 100, new byte[] { 0x12, 0x34 });
         Assert.Equal(0x02, frame[0]); // STX
         Assert.Equal((byte)'1', frame[1]); // Write command
-        Assert.Equal((byte)'D', frame[2]); // Device code
+        Assert.Equal((byte)'0', frame[2]); // Address high nibble
         Assert.True(frame.Length >= 10);
+    }
+
+    [Fact]
+    public void FxFrameBuilder_BuildWriteCommand_ContainsAddressByteCountAndData()
+    {
+        byte[] frame = FxFrameBuilder.BuildWriteCommand('D', 100, new byte[] { 0x12, 0x34 });
+        string body = Encoding.ASCII.GetString(frame, 1, frame.Length - 4);
+
+        Assert.Equal("10064021234", body);
     }
 
     [Fact]
     public void FxFrameBuilder_BuildReadCommand_ContainsAddressAndCount()
     {
         byte[] frame = FxFrameBuilder.BuildReadCommand('D', 100, 2);
-        // STX + "0D010002" + ETX + SUM → ASCII payload starts at index 1
+        // STX + "0006404" + ETX + SUM → ASCII payload starts at index 1.
         // Command body is frame[1..^3] (before ETX and SUM)
-        int bodyLen = frame.Length - 3; // exclude ETX + SUM(2)
+        int bodyLen = frame.Length - 4; // exclude STX, ETX, and SUM(2)
         string body = Encoding.ASCII.GetString(frame, 1, bodyLen);
-        Assert.StartsWith("0D0100", body); // Read + D + addr 0100
-        Assert.EndsWith("02", body);       // count = 2
+        Assert.Equal("0006404", body); // Read + raw address 0x0064 + 4 bytes
     }
 
     [Fact]
@@ -196,25 +204,26 @@ public sealed class FxSerialFrameTests
         string actual = Encoding.ASCII.GetString(frame, frame.Length - 2, 2);
 
         Assert.Equal(expected, actual);
-        Assert.Equal("9A", actual);
+        Assert.Equal("61", actual);
     }
 
     [Fact]
     public void FxFrameBuilder_BuildReadCommand_RejectsOutOfRangeFields()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', -1, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 10000, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0x10000, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0, 256));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildReadCommand('D', 0, 128));
     }
 
     [Fact]
     public void FxFrameBuilder_BuildWriteCommand_RejectsInvalidData()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildWriteCommand('D', 10000, new byte[] { 0x12, 0x34 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FxFrameBuilder.BuildWriteCommand('D', 0x10000, new byte[] { 0x12, 0x34 }));
         Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, null!));
         Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, Array.Empty<byte>()));
         Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, new byte[] { 0x12 }));
+        Assert.Throws<ArgumentException>(() => FxFrameBuilder.BuildWriteCommand('D', 100, new byte[256]));
     }
 
     [Fact]
@@ -464,18 +473,17 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
-    public void FxSerialClient_ReadInt16_CounterAddress_UsesCDeviceCode()
+    public void FxSerialClient_ReadInt16_BitDeviceAddress_ReturnsFailureWithoutWriting()
     {
         using var port = new FxFakeSerialPort();
         port.Open();
-        port.LoadReadBytes(WithHandshakeAck(BuildFxResponse("3412")));
         using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
 
         var result = client.ReadInt16("C100");
 
-        Assert.True(result.IsSuccess, result.Message);
-        Assert.Equal((short)0x1234, result.Content);
-        Assert.Equal(FxFrameBuilder.BuildReadCommand('C', 100, 1), port.Writes[1]);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("暂仅支持 D/R 字设备地址", result.Message);
+        Assert.Empty(port.Writes);
     }
 
     [Fact]
@@ -493,19 +501,17 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
-    public void FxSerialClient_ReadBool_BitAddress_UsesBitDeviceFrame()
+    public void FxSerialClient_ReadBool_BitAddressRejectsUnverifiedMappingWithoutWriting()
     {
         using var port = new FxFakeSerialPort();
         port.Open();
-        port.LoadReadBytes(WithHandshakeAck(BuildFxResponse("01")));
         using var client = new FxSerialClient(port, timeout: 2000) { InterFrameDelay = 0 };
 
         var result = client.ReadBool("M100");
 
-        Assert.True(result.IsSuccess, result.Message);
-        Assert.True(result.Content);
-        Assert.Equal(new byte[] { 0x05 }, port.Writes[0]);
-        Assert.Equal(FxFrameBuilder.BuildReadCommand('M', 100, 1), port.Writes[1]);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("拒绝执行未验证读取", result.Message);
+        Assert.Empty(port.Writes);
     }
 
     [Fact]
@@ -518,7 +524,7 @@ public sealed class FxSerialFrameTests
         var result = client.ReadBool("D100");
 
         Assert.False(result.IsSuccess);
-        Assert.Contains("FX Bool 读取只支持位设备地址", result.Message);
+        Assert.Contains("拒绝执行未验证读取", result.Message);
         Assert.Empty(port.Writes);
     }
 

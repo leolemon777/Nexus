@@ -125,6 +125,7 @@ namespace Nexus.Mitsubishi
         {
             var addr = TryParseAddress(address);
             if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            if (addr.Content.IsBitDevice) return OperateResult<byte[]>.Failed($"FX Serial 字/字节读取暂仅支持 D/R 字设备地址: {address}");
 
             try
             {
@@ -140,6 +141,7 @@ namespace Nexus.Mitsubishi
         {
             var addr = TryParseAddress(address);
             if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            if (addr.Content.IsBitDevice) return OperateResult<byte[]>.Failed($"FX Serial 字/字节写入暂仅支持 D/R 字设备地址: {address}");
 
             try
             {
@@ -249,25 +251,12 @@ namespace Nexus.Mitsubishi
 
         // ── 补全类型读取 ──────────────────────────
 
-        public async Task<OperateResult<bool>> ReadBoolAsync(string address, CancellationToken ct = default)
+        public Task<OperateResult<bool>> ReadBoolAsync(string address, CancellationToken ct = default)
         {
             var addr = TryParseAddress(address);
-            if (!addr.IsSuccess) return OperateResult<bool>.Failed(addr.Message, addr.ErrorCode);
-            if (!addr.Content.IsBitDevice) return OperateResult<bool>.Failed($"FX Bool 读取只支持位设备地址: {address}");
+            if (!addr.IsSuccess) return Task.FromResult(OperateResult<bool>.Failed(addr.Message, addr.ErrorCode));
 
-            byte[] command;
-            try
-            {
-                command = FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, 1);
-            }
-            catch (Exception ex)
-            {
-                return OperateResult<bool>.Failed(ex.Message);
-            }
-
-            var result = await SendFxAsync(command, ct).ConfigureAwait(false);
-            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
-            return result.Content.Length >= 1 ? OperateResult<bool>.Success(result.Content[0] != 0) : OperateResult<bool>.Failed("FX 读取 Bool 响应数据不足");
+            return Task.FromResult(OperateResult<bool>.Failed("FX Serial Bool 读取需要编程口位设备地址映射验证，当前拒绝执行未验证读取"));
         }
         public override OperateResult<bool> ReadBool(string address) => ReadBoolAsync(address, CancellationToken.None).GetAwaiter().GetResult();
 

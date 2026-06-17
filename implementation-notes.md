@@ -493,10 +493,13 @@
 - Restricted `ReadBool` to bit-device addresses so word devices are not silently interpreted as bit reads.
 - Rejected `Write(address, bool)` before serial I/O instead of writing `01 00` through the word-write path. FX programming-port bit forcing uses a separate command/address mapping that still needs manual or hardware verification.
 - Corrected FX programming-port SUM scope to exclude STX and include ETX for both request frame construction and response verification.
+- Replaced the mixed Computer-Link-style programming-port frame (`Command + Device + Address + Count`) with the programming-port raw-memory frame (`Command + Address + ByteCount + Data`).
+- Updated programming-port response parsing to treat the STX/ETX body as data only, rather than skipping a non-existent command/device/address header.
+- Kept FX Serial high-level reads/writes limited to `D/R` word-device addresses until bit-device raw-memory mapping is verified.
 
 ## Verification
-- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 41/41.
-- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-build` passed: 350/350.
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 42/42.
+- `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-build` passed: 351/351.
 - `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 85 warnings. Warnings are existing cross-project nullable/member-hiding/analyzer warnings outside the FX Serial files changed here.
 - `dotnet test tests/Nexus.MitsubishiFx.Tests --configuration Release --no-restore` could not run because that project is not present on the current branch; `rg --files tests | rg "MitsubishiFx|Fx"` found only `tests/Nexus.Mitsubishi.Tests/FxSerialFrameTests.cs`.
 

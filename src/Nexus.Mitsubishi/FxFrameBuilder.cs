@@ -5,7 +5,7 @@ namespace Nexus.Mitsubishi
 {
     /// <summary>
     /// 三菱 FX 系列编程口协议帧构建器。
-    /// <para>帧结构: ENQ(0x05) -> ACK(0x06)/NAK(0x15) -> STX(0x02) + Command(1) + Address(4) + Data(N) + ETX(0x03) + SUM(2 chars hex)</para>
+    /// <para>帧结构: ENQ(0x05) -> ACK(0x06)/NAK(0x15) -> STX(0x02) + Command(1) + Address(4 hex) + ByteCount(2 hex) + Data(N) + ETX(0x03) + SUM(2 chars hex)</para>
     /// </summary>
     public static class FxFrameBuilder
     {
@@ -14,24 +14,25 @@ namespace Nexus.Mitsubishi
         private const byte NAK = 0x15;
         private const byte STX = 0x02;
         private const byte ETX = 0x03;
-        private const int MaxAddress = 9999;
-        private const int MaxWordCount = 0xFF;
+        private const int MaxAddress = 0xFFFF;
+        private const int MaxWordCount = 0x7F;
+        private const int MaxWriteBytes = 0xFE;
 
         /// <summary>
         /// 构建 FX 读取命令帧 (Command '0')。
         /// </summary>
-        /// <param name="deviceCode">设备代码 (如 'D'=0x44, 'M'=0x4D, 'X'=0x58, 'Y'=0x59)</param>
-        /// <param name="address">起始地址 (十进制)。</param>
+        /// <param name="deviceCode">保留参数；FX 编程口帧不编码设备代码。</param>
+        /// <param name="address">FX 编程口原始起始地址。</param>
         /// <param name="wordCount">读取字数 (1 word = 2 bytes)。</param>
         public static byte[] BuildReadCommand(char deviceCode, int address, int wordCount)
         {
             ValidateAddress(address);
             ValidateWordCount(wordCount);
 
-            string addrStr = address.ToString("D4");
-            string countStr = wordCount.ToString("X2"); // 2位十六进制
+            string addrStr = address.ToString("X4");
+            string countStr = checked(wordCount * 2).ToString("X2");
 
-            string cmd = $"0{char.ToUpperInvariant(deviceCode)}{addrStr}{countStr}";
+            string cmd = $"0{addrStr}{countStr}";
             byte[] data = Encoding.ASCII.GetBytes(cmd);
             
             byte[] frame = new byte[1 + data.Length + 1 + 2]; // STX + Data + ETX + SUM
@@ -49,18 +50,19 @@ namespace Nexus.Mitsubishi
         /// <summary>
         /// 构建 FX 写入命令帧 (Command '1')。
         /// </summary>
-        /// <param name="deviceCode">设备代码。</param>
-        /// <param name="address">起始地址。</param>
+        /// <param name="deviceCode">保留参数；FX 编程口帧不编码设备代码。</param>
+        /// <param name="address">FX 编程口原始起始地址。</param>
         /// <param name="data">要写入的字节数据 (必须是偶数长度)。</param>
         public static byte[] BuildWriteCommand(char deviceCode, int address, byte[] data)
         {
             ValidateAddress(address);
             ValidateWriteData(data);
 
-            string addrStr = address.ToString("D4");
+            string addrStr = address.ToString("X4");
+            string countStr = data.Length.ToString("X2");
             string dataStr = BitConverter.ToString(data).Replace("-", ""); // 转为十六进制字符串
             
-            string cmd = $"1{char.ToUpperInvariant(deviceCode)}{addrStr}{dataStr}";
+            string cmd = $"1{addrStr}{countStr}{dataStr}";
             byte[] cmdBytes = Encoding.ASCII.GetBytes(cmd);
             
             byte[] frame = new byte[1 + cmdBytes.Length + 1 + 2]; // STX + Data + ETX + SUM
@@ -78,7 +80,7 @@ namespace Nexus.Mitsubishi
         private static void ValidateAddress(int address)
         {
             if (address < 0 || address > MaxAddress)
-                throw new ArgumentOutOfRangeException(nameof(address), $"FX 地址必须在 0..{MaxAddress} 范围内");
+                throw new ArgumentOutOfRangeException(nameof(address), $"FX 编程口原始地址必须在 0x0000..0x{MaxAddress:X4} 范围内");
         }
 
         private static void ValidateWordCount(int wordCount)
@@ -93,6 +95,8 @@ namespace Nexus.Mitsubishi
                 throw new ArgumentException("FX 写入数据不能为空", nameof(data));
             if ((data.Length % 2) != 0)
                 throw new ArgumentException("FX 写入数据长度必须为偶数字节", nameof(data));
+            if (data.Length > MaxWriteBytes)
+                throw new ArgumentException($"FX 写入数据长度必须在 1..{MaxWriteBytes} 字节范围内", nameof(data));
         }
 
         /// <summary>
@@ -137,7 +141,7 @@ namespace Nexus.Mitsubishi
             int stxIndex = Array.IndexOf(response, STX);
             int etxIndex = Array.IndexOf(response, ETX);
             
-            if (stxIndex < 0 || etxIndex < stxIndex + 5 || etxIndex + 3 > response.Length)
+            if (stxIndex < 0 || etxIndex <= stxIndex || etxIndex + 3 > response.Length)
                 return false;
 
             // 验证 SUM
@@ -153,12 +157,10 @@ namespace Nexus.Mitsubishi
             if (!expectedSum.Equals(actualSum, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            // 提取数据 (跳过 STX, Command, Device, Address)
-            // Data 长度 = (etxIndex - stxIndex - 1) - 1(Command) - 1(Device) - 4(Address)
-            int dataLen = etxIndex - stxIndex - 7;
+            int dataLen = etxIndex - stxIndex - 1;
             if (dataLen > 0)
             {
-                string hexData = Encoding.ASCII.GetString(response, stxIndex + 7, dataLen);
+                string hexData = Encoding.ASCII.GetString(response, stxIndex + 1, dataLen);
                 try
                 {
                     data = HexStringToByteArray(hexData);
