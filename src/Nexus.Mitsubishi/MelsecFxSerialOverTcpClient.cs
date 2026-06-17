@@ -9,8 +9,8 @@ namespace Nexus.Mitsubishi
     /// <summary>
     /// 三菱 FX 编程口协议 over TCP 客户端 — 将 FX 串口帧封装在 TCP 连接上。
     /// <para>适用于 FX3U/FX5U 等通过以太网适配器或串口服务器暴露编程口协议的场景。</para>
-    /// <para>帧格式: ENQ(0x05) → ACK(0x06) → STX(0x02) + Cmd(1) + Device(1) + Addr(4) + Data(N) + ETX(0x03) + SUM(2hex)</para>
-    /// <para>地址格式: D100, M100, X0, Y10, S100, T100, C100</para>
+    /// <para>帧格式: ENQ(0x05) → ACK(0x06) → STX(0x02) + Cmd(1) + Addr(4 hex) + ByteCount(2 hex) + Data(N) + ETX(0x03) + SUM(2hex)</para>
+    /// <para>当前高层字/字节读写仅放行 D/R 字设备地址。M/X/Y/T/S/C 位设备与 Bool 操作需要编程口地址映射和强制位命令验证后再开放。</para>
     /// </summary>
     public class MelsecFxSerialOverTcpClient : TcpDeviceBase, IBatchReadWrite
     {
@@ -100,13 +100,76 @@ namespace Nexus.Mitsubishi
         private static readonly System.Text.RegularExpressions.Regex _fxAddrRegex =
             new System.Text.RegularExpressions.Regex(@"^([DMXYTSRC])(\d+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        private class FxAddress { public char DeviceCode; public int Address; }
+        private class FxAddress { public char DeviceCode; public int Address; public bool IsBitDevice; }
 
-        private static FxAddress ParseAddress(string address)
+        private static OperateResult<FxAddress> TryParseAddress(string address)
         {
-            var match = _fxAddrRegex.Match(address.ToUpper());
-            if (!match.Success) throw new ArgumentException($"无效的 FX 地址格式: {address}");
-            return new FxAddress { DeviceCode = match.Groups[1].Value[0], Address = int.Parse(match.Groups[2].Value) };
+            if (string.IsNullOrWhiteSpace(address))
+                return OperateResult<FxAddress>.Failed("FX 地址不能为空");
+
+            string normalized = address.Trim().ToUpperInvariant();
+            var match = _fxAddrRegex.Match(normalized);
+            if (!match.Success)
+                return OperateResult<FxAddress>.Failed($"无效的 FX 地址格式: {address}");
+
+            if (!int.TryParse(match.Groups[2].Value, out int parsedAddress))
+                return OperateResult<FxAddress>.Failed($"无效的 FX 地址编号: {address}");
+
+            char deviceCode = match.Groups[1].Value[0];
+            return OperateResult<FxAddress>.Success(new FxAddress
+            {
+                DeviceCode = deviceCode,
+                Address = parsedAddress,
+                IsBitDevice = IsBitDevice(deviceCode)
+            });
+        }
+
+        private static bool IsBitDevice(char deviceCode)
+        {
+            switch (char.ToUpperInvariant(deviceCode))
+            {
+                case 'M':
+                case 'X':
+                case 'Y':
+                case 'T':
+                case 'S':
+                case 'C':
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static OperateResult<byte[]> BuildReadFrame(string address, int words)
+        {
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            if (addr.Content.IsBitDevice) return OperateResult<byte[]>.Failed($"FX Serial over TCP 字/字节读取暂仅支持 D/R 字设备地址: {address}");
+
+            try
+            {
+                return OperateResult<byte[]>.Success(FxFrameBuilder.BuildReadCommand(addr.Content.DeviceCode, addr.Content.Address, words));
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<byte[]>.Failed(ex.Message);
+            }
+        }
+
+        private static OperateResult<byte[]> BuildWriteFrame(string address, byte[] data)
+        {
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<byte[]>.Failed(addr.Message, addr.ErrorCode);
+            if (addr.Content.IsBitDevice) return OperateResult<byte[]>.Failed($"FX Serial over TCP 字/字节写入暂仅支持 D/R 字设备地址: {address}");
+
+            try
+            {
+                return OperateResult<byte[]>.Success(FxFrameBuilder.BuildWriteCommand(addr.Content.DeviceCode, addr.Content.Address, data));
+            }
+            catch (Exception ex)
+            {
+                return OperateResult<byte[]>.Failed(ex.Message);
+            }
         }
 
         // ═══════════════════════════════════════════
@@ -115,8 +178,10 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult<short> ReadInt16(string address)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 1));
+            var command = BuildReadFrame(address, 1);
+            if (!command.IsSuccess) return OperateResult<short>.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             if (!result.IsSuccess) return OperateResult<short>.Failed(result.Message, result.ErrorCode);
             return result.Content.Length >= 2
                 ? OperateResult<short>.Success((short)((result.Content[1] << 8) | result.Content[0]))
@@ -131,8 +196,10 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult<int> ReadInt32(string address)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 2));
+            var command = BuildReadFrame(address, 2);
+            if (!command.IsSuccess) return OperateResult<int>.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             if (!result.IsSuccess) return OperateResult<int>.Failed(result.Message, result.ErrorCode);
             return result.Content.Length >= 4
                 ? OperateResult<int>.Success((result.Content[3] << 24) | (result.Content[2] << 16) | (result.Content[1] << 8) | result.Content[0])
@@ -147,8 +214,10 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult<long> ReadInt64(string address)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 4));
+            var command = BuildReadFrame(address, 4);
+            if (!command.IsSuccess) return OperateResult<long>.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             if (!result.IsSuccess) return OperateResult<long>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < 8) return OperateResult<long>.Failed("FX 读取长整型响应数据不足");
             return OperateResult<long>.Success(BitConverter.ToInt64(result.Content, 0));
@@ -174,19 +243,19 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult<bool> ReadBool(string address)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, 1));
-            if (!result.IsSuccess) return OperateResult<bool>.Failed(result.Message, result.ErrorCode);
-            return result.Content.Length >= 1
-                ? OperateResult<bool>.Success((result.Content[0] & 0x01) != 0)
-                : OperateResult<bool>.Failed("FX 读取 Bool 响应数据不足");
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult<bool>.Failed(addr.Message, addr.ErrorCode);
+
+            return OperateResult<bool>.Failed("FX Serial over TCP Bool 读取需要编程口位设备地址映射验证，当前拒绝执行未验证读取");
         }
 
         public override OperateResult<string> ReadString(string address, ushort length)
         {
-            var addr = ParseAddress(address);
             int words = (length + 1) / 2;
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, words));
+            var command = BuildReadFrame(address, words);
+            if (!command.IsSuccess) return OperateResult<string>.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             if (!result.IsSuccess) return OperateResult<string>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < length) return OperateResult<string>.Failed("FX 读取字符串响应数据不足");
             return OperateResult<string>.Success(Encoding.ASCII.GetString(result.Content, 0, length).TrimEnd('\0'));
@@ -194,9 +263,11 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult<byte[]> ReadBytes(string address, ushort length)
         {
-            var addr = ParseAddress(address);
             int words = (length + 1) / 2;
-            var result = SendFxCommand(FxFrameBuilder.BuildReadCommand(addr.DeviceCode, addr.Address, words));
+            var command = BuildReadFrame(address, words);
+            if (!command.IsSuccess) return OperateResult<byte[]>.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message, result.ErrorCode);
             if (result.Content.Length < length) return OperateResult<byte[]>.Failed("FX 读取字节响应数据不足");
             byte[] data = new byte[length];
@@ -210,15 +281,19 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult Write(string address, bool value)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, new byte[] { (byte)(value ? 1 : 0), 0x00 }));
-            return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
+            var addr = TryParseAddress(address);
+            if (!addr.IsSuccess) return OperateResult.Failed(addr.Message, addr.ErrorCode);
+            if (!addr.Content.IsBitDevice) return OperateResult.Failed($"FX Serial over TCP Bool 写入只支持位设备地址: {address}");
+
+            return OperateResult.Failed("FX Serial over TCP Bool 写入需要编程口强制位命令和地址映射验证，当前拒绝执行未验证写入");
         }
 
         public override OperateResult Write(string address, short value)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, new byte[] { (byte)(value & 0xFF), (byte)(value >> 8) }));
+            var command = BuildWriteFrame(address, new byte[] { (byte)(value & 0xFF), (byte)(value >> 8) });
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
 
@@ -226,8 +301,10 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult Write(string address, int value)
         {
-            var addr = ParseAddress(address);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, BitConverter.GetBytes(value)));
+            var command = BuildWriteFrame(address, BitConverter.GetBytes(value));
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
 
@@ -235,11 +312,13 @@ namespace Nexus.Mitsubishi
 
         public override OperateResult Write(string address, long value)
         {
-            var addr = ParseAddress(address);
             byte[] data = new byte[8];
             Buffer.BlockCopy(BitConverter.GetBytes((int)(value & 0xFFFFFFFF)), 0, data, 0, 4);
             Buffer.BlockCopy(BitConverter.GetBytes((int)(value >> 32)), 0, data, 4, 4);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data));
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
 
@@ -252,19 +331,23 @@ namespace Nexus.Mitsubishi
         public override OperateResult Write(string address, string value)
         {
             if (value == null) return OperateResult.Failed("写入字符串不能为空");
-            var addr = ParseAddress(address);
             byte[] data = Encoding.ASCII.GetBytes(value);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data));
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
 
         public override OperateResult Write(string address, byte[] data)
         {
             if (data == null) return OperateResult.Failed("写入数据不能为空");
-            var addr = ParseAddress(address);
             if (data.Length % 2 != 0) Array.Resize(ref data, data.Length + 1);
-            var result = SendFxCommand(FxFrameBuilder.BuildWriteCommand(addr.DeviceCode, addr.Address, data));
+            var command = BuildWriteFrame(address, data);
+            if (!command.IsSuccess) return OperateResult.Failed(command.Message, command.ErrorCode);
+
+            var result = SendFxCommand(command.Content);
             return result.IsSuccess ? OperateResult.Success() : OperateResult.Failed(result.Message, result.ErrorCode);
         }
 

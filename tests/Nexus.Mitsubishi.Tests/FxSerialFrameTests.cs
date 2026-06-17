@@ -656,4 +656,80 @@ public sealed class FxSerialFrameTests
         Assert.False(result.IsSuccess);
         Assert.Contains("SUM", result.Message);
     }
+
+    // ═══════════════════════════════════════════
+    //  MelsecFxSerialOverTcpClient — 离线安全边界
+    // ═══════════════════════════════════════════
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_ReadInt16_BitAddress_ReturnsFailureWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.ReadInt16("M100");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("暂仅支持 D/R 字设备地址", result.Message);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_ReadInt16_InvalidAddress_ReturnsFailureWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.ReadInt16("Q100");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("无效的 FX 地址格式", result.Message);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_ReadBool_BitAddressRejectsUnverifiedMappingWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.ReadBool("M100");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("拒绝执行未验证读取", result.Message);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_WriteBool_BitAddressRejectsUnverifiedForceWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.Write("M100", true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("拒绝执行未验证写入", result.Message);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_WriteBool_WordAddress_ReturnsFailureWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.Write("D100", true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Bool 写入只支持位设备地址", result.Message);
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public void MelsecFxSerialOverTcpClient_WriteBytes_BitAddress_ReturnsFailureWithoutConnecting()
+    {
+        using var client = new MelsecFxSerialOverTcpClient("127.0.0.1", 65000, timeout: 50);
+
+        var result = client.Write("C100", new byte[] { 0x12, 0x34 });
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("暂仅支持 D/R 字设备地址", result.Message);
+        Assert.False(client.IsConnected);
+    }
 }
