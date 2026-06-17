@@ -103,7 +103,7 @@ public sealed class FxSerialFrameTests
         frame[frame.Length - 3] = 0x03;
 
         int sum = 0;
-        for (int i = 0; i < frame.Length - 2; i++)
+        for (int i = 1; i < frame.Length - 2; i++)
             sum += frame[i];
         byte[] sumBytes = Encoding.ASCII.GetBytes((sum & 0xFF).ToString("X2"));
         frame[frame.Length - 2] = sumBytes[0];
@@ -184,18 +184,19 @@ public sealed class FxSerialFrameTests
     }
 
     [Fact]
-    public void FxFrameBuilder_BuildReadCommand_SumIncludesEtx()
+    public void FxFrameBuilder_BuildReadCommand_SumExcludesStxAndIncludesEtx()
     {
         byte[] frame = FxFrameBuilder.BuildReadCommand('D', 100, 2);
 
         int sum = 0;
-        for (int i = 0; i < frame.Length - 2; i++)
+        for (int i = 1; i < frame.Length - 2; i++)
             sum += frame[i];
 
         string expected = (sum & 0xFF).ToString("X2");
         string actual = Encoding.ASCII.GetString(frame, frame.Length - 2, 2);
 
         Assert.Equal(expected, actual);
+        Assert.Equal("9A", actual);
     }
 
     [Fact]

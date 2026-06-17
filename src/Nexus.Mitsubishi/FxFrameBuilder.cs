@@ -39,7 +39,7 @@ namespace Nexus.Mitsubishi
             Buffer.BlockCopy(data, 0, frame, 1, data.Length);
             frame[frame.Length - 3] = ETX;
             
-            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 2);
+            byte[] sumBytes = CalculateSum(frame, 1, frame.Length - 3);
             frame[frame.Length - 2] = sumBytes[0];
             frame[frame.Length - 1] = sumBytes[1];
 
@@ -68,7 +68,7 @@ namespace Nexus.Mitsubishi
             Buffer.BlockCopy(cmdBytes, 0, frame, 1, cmdBytes.Length);
             frame[frame.Length - 3] = ETX;
             
-            byte[] sumBytes = CalculateSum(frame, 0, frame.Length - 2);
+            byte[] sumBytes = CalculateSum(frame, 1, frame.Length - 3);
             frame[frame.Length - 2] = sumBytes[0];
             frame[frame.Length - 1] = sumBytes[1];
 
@@ -97,7 +97,7 @@ namespace Nexus.Mitsubishi
 
         /// <summary>
         /// 计算 FX 协议的 SUM 校验和 (2位十六进制 ASCII 字符)。
-        /// 校验范围：从 STX 到 ETX (包含)。
+        /// 校验范围：从 STX 后的第一个字节到 ETX (包含)。
         /// </summary>
         private static byte[] CalculateSum(byte[] frame, int offset, int length)
         {
@@ -142,7 +142,7 @@ namespace Nexus.Mitsubishi
 
             // 验证 SUM
             int sum = 0;
-            for (int i = stxIndex; i <= etxIndex; i++)
+            for (int i = stxIndex + 1; i <= etxIndex; i++)
             {
                 sum += response[i];
             }

@@ -492,11 +492,12 @@
 - Classified FX Serial addresses as bit devices (`M/X/Y/T/S/C`) or word devices (`D/R`) for the high-level Bool APIs.
 - Restricted `ReadBool` to bit-device addresses so word devices are not silently interpreted as bit reads.
 - Rejected `Write(address, bool)` before serial I/O instead of writing `01 00` through the word-write path. FX programming-port bit forcing uses a separate command/address mapping that still needs manual or hardware verification.
+- Corrected FX programming-port SUM scope to exclude STX and include ETX for both request frame construction and response verification.
 
 ## Verification
 - `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-restore --filter "FullyQualifiedName~FxSerialFrameTests"` passed: 41/41.
 - `dotnet test tests/Nexus.Mitsubishi.Tests --configuration Release --no-build` passed: 350/350.
-- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 0 warnings.
+- `dotnet build Nexus.slnx --configuration Release --no-restore -m:1` passed: 0 errors, 85 warnings. Warnings are existing cross-project nullable/member-hiding/analyzer warnings outside the FX Serial files changed here.
 - `dotnet test tests/Nexus.MitsubishiFx.Tests --configuration Release --no-restore` could not run because that project is not present on the current branch; `rg --files tests | rg "MitsubishiFx|Fx"` found only `tests/Nexus.Mitsubishi.Tests/FxSerialFrameTests.cs`.
 
 ## Risks
