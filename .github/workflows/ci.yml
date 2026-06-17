@@ -2,16 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master ]
 
 jobs:
   build-and-test:
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -29,10 +27,11 @@ jobs:
     - name: Test
       run: dotnet test Nexus.slnx --no-build --configuration Release --verbosity normal
 
-  pack-and-publish:
+  pack:
     needs: build-and-test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -41,18 +40,20 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
-    - name: Restore
+    - name: Restore dependencies
       run: dotnet restore Nexus.slnx
 
-    - name: Pack all libraries
+    - name: Build
+      run: dotnet build Nexus.slnx --no-restore --configuration Release
+
+    - name: Pack libraries
       shell: pwsh
       run: |
         $projects = Get-ChildItem -Path src -Filter "Nexus.*.csproj" -Recurse | Where-Object {
           $_.Name -ne "Nexus.App.csproj"
         }
-        foreach ($proj in $projects) {
-          Write-Host "Packing $($proj.FullName)..."
-          dotnet pack $proj.FullName --configuration Release --output ./nupkgs --no-build
+        foreach ($project in $projects) {
+          dotnet pack $project.FullName --configuration Release --output ./nupkgs --no-build
         }
 
     - name: Upload NuGet artifacts
@@ -60,8 +61,3 @@ jobs:
       with:
         name: nuget-packages
         path: ./nupkgs/*.nupkg
-
-    # Uncomment when ready to publish to nuget.org
-    # - name: Push to NuGet
-    #   run: |
-    #     dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
