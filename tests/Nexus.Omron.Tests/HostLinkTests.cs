@@ -75,7 +75,12 @@ public class HostLinkTests
 
             int read = 0;
             while (read < count && _readQueue.Count > 0)
-                buffer[offset + read++] = _readQueue.Dequeue();
+            {
+                byte b = _readQueue.Dequeue();
+                buffer[offset + read++] = b;
+                if (b == 0x0D)
+                    break;
+            }
 
             return read;
         }
@@ -426,6 +431,41 @@ public class HostLinkTests
         Assert.Equal((byte)'D', request[4]);
         Assert.Equal((byte)'*', request[request.Length - 2]);
         Assert.Equal(0x0D, request[request.Length - 1]);
+    }
+
+    [Fact]
+    public void CModeClient_ReadBool_BitAddress_UsesRequestedBit()
+    {
+        using var port = new CModeFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(BuildCModeResponse("RD", "0000", "0008"));
+        using var client = new OmronHostLinkCModeClient(port, timeout: 100);
+
+        var result = client.ReadBool("D100.03");
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True(result.Content);
+        Assert.Single(port.Writes);
+    }
+
+    [Fact]
+    public void CModeClient_WriteBool_BitAddress_PreservesOtherBits()
+    {
+        using var port = new CModeFakeSerialPort();
+        port.Open();
+        port.LoadReadBytes(BuildCModeResponse("RD", "0000", "00A0"));
+        port.LoadReadBytes(BuildCModeResponse("WD", "0000"));
+        using var client = new OmronHostLinkCModeClient(port, timeout: 100);
+
+        var result = client.Write("D100.03", true);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(2, port.Writes.Count);
+
+        byte[] writeRequest = port.Writes[1];
+        Assert.Equal((byte)'W', writeRequest[3]);
+        Assert.Equal((byte)'D', writeRequest[4]);
+        Assert.Equal("00A8", Encoding.ASCII.GetString(writeRequest, 12, 4));
     }
 
     [Fact]
@@ -1054,6 +1094,45 @@ public class HostLinkTests
             Assert.True(result.IsSuccess, result.Message);
             Assert.Equal((short)0x1357, result.Content);
             Assert.StartsWith("40 30 35 52 44", sentHex ?? string.Empty);
+        }
+        finally
+        {
+            server.Stop();
+            server.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CModeOverTcpClient_WriteReadBool_BitAddress_PreservesOtherBits()
+    {
+        int port = PortBase + 43;
+        var server = new OmronHostLinkVirtualServer(port);
+        server.SetDmWord(130, 0x00A0);
+        server.Start();
+
+        try
+        {
+            using var client = new OmronHostLinkCModeOverTcpClient("127.0.0.1", port, timeout: 1000);
+            client.SetPersistentConnection();
+            Assert.True(client.Connect().IsSuccess);
+
+            var set = client.Write("D130.03", true);
+            Assert.True(set.IsSuccess, set.Message);
+
+            var readSet = client.ReadUInt16("D130");
+            Assert.True(readSet.IsSuccess, readSet.Message);
+            Assert.Equal((ushort)0x00A8, readSet.Content);
+
+            var bit3 = client.ReadBool("D130.03");
+            Assert.True(bit3.IsSuccess, bit3.Message);
+            Assert.True(bit3.Content);
+
+            var clear = client.Write("D130.03", false);
+            Assert.True(clear.IsSuccess, clear.Message);
+
+            var readClear = client.ReadUInt16("D130");
+            Assert.True(readClear.IsSuccess, readClear.Message);
+            Assert.Equal((ushort)0x00A0, readClear.Content);
         }
         finally
         {

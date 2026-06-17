@@ -120,14 +120,55 @@ namespace Nexus.Omron
 
         public override OperateResult<bool> ReadBool(string address)
         {
-            var r = ReadBytes(address, 2);
-            if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message);
-            return OperateResult<bool>.Success(r.Content.Length > 0 && r.Content[0] != 0);
+            var addr = _addressParser.Parse(address);
+            var word = ReadWordForBool(addr);
+            if (!word.IsSuccess) return OperateResult<bool>.Failed(word.Message, word.ErrorCode);
+
+            if (addr.BitOffset >= 0)
+                return OperateResult<bool>.Success((word.Content & (1 << addr.BitOffset)) != 0);
+
+            return OperateResult<bool>.Success(word.Content != 0);
         }
 
         public override OperateResult Write(string address, bool value)
         {
+            var addr = _addressParser.Parse(address);
+            if (addr.BitOffset >= 0)
+            {
+                var word = ReadWordForBool(addr);
+                if (!word.IsSuccess) return OperateResult.Failed(word.Message, word.ErrorCode);
+
+                ushort mask = (ushort)(1 << addr.BitOffset);
+                ushort updated = value
+                    ? (ushort)(word.Content | mask)
+                    : (ushort)(word.Content & ~mask);
+
+                return Write(ToWordAddress(addr).ToString(), ToWordBytes(updated));
+            }
+
             return Write(address, new byte[] { 0, (byte)(value ? 1 : 0) });
+        }
+
+        private OperateResult<ushort> ReadWordForBool(OmronHostLinkCModeAddress addr)
+        {
+            var r = ReadBytes(ToWordAddress(addr).ToString(), 2);
+            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message, r.ErrorCode);
+            if (r.Content.Length < 2)
+                return OperateResult<ushort>.Failed($"C-Mode 位读取响应长度不足: {r.Content.Length} 字节");
+
+            return OperateResult<ushort>.Success(DataConverter.ToUInt16(r.Content, 0));
+        }
+
+        private static OmronHostLinkCModeAddress ToWordAddress(OmronHostLinkCModeAddress addr)
+        {
+            return addr.BitOffset < 0
+                ? addr
+                : new OmronHostLinkCModeAddress(addr.Original, addr.Area, addr.WordAddress, -1, addr.EmBank);
+        }
+
+        private static byte[] ToWordBytes(ushort value)
+        {
+            return new byte[] { (byte)(value >> 8), (byte)(value & 0xFF) };
         }
 
         public override OperateResult<short> ReadInt16(string address)
