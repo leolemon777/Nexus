@@ -382,8 +382,8 @@ namespace Nexus.Omron
                 return OperateResult<byte[]>.Failed($"HostLink 响应过短 ({response?.Length ?? 0} 字节)");
 
             // 查找响应中的 FINS 数据起点（跳过 HostLink 头）
-            // HostLink 头: @ + unit(2) + FA(2) + wait(1) + ICF(2) + DA2(2) + SA2(2) + SID(2) = 14
-            // 响应额外 1 字节后为 FINS 命令码
+            // HostLink 头: @ + unit(2) + FA(2) + wait(2) + ICF(2) + DA2(2) + SA2(2) + SID(2) = 15
+            // 注：wait 字段为 2 字符 hex（与测试契约一致），故命令码从 [15] 开始。
             if (response.Length < 27)
                 return OperateResult<byte[]>.Failed("HostLink 响应不完整");
 

@@ -116,8 +116,15 @@ namespace Nexus
                 if (!_running || _disposed) return;
             }
 
-            if (!_callbackLock.Wait(0))
-                return;   // 上一次心跳回调尚未完成，跳过
+            try
+            {
+                if (!_callbackLock.Wait(0))
+                    return;   // 上一次心跳回调尚未完成，跳过
+            }
+            catch (ObjectDisposedException)
+            {
+                return; // 已经被 Dispose 释放，直接退出
+            }
 
             try
             {
@@ -195,7 +202,14 @@ namespace Nexus
             }
             finally
             {
-                _callbackLock.Release();
+                try
+                {
+                    _callbackLock.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 忽略由于 Dispose 导致的异常
+                }
             }
         }
 

@@ -704,6 +704,39 @@ namespace Nexus.Core.Tests
             guard.Dispose();
         }
 
+        [Fact]
+        public void Dispose_WhileHeartbeatCallbackInFlight_DoesNotCrash()
+        {
+            using var callbackStarted = new ManualResetEventSlim(false);
+            using var callbackFinished = new ManualResetEventSlim(false);
+            var releaseCallback = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var guard = new HeartbeatGuard(
+                new StubDevice(),
+                async () =>
+                {
+                    callbackStarted.Set();
+                    await releaseCallback.Task.ConfigureAwait(false);
+                    callbackFinished.Set();
+                    return OperateResult.Success();
+                })
+            {
+                IntervalMs = 10,
+                TimeoutMs = 1000,
+                MaxConsecutiveFailures = 3
+            };
+
+            guard.Start();
+
+            Assert.True(callbackStarted.Wait(1000));
+            guard.Dispose();
+            releaseCallback.SetResult(true);
+
+            Assert.True(callbackFinished.Wait(1000));
+            Thread.Sleep(100);
+            Assert.False(guard.IsRunning);
+        }
+
         private class StubDevice : IReadWriteDevice
         {
             public bool IsConnected => true;
