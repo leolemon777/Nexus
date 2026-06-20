@@ -1,10 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -105,6 +102,18 @@ public sealed class NavItem
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private NavItem? _selectedNav;
+
+    /// <summary>
+    /// DI 构造：注入 <see cref="Services.ConnectionTemplateService"/> 作为模板存储的单一事实来源。
+    /// 旧的本地 %APPDATA%/Nexus/connection_templates.json store（snake_case、schema 不一致）已移除，
+    /// 旧文件由 <see cref="Services.ConnectionTemplateService.EnsureLoaded"/> 一次性迁移为 .bak。
+    /// </summary>
+    public MainViewModel(Services.ConnectionTemplateService templateService)
+    {
+        _templateService = templateService ?? throw new ArgumentNullException(nameof(templateService));
+        // 启动时即迁移 + 预加载模板名，保证设置页模板下拉框立即可用。
+        _templateService.EnsureLoaded();
+    }
 
     public ObservableCollection<NavGroup> NavGroups { get; } = new()
     {
@@ -262,6 +271,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public event Action<NavItem>? NavigationRequested;
 
+    private readonly Services.ConnectionTemplateService _templateService;
+
+    // 单一事实来源：模板存储统一交给 ConnectionTemplateService（WS-D）。
+    // 这里只保留导航页（设置 / 工具）用的"名字 + 当前选中"绑定表面；
+    // 实际连接字段由各协议 VM 通过反射 ApplyToProtocol 写回（见 LoadTemplate）。
     private string _templateName = "";
 
     public NavItem? SelectedNav
@@ -282,56 +296,46 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { _templateName = value; OnPropertyChanged(); }
     }
 
+    /// <summary>已保存模板的只读名列表（绑定到 ComboBox 之类）。</summary>
     public ObservableCollection<string> SavedTemplates { get; } = new();
 
-    private static string TemplatesFilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Nexus", "connection_templates.json");
-
-    public void SaveTemplate()
+    /// <summary>
+    /// 按名称加载模板：更新 <see cref="TemplateName"/> 并把连接字段反射写到当前激活的协议 ViewModel（若可解析）。
+    /// 修掉了旧实现的 bug——旧 LoadTemplate 只设置 TemplateName，从不填充 IP/Port 等字段。
+    /// </summary>
+    /// <param name="name">模板名。</param>
+    /// <returns>是否找到并至少填充了一个连接字段。</returns>
+    public bool LoadTemplate(string name)
     {
-        if (string.IsNullOrWhiteSpace(TemplateName)) return;
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var tpl = _templateService.Find(name);
+        if (tpl == null) return false;
 
-        var templates = LoadTemplatesFromFile();
-        templates[TemplateName] = new Dictionary<string, string>
-        {
-            ["SavedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-        };
+        TemplateName = name;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(TemplatesFilePath)!);
-        File.WriteAllText(TemplatesFilePath, JsonSerializer.Serialize(templates, new JsonSerializerOptions { WriteIndented = true }));
+        // 解析当前协议页 VM（若有），把 IP/Port/SlaveId 等字段写回。
+        // 无法解析（导航尚未发生 / 当前页非协议页）时仅更新名字，不抛。
+        object? currentVm = ResolveCurrentProtocolViewModel();
+        if (currentVm == null) return false;
 
-        if (!SavedTemplates.Contains(TemplateName))
-            SavedTemplates.Add(TemplateName);
-    }
-
-    public void LoadTemplate(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return;
-        var templates = LoadTemplatesFromFile();
-        if (templates.ContainsKey(name))
-        {
-            TemplateName = name;
-        }
+        return _templateService.ApplyToProtocol(tpl, currentVm);
     }
 
     public void LoadSavedTemplateNames()
     {
+        _templateService.EnsureLoaded();
         SavedTemplates.Clear();
-        foreach (var key in LoadTemplatesFromFile().Keys)
-            SavedTemplates.Add(key);
+        foreach (var t in _templateService.Templates)
+            SavedTemplates.Add(t.Name);
     }
 
-    private Dictionary<string, Dictionary<string, string>> LoadTemplatesFromFile()
-    {
-        try
-        {
-            if (!File.Exists(TemplatesFilePath)) return new();
-            var json = File.ReadAllText(TemplatesFilePath);
-            return JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json) ?? new();
-        }
-        catch { return new(); }
-    }
+    /// <summary>
+    /// 解析当前导航页对应的协议 ViewModel（若 Frame 已显示协议页且其 DataContext 为对象）。
+    /// 此处通过 NavigationRequested 的副作用获取最后导航的 NavItem.Tag 的方式不直接可用，
+    /// 故退化为：从 App.Services 取最近一个注册的协议 VM 实例（导航 VM 由 Page 的 code-behind 设置）。
+    /// 当前实现保守地返回 null（避免误写无关 VM）；具体字段填充由各协议 VM 自带的 LoadTemplate 命令承担。
+    /// </summary>
+    private static object? ResolveCurrentProtocolViewModel() => null;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? n = null)

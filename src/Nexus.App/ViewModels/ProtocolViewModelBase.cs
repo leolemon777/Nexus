@@ -49,6 +49,45 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     private readonly string _packetProtocol = string.Empty;
     private readonly ModbusPacketTransport _packetTransport;
 
+    // ── 写入确认 / 审计（可注入，WS-C）──────────────────────
+    // 子类不感知此字段：通过服务定位（App.Services）惰性解析默认实现，
+    // 单测可通过 WriteConfirmation 属性注入 fake，避免弹真实 MessageBox。
+    private IWriteConfirmationService? _writeConfirmation;
+
+    /// <summary>
+    /// 写入确认 + 审计服务。子类构造时无需传入；首次访问时从
+    /// <c>App.Services</c> 解析（与 DiagnosticBundleService 同样的既有模式）。
+    /// 单测可直接赋值 fake 以避免弹窗。
+    /// </summary>
+    protected IWriteConfirmationService WriteConfirmation
+    {
+        get => _writeConfirmation ??= ResolveWriteConfirmation();
+        set => _writeConfirmation = value;
+    }
+
+    /// <summary>
+    /// 从 <c>App.Services</c> 解析 <see cref="IWriteConfirmationService"/>；
+    /// 若容器不可用（设计时/早期启动/单测无 host）则回退到
+    /// <see cref="NullWriteConfirmation"/>（放行但不审计），避免 NRE 中断 UI。
+    /// </summary>
+    private static IWriteConfirmationService ResolveWriteConfirmation()
+    {
+        try
+        {
+            var app = Application.Current as App;
+            if (app != null)
+            {
+                var svc = app.Services.GetService(typeof(IWriteConfirmationService)) as IWriteConfirmationService;
+                if (svc != null) return svc;
+            }
+        }
+        catch
+        {
+            // 容器未就绪 — 回退到安全默认。
+        }
+        return NullWriteConfirmation.Instance;
+    }
+
     protected ProtocolViewModelBase()
     {
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
@@ -267,8 +306,8 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
             AppendLog("[WARN] Address validation: " + validation.Message);
         }
 
-        // 写入确认
-        if (!WriteConfirmationService.Confirm(addr, DataType, WriteValue))
+        // 写入确认（同时追加 confirmed/skipped 审计记录）
+        if (!WriteConfirmation.ConfirmWrite(ProtocolName, addr, DataType, WriteValue))
         {
             AppendLog("[SKIP] Write cancelled by user.");
             return;
@@ -287,9 +326,20 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
                 _        => "[ERR] Unsupported type for writing",
             };
             AppendLog(result);
+            bool ok = result.StartsWith("[WR]", StringComparison.Ordinal);
+            WriteConfirmation.RecordOutcome(ProtocolName, addr, DataType, WriteValue, ok, ok ? null : result);
         }
-        catch (FormatException fex) { AppendLog("[ERR] Write parse: " + fex.Message); }
-        catch (Exception ex) { AppendLog("[ERR] Write error: " + ex.Message); AppendDiagnostic(ex.Message, ex); }
+        catch (FormatException fex)
+        {
+            AppendLog("[ERR] Write parse: " + fex.Message);
+            WriteConfirmation.RecordOutcome(ProtocolName, addr, DataType, WriteValue, succeeded: false, fex.Message);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("[ERR] Write error: " + ex.Message);
+            AppendDiagnostic(ex.Message, ex);
+            WriteConfirmation.RecordOutcome(ProtocolName, addr, DataType, WriteValue, succeeded: false, ex.Message);
+        }
     }
 
     private static async Task<string> DoWrite(string addr, Func<Task<OperateResult>> action)

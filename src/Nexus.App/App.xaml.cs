@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Nexus;
 using Nexus.App.Configuration;
 using Nexus.App.ViewModels;
 using Nexus.App.Services;
@@ -66,16 +67,37 @@ public partial class App : Application
 
         ThemeManager.Init("mono", "soft");
 
+        string environment = ResolveEnvironment();
+
         _host = Host.CreateDefaultBuilder()
             .ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+                // 仅加载匹配当前环境的覆盖文件，避免 Dev/Prod 同时叠加（后加者覆盖前者）。
+                cfg.AddJsonFile($"appsettings.{environment}.json", optional: true, reloadOnChange: true);
             })
+            .UseEnvironment(environment)
             .ConfigureServices((ctx, services) =>
             {
                 // Options
                 services.Configure<ModbusOptions>(
                     ctx.Configuration.GetSection(ModbusOptions.SectionName));
+
+                // WS-A: Settings 页 POCO（从 "Theme" 节绑定；缺失字段回退到 POCO 默认 mono/soft/true）。
+                services.Configure<AppOptions>(
+                    ctx.Configuration.GetSection(AppOptions.SectionName));
+
+                // ── Wave-1 服务（WS-D 接线）─────────────────────────────────
+                // 日志：FileLogger + BufferedLogger + SecretRedactor 组合，注册为 ILogger 单例。
+                AppLoggerFactory.ConfigureLogging(services);
+
+                // 写入确认 + 审计门面（ProtocolViewModelBase 经 App.Services 解析）。
+                services.AddSingleton<IConfirmationDialog, MessageBoxConfirmationDialog>();
+                services.AddSingleton<IWriteAuditSink, WriteAuditSink>();
+                services.AddSingleton<IWriteConfirmationService, WriteConfirmationService>();
+
+                // WS-A: Settings 页 ViewModel（Transient —— 每次导航新建，Unloaded 时 Dispose）。
+                services.AddTransient<SettingsViewModel>();
 
                 // ViewModels
                 services.AddSingleton<MainViewModel>();
@@ -186,21 +208,91 @@ public partial class App : Application
         }
     }
 
-    /// <summary>把崩溃信息写入 crash.log（应用所在目录），供事后排查。</summary>
+    /// <summary>
+    /// 把崩溃信息写到应用级 <see cref="ILogger"/>（脱敏后落 nexus.log 滚动序列）。
+    /// 三个全局异常入口（DispatcherUnhandledException / AppDomain.UnhandledException /
+    /// TaskScheduler.UnobservedTaskException）均经此路径，源标识由调用方传入。
+    /// </summary>
+    /// <remarks>
+    /// 设计要点（WS-B "彻底放弃"原则）：
+    /// <list type="bullet">
+    /// <item>崩溃可能发生在 DI 容器就绪前，故惰性解析 <c>ILogger</c>，
+    /// 失败时回退到 <see cref="AppLoggerFactory.CreateLogger(LoggingOptions)"/> 构造的临时实例。</item>
+    /// <item>异常文本先经 <see cref="SecretRedactor.Redact"/> 脱敏（IP / 连接串口令 / Token）。</item>
+    /// <item>最外层 try/catch 不删；若 logger 也抛，最终兜底 <c>File.AppendAllText(crash.log)</c>，
+    /// 该兜底文本同样先经 <see cref="SecretRedactor.Redact"/>。</item>
+    /// </list>
+    /// </remarks>
     private static void WriteCrashLog(string source, object? errorObject)
     {
         try
         {
-            string path = Path.Combine(AppContext.BaseDirectory, "crash.log");
             string detail = errorObject is Exception ex
                 ? $"{ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}"
                 : errorObject?.ToString() ?? "(null)";
-            string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{source}]\n{detail}\n{new string('-', 60)}\n";
-            File.AppendAllText(path, entry);
+            string safe = SecretRedactor.Redact(detail);
+            CrashLogger.Error($"[Crash:{source}] {safe}");
         }
         catch
         {
-            // 连写日志都失败（磁盘满/无权限）则彻底放弃；不可在此再抛异常。
+            // logger 本身异常 — 兜底直写 crash.log（同样脱敏），永不在此抛。
+            try
+            {
+                string path = Path.Combine(AppContext.BaseDirectory, "crash.log");
+                string detail = errorObject is Exception ex
+                    ? $"{ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}"
+                    : errorObject?.ToString() ?? "(null)";
+                string safe = SecretRedactor.Redact(detail);
+                string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{source}]\n{safe}\n{new string('-', 60)}\n";
+                File.AppendAllText(path, entry);
+            }
+            catch
+            {
+                // 连写日志都失败（磁盘满/无权限）则彻底放弃；不可在此再抛异常。
+            }
         }
+    }
+
+    /// <summary>
+    /// 惰性解析崩溃专用 <see cref="ILogger"/>：优先取 DI 容器里的单例；
+    /// 若 host 尚未就绪（早期 OnStartup 异常），回退到
+    /// <see cref="AppLoggerFactory.CreateLogger(LoggingOptions)"/> 构造的临时实例。
+    /// 该回退实例会更新 <see cref="AppLoggerFactory.BufferedLog"/>，便于事后排查。
+    /// </summary>
+    private static ILogger? _crashLogger;
+    private static ILogger CrashLogger
+    {
+        get
+        {
+            if (_crashLogger != null) return _crashLogger;
+            try
+            {
+                // _host 是实例字段；CrashLogger 为静态，经 Current 取当前 App 实例。
+                var host = (Current as App)?._host;
+                var fromDi = host?.Services.GetService(typeof(ILogger)) as ILogger;
+                if (fromDi != null) { _crashLogger = fromDi; return fromDi; }
+            }
+            catch { /* DI 不可用 — 走回退 */ }
+            ILogger fallback = AppLoggerFactory.CreateLogger(new LoggingOptions());
+            _crashLogger = fallback;
+            return fallback;
+        }
+    }
+
+    /// <summary>
+    /// 解析当前运行环境：优先 <c>DOTNET_ENVIRONMENT</c>，其次 <c>ASPNETCORE_ENVIRONMENT</c>，
+    /// 最后 <c>NEXUS_ENVIRONMENT</c>；默认 <c>Development</c>（本地调试友好）。
+    /// 仅接受 <c>Development</c> / <c>Production</c> / <c>Staging</c>；其它值回退到 Development。
+    /// </summary>
+    private static string ResolveEnvironment()
+    {
+        string env = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+                     ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                     ?? Environment.GetEnvironmentVariable("NEXUS_ENVIRONMENT")
+                     ?? Environments.Development;
+        // Environments.* 是 static readonly（非 const），无法用于常量模式匹配，故走字面比较。
+        if (env == Environments.Production) return Environments.Production;
+        if (env == Environments.Staging) return Environments.Staging;
+        return Environments.Development;   // 未知值回退到 Development（本地调试友好）
     }
 }

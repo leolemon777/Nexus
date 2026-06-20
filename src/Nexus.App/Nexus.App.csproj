@@ -9,8 +9,36 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ForceSelfContained>true</ForceSelfContained>
-    <Version>0.1.0</Version>
+    <!--
+      Version intentionally NOT hardcoded here.
+      Versioning is centralized in $(RepositoryRoot)/Directory.Build.props via MinVer
+      (git-tag driven: <MinVerTagPrefix>v</MinVerTagPrefix>, <VersionPrefix>1.0.0</VersionPrefix>).
+      A per-project <Version> would override MinVer and break single-source versioning.
+      See docs/RELEASE_RUNBOOK.md for how to cut a release tag (e.g. `git tag v1.0.0`).
+    -->
     <Description>Nexus — Open-source Industrial Communication Library &amp; Debugger</Description>
+
+    <!--
+      Code signing: intentionally OFF.
+      Enabling requires an OV/EV cert the user must procure. See docs/RELEASE_RUNBOOK.md
+      "Deferred decisions" before flipping this to true and wiring AssemblyOriginatorKeyFile.
+    -->
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+
+  <!--
+    Release-only publish shaping.
+    Properties here are gated on Configuration=Release AND only take effect at publish time,
+    so plain `dotnet build` / `dotnet run` remain RID-agnostic for local dev.
+    RuntimeIdentifier=win-x64 is intentionally set INSIDE the publish profile
+    (Properties/PublishProfiles/win-x64.pubxml), not here, so the default build is not
+    pinned to a single RID.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -50,6 +78,12 @@
 
   <ItemGroup>
     <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.Development.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.Production.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
