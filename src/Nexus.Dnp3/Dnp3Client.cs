@@ -749,7 +749,7 @@ namespace Nexus.Dnp3
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadRequest(0, Dnp3Group.AnalogInput, Dnp3Variation.AnalogInputInt16, 0, 1); }
             catch { return null; }

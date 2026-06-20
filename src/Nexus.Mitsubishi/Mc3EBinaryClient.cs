@@ -82,7 +82,7 @@ namespace Nexus.Mitsubishi
         }
 
         /// <summary>默认心跳：批量读字 D0 的 1 个 word（Command=0x0401, SubCommand=0x0000）。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             // A7 修复：D 软元件 sub-label 应为 0xA8（与 Mc3EAddressParser 一致），
             // 原 0x0A 是未定义软元件代码，会被 PLC 以 0xC051/0xC002 拒绝，心跳永远失败。

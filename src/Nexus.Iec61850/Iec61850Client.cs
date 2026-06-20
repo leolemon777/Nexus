@@ -1142,7 +1142,7 @@ namespace Nexus.Iec61850
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildGetDataValuesRequest("LD0", "LLN0", "NamPlt", FunctionalConstraint.DC); }
             catch { return null; }

@@ -623,7 +623,7 @@ namespace Nexus.Schneider
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

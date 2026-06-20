@@ -583,7 +583,7 @@ namespace Nexus.Rkc
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand(1, "M1").Content; }
             catch { return null; }

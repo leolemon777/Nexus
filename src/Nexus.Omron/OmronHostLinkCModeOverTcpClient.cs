@@ -25,7 +25,7 @@ namespace Nexus.Omron
 
         private static readonly OmronHostLinkCModeAddressParser _addressParser = new OmronHostLinkCModeAddressParser();
 
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

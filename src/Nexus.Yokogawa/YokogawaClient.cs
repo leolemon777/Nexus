@@ -915,7 +915,7 @@ namespace Nexus.Yokogawa
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand("HR0", 1, false).Content; }
             catch { return null; }

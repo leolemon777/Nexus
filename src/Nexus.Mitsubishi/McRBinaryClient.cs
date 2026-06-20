@@ -68,7 +68,7 @@ namespace Nexus.Mitsubishi
         }
 
         /// <summary>默认心跳: 批量读字 D0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             return BuildMcRFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x01, 0x00 });
         }

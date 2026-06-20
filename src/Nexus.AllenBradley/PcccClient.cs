@@ -808,7 +808,7 @@ namespace Nexus.AllenBradley
         // ═══════════════════════════════════════════
 
         /// <summary>默认心跳：读取 N7:0 的 1 个 word（最常用的测试地址）。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

@@ -29,7 +29,7 @@ namespace Nexus.LsElectric
         }
 
         /// <summary>默认心跳：读 D0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             return BuildReadRequest(new LSCnetAddress(0x44, 0, LSCnetArea.DataRegister, false), 1);
         }

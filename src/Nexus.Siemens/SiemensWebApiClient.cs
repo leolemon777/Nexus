@@ -335,7 +335,7 @@ namespace Nexus.Siemens
                 // 解析 JSON: {"jsonrpc":"2.0","result":{"data":[...]},"id":1}
                 // 或: {"result":{"value":...},"id":1}
                 // 或简单格式: {"data":[0x00,0x01,...]}
-                string dataStr = ExtractJsonField(json, "data");
+                string? dataStr = ExtractJsonField(json, "data");
                 if (dataStr != null)
                 {
                     byte[] bytes = ParseByteArray(dataStr);
@@ -343,7 +343,7 @@ namespace Nexus.Siemens
                 }
 
                 // 尝试提取 value 字段
-                string valueStr = ExtractJsonField(json, "value");
+                string? valueStr = ExtractJsonField(json, "value");
                 if (valueStr != null)
                 {
                     byte[] bytes = ParseByteArray(valueStr);

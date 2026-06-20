@@ -34,7 +34,7 @@ namespace Nexus.Panasonic
 
         protected override int GetResponsePayloadLength(byte[] header) => 0;
 
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             return BuildMcFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x00, 0x01 });
         }

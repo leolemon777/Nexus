@@ -1252,7 +1252,7 @@ namespace Nexus.Siemens
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildS7PlusSetupCommunication(); }
             catch { return null; }

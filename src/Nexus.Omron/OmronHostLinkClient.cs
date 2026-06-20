@@ -56,7 +56,7 @@ namespace Nexus.Omron
         // ── TcpDeviceBase 抽象实现 ───────────────
 
         /// <summary>默认心跳：HostLink 读 D0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

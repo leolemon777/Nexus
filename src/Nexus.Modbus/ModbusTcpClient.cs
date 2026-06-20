@@ -133,7 +133,7 @@ namespace Nexus.Modbus
         }
 
         /// <summary>默认心跳：读取保持寄存器 0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
             => BuildMbap(new byte[] { 0x03, 0x00, 0x00, 0x00, 0x01 });
 
         // ── 地址解析（支持前缀模式）───────────────

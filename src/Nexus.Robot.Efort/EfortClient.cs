@@ -438,7 +438,7 @@ namespace Nexus.Robot.Efort
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand(); }
             catch { return null; }
@@ -549,7 +549,6 @@ namespace Nexus.Robot.Efort
                 return OperateResult<EfortData>.Failed($"数据长度不足，需要 {RESPONSE_LENGTH} 字节，实际 {data?.Length ?? 0} 字节");
 
             var d = new EfortData();
-            int offset = 0;
 
             // PacketStart: 16 字节 ASCII
             d.PacketStart = Encoding.ASCII.GetString(data, 0, 16).Trim('\0', ' ');

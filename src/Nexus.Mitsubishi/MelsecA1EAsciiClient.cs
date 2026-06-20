@@ -642,7 +642,7 @@ namespace Nexus.Mitsubishi
             IEnumerable<KeyValuePair<string, object>> items, CancellationToken cancellationToken = default)
             => Task.Run(() => BatchWrite(items), cancellationToken);
 
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand("D0", 1, false, PLCNumber).Content; }
             catch { return null; }

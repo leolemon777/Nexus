@@ -31,7 +31,7 @@ namespace Nexus.Keyence
         protected override int ResponseHeaderLength => 9;
         protected override int GetResponsePayloadLength(byte[] header) => 0;
 
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             return BuildMc3EFrame(0x0401, 0x0000, new byte[] { 0xA8, 0x00, 0x00, 0x00, 0x01, 0x00 });
         }

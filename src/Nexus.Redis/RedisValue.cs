@@ -24,7 +24,7 @@ namespace Nexus.Redis
         public bool IsNull => ValueType == RedisValueType.Null;
         public bool HasValue => ValueType != RedisValueType.Null;
 
-        private RedisValue(RedisValueType type, string s, long i, double d, byte[] b)
+        private RedisValue(RedisValueType type, string? s, long i, double d, byte[]? b)
         {
             ValueType = type;
             _stringValue = s;

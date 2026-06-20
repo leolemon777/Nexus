@@ -1305,7 +1305,7 @@ namespace Nexus.Iec104
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildUFrame(U_STARTDT_ACT); }
             catch { return null; }

@@ -448,15 +448,15 @@ namespace Nexus.Freedom
             return ReadCore(address + BytesToHex(data));
         }
 
-        public Task<OperateResult> WriteAsync(string address, double value)
+        public new Task<OperateResult> WriteAsync(string address, double value)
             => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, ushort value)
+        public new Task<OperateResult> WriteAsync(string address, ushort value)
             => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, uint value)
+        public new Task<OperateResult> WriteAsync(string address, uint value)
             => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, long value)
+        public new Task<OperateResult> WriteAsync(string address, long value)
             => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, ulong value)
+        public new Task<OperateResult> WriteAsync(string address, ulong value)
             => Task.Run(() => Write(address, value));
 
         // ── IBatchReadWrite ──

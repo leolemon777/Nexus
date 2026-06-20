@@ -140,7 +140,9 @@ public class RkcTests
     [Fact]
     public void BuildWriteCommand_NullAddress()
     {
-        var result = RkcTemperatureClient.BuildWriteCommand(1, null, 50.0);
+        // Deliberately pass a null address to verify BuildWriteCommand's defensive guard
+        // (null! asserts intent for the analyzer while keeping the runtime null argument).
+        var result = RkcTemperatureClient.BuildWriteCommand(1, null!, 50.0);
         Assert.False(result.IsSuccess);
     }
 

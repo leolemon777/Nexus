@@ -363,7 +363,7 @@ namespace Nexus.Robot.Kuka
             => Task.FromResult(BatchWrite(items));
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCore("$POS_ACT"); }
             catch { return null; }

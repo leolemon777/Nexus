@@ -27,7 +27,7 @@ namespace Nexus.Inovance
         private const byte ErrorFlag = 0x0F;
 
         /// <summary>默认心跳：读 D0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             var result = BuildReadCommand("D0", 1, isBit: false);
             return result.IsSuccess ? result.Content : null;

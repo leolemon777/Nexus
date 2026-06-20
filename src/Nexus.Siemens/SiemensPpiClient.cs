@@ -287,11 +287,11 @@ namespace Nexus.Siemens
 
         // ── 异步覆写（ushort/uint/long/ulong/double）──
 
-        public Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
-        public Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
+        public new Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
+        public new Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
+        public new Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
+        public new Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
+        public new Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
 
         // ═══════════════════════════════════════════
         //  IBatchReadWrite — 批量读写接口

@@ -581,7 +581,7 @@ namespace Nexus.Robot.Yamaha
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return System.Text.Encoding.ASCII.GetBytes(BuildCommand("STATUS?")); }
             catch { return null; }

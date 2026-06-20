@@ -524,7 +524,7 @@ namespace Nexus.Modbus
         }
 
         public override OperateResult Write(string address, ushort value) => Write(address, (short)value);
-        public Task<OperateResult> WriteAsync(string address, ushort value) => WriteAsync(address, (short)value);
+        public new Task<OperateResult> WriteAsync(string address, ushort value) => WriteAsync(address, (short)value);
 
         /// <summary>
         /// 原子掩码写保持寄存器 (FC22)。
@@ -570,14 +570,14 @@ namespace Nexus.Modbus
         }
 
         public override OperateResult Write(string address, uint value) => Write(address, (int)value);
-        public Task<OperateResult> WriteAsync(string address, uint value) => WriteAsync(address, (int)value);
+        public new Task<OperateResult> WriteAsync(string address, uint value) => WriteAsync(address, (int)value);
         public override OperateResult Write(string address, long value)
         {
             ushort addr = ParseAddress(address);
             return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
         }
 
-        public Task<OperateResult> WriteAsync(string address, long value)
+        public new Task<OperateResult> WriteAsync(string address, long value)
         {
             ushort addr = ParseAddress(address);
             return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));
@@ -589,7 +589,7 @@ namespace Nexus.Modbus
             return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
         }
 
-        public Task<OperateResult> WriteAsync(string address, ulong value)
+        public new Task<OperateResult> WriteAsync(string address, ulong value)
         {
             ushort addr = ParseAddress(address);
             return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));
@@ -613,7 +613,7 @@ namespace Nexus.Modbus
             return WriteMultipleRegisters(addr, 4, GetBytesOrdered(value));
         }
 
-        public Task<OperateResult> WriteAsync(string address, double value)
+        public new Task<OperateResult> WriteAsync(string address, double value)
         {
             ushort addr = ParseAddress(address);
             return WriteMultipleRegistersAsync(addr, 4, GetBytesOrdered(value));

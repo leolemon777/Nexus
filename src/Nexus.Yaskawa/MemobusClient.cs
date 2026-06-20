@@ -1080,7 +1080,7 @@ namespace Nexus.Yaskawa
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand("D0", 1).Content; }
             catch { return null; }

@@ -45,7 +45,7 @@ namespace Nexus.Modbus
         // ═══════════════════════════════════════════
 
         /// <summary>默认心跳：RTU 读保持寄存器 0（FC03）。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             byte[] pdu = new byte[] { 0x03, 0x00, 0x00, 0x00, 0x01 };
             return BuildRtuFrame(pdu, Station);

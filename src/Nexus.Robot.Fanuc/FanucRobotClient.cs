@@ -691,7 +691,7 @@ namespace Nexus.Robot.Fanuc
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildCommand(21, 0, null); }
             catch { return null; }

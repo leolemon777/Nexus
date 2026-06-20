@@ -9,12 +9,12 @@ namespace Nexus
         private readonly IReadWriteDevice _backup;
         private IReadWriteDevice _active;
         private readonly int _healthCheckIntervalMs;
-        private Timer _healthTimer;
+        private Timer? _healthTimer;
         private bool _disposed;
 
         public IReadWriteDevice ActiveDevice => _active;
         public bool IsUsingBackup => _active == _backup;
-        public event EventHandler<bool> OnFailover;
+        public event EventHandler<bool>? OnFailover;
 
         public RedundancyManager(IReadWriteDevice primary, IReadWriteDevice backup, int healthCheckIntervalMs = 5000)
         {

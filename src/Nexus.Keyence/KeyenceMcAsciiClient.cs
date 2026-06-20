@@ -619,7 +619,7 @@ namespace Nexus.Keyence
             catch { }
         }
 
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

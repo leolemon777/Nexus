@@ -65,6 +65,7 @@ namespace Nexus.Redis.Tests
             byte[] data = System.Text.Encoding.UTF8.GetBytes("*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n");
             var result = RespParser.Parse(data);
             Assert.Equal(RespType.Array, result.Type);
+            Assert.NotNull(result.ArrayValue);
             Assert.Equal(2, result.ArrayValue.Length);
             Assert.Equal("hello", result.ArrayValue[0].AsString());
             Assert.Equal("world", result.ArrayValue[1].AsString());
@@ -104,12 +105,17 @@ namespace Nexus.Redis.Tests
             byte[] data = System.Text.Encoding.UTF8.GetBytes("*2\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n$3\r\nbaz\r\n");
             var result = RespParser.Parse(data);
             Assert.Equal(RespType.Array, result.Type);
-            Assert.Equal(2, result.ArrayValue.Length);
-            Assert.Equal(RespType.Array, result.ArrayValue[0].Type);
-            Assert.Equal(2, result.ArrayValue[0].ArrayValue.Length);
-            Assert.Equal("foo", result.ArrayValue[0].ArrayValue[0].AsString());
-            Assert.Equal("bar", result.ArrayValue[0].ArrayValue[1].AsString());
-            Assert.Equal("baz", result.ArrayValue[1].AsString());
+            Assert.NotNull(result.ArrayValue);
+            var outer = result.ArrayValue;
+            Assert.NotNull(outer);
+            Assert.Equal(2, outer.Length);
+            Assert.Equal(RespType.Array, outer[0].Type);
+            var inner = outer[0].ArrayValue;
+            Assert.NotNull(inner);
+            Assert.Equal(2, inner.Length);
+            Assert.Equal("foo", inner[0].AsString());
+            Assert.Equal("bar", inner[1].AsString());
+            Assert.Equal("baz", outer[1].AsString());
         }
 
         [Fact]

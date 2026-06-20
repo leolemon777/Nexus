@@ -92,7 +92,7 @@ namespace Nexus.Panasonic
                         string request = Encoding.ASCII.GetString(buffer, 0, bufPos).TrimEnd('\r');
                         if (string.IsNullOrEmpty(request) || request[0] != '%') continue;
 
-                        string response = ProcessRequest(request);
+                        string? response = ProcessRequest(request);
                         if (response != null)
                         {
                             byte[] respBytes = Encoding.ASCII.GetBytes(response + "\r");
@@ -104,7 +104,7 @@ namespace Nexus.Panasonic
             catch { }
         }
 
-        private string ProcessRequest(string request)
+        private string? ProcessRequest(string request)
         {
             // %SSCCDD...DBCC
             // SS = station (2 chars), CC = command (2 chars), data, BCC (2 chars)
@@ -123,7 +123,7 @@ namespace Nexus.Panasonic
             string command = request.Substring(3, 2).ToUpperInvariant();
             string data = request.Substring(5, request.Length - 7); // between command and BCC
 
-            string responseData;
+            string? responseData;
             switch (command)
             {
                 case "RD": // Read registers
@@ -150,7 +150,7 @@ namespace Nexus.Panasonic
             return responseFrame + responseBcc.ToString("X2");
         }
 
-        private string ProcessRead(string data)
+        private string? ProcessRead(string data)
         {
             // data = "DT0 1" (area + start + count)
             // Simplified: just parse start address and count
@@ -183,7 +183,7 @@ namespace Nexus.Panasonic
             return sb.ToString();
         }
 
-        private string ProcessWrite(string data)
+        private string? ProcessWrite(string data)
         {
             // data = "DT0 XXXX"
             int spaceIdx = data.IndexOf(' ');
@@ -216,7 +216,7 @@ namespace Nexus.Panasonic
             return "RCS" + (val ? "1" : "0");
         }
 
-        private string ProcessWriteCoil(string data)
+        private string? ProcessWriteCoil(string data)
         {
             // data = "addr value"
             var parts = data.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);

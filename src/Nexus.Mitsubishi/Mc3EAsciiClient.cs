@@ -79,7 +79,7 @@ namespace Nexus.Mitsubishi
         protected override int GetResponsePayloadLength(byte[] header) => 0;
 
         /// <summary>默认心跳：批量读字 D0 的 1 个 word（Command=0x0401, SubCommand=0x0000）。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

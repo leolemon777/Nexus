@@ -198,7 +198,7 @@ namespace Nexus.Omron
         }
 
         /// <summary>默认心跳：读取 DM0 的 1 个 word。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             byte[] commandData = { (byte)FinsMemoryArea.DM, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
             return BuildFinsFrame(FinsCommandCode.MemoryAreaRead, commandData);

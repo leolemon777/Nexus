@@ -66,7 +66,7 @@ namespace Nexus.Redis
         {
             switch (Type)
             {
-                case RespType.SimpleString: return RedisValue.FromString(StringValue);
+                case RespType.SimpleString: return RedisValue.FromString(StringValue ?? "");
                 case RespType.Integer: return RedisValue.FromInteger(IntegerValue);
                 case RespType.BulkString:
                     if (IsNull || BulkValue == null) return RedisValue.Null;

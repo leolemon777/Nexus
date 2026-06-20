@@ -602,7 +602,7 @@ namespace Nexus.Secs
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildFrame(BuildHsmsHeader(LinktestReq, PType_Linktest), null); }
             catch { return null; }

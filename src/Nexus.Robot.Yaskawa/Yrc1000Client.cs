@@ -748,7 +748,7 @@ namespace Nexus.Robot.Yaskawa
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return BuildReadCommand(0x0101, 0, 1); }
             catch { return null; }

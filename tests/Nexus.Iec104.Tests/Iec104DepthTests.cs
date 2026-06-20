@@ -167,7 +167,7 @@ namespace Nexus.Iec104.Tests
             Assert.Equal(1, asdu.CommonAddress);
             Assert.Single(asdu.Objects);
             Assert.Equal(0, asdu.Objects[0].Address);
-            Assert.Equal(1, asdu.Objects[0].Data.Length);
+            Assert.Single(asdu.Objects[0].Data);
             Assert.Equal(5, asdu.Objects[0].Data[0]); // QCC=5 = general request
         }
 
@@ -263,7 +263,7 @@ namespace Nexus.Iec104.Tests
             var asdu = Iec104Asdu.BuildCounterReadCommand(1);
             byte[] encoded = asdu.Encode();
             var decoded = Iec104Asdu.Decode(encoded, 0);
-            Assert.Equal(1, decoded.Objects[0].Data.Length);
+            Assert.Single(decoded.Objects[0].Data);
         }
 
         [Fact]

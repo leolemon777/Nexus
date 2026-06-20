@@ -322,7 +322,7 @@ namespace Nexus.Xinje
             => Task.FromResult(BatchWrite(items));
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try
             {

@@ -536,7 +536,7 @@ namespace Nexus.Robot.Kuka
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             try { return System.Text.Encoding.ASCII.GetBytes(BuildReadCommand("$POS_ACT")); }
             catch { return null; }

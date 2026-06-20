@@ -21,7 +21,7 @@ namespace Nexus.LsElectric
         public byte CpuFrom { get; set; } = 0;
 
         /// <summary>默认心跳：读 D0000 的 1 个 word（XGT Word 类型=0x01）。</summary>
-        protected override byte[] BuildHeartbeat()
+        protected override byte[]? BuildHeartbeat()
         {
             return BuildReadRequest(0x01, "D0000", 1);
         }

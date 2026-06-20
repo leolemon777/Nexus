@@ -308,7 +308,7 @@ namespace Nexus.Toledo
         }
 
         /// <inheritdoc/>
-        protected override byte[] BuildHeartbeat() => null;
+        protected override byte[]? BuildHeartbeat() => null;
     }
 
     /// <summary>
