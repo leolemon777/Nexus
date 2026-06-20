@@ -1,5 +1,7 @@
 # Nexus Current Gap Matrix
 
+> ⚠️ **SUPERSEDED** — 当前进度与权威数据见 [`OVERTAKE_HSL_PLAN.md`](OVERTAKE_HSL_PLAN.md)（顶部"当前进度快照"）与 [`CLAUDE.md`](CLAUDE.md)。本文件保留作历史记录。
+
 > Last calibrated: 2026-06-08
 >
 > Purpose: replace stale "Phase 0" assumptions with the current repository reality, then drive the next sprint toward a production-grade open-source release.

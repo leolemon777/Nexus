@@ -1,5 +1,7 @@
 # Nexus 超越 HSL 作战计划
 
+> ⚠️ **SUPERSEDED** — 当前进度与权威数据见 [`OVERTAKE_HSL_PLAN.md`](OVERTAKE_HSL_PLAN.md)（顶部"当前进度快照"）与 [`CLAUDE.md`](CLAUDE.md)。本文件保留作历史记录。
+
 **目标:** 20 个并行 Agent，覆盖传输层、协议深度、IoT、虚拟 PLC、UI 五大战场  
 **原则:** 每个 Agent 有独立文件所有权，零冲突并行
 

@@ -1,5 +1,7 @@
 # Nexus 超越 HSL 长周期开发计划 (2026-2028)
 
+> ⚠️ **SUPERSEDED** — 当前进度与权威数据见 [`OVERTAKE_HSL_PLAN.md`](OVERTAKE_HSL_PLAN.md)（顶部"当前进度快照"）与 [`CLAUDE.md`](CLAUDE.md)。本文件保留作历史记录。
+
 ## Context
 
 **为什么需要这份计划：** 现有的 `OVERTAKE_HSL_PLAN.md` 和 `EXECUTION_PLAN.md` 已经定义了 Phase 0-6 的执行路线，但它们偏向"传统追赶"——协议数量、测试数量、文档覆盖。用户需要一份**更高维度的战略计划**，不仅要追赶 HSL，更要在"智能化"维度形成代差，建立 HSL 无法复制的护城河。

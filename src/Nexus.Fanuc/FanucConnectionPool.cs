@@ -50,6 +50,12 @@ namespace Nexus.Fanuc
         {
             var client = new FanucClient(_ip, _port, _timeout);
             client.SetLogger(_logger);
+            // Bridge the underlying client's message/error events to this pool's events,
+            // mirroring AllenBradleyCipConnectionPool / PcccConnectionPool. Without this,
+            // OnMessageSent/OnMessageReceived/OnError are declared but never raised (CS0067).
+            client.OnMessageSent += (s, msg) => OnMessageSent?.Invoke(s, msg);
+            client.OnMessageReceived += (s, msg) => OnMessageReceived?.Invoke(s, msg);
+            client.OnError += (s, msg) => OnError?.Invoke(s, msg);
             return client;
         }
 

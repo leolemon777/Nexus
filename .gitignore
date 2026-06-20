@@ -43,3 +43,12 @@ docs/api/
 ## Environment / secrets
 .env
 appsettings.Development.json
+
+## Agent orchestrator workspaces (git worktrees live under .claude/worktrees/)
+.claude/
+
+## Crash logs written by global exception handlers
+crash.log
+
+## Windows reserved-name artifact (not a real file; surfaces as untracked)
+nul

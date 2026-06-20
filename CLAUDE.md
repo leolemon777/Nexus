@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build entire solution (uses .slnx format, NOT .sln)
 dotnet build Nexus.slnx
 
-# Run all tests (~1342 tests across 39 test projects)
+# Run all tests (~3236 tests across ~57 test projects)
 dotnet test Nexus.slnx
 
 # Run a single test project
@@ -26,13 +26,13 @@ dotnet restore Nexus.slnx
 
 ## Architecture Overview
 
-Nexus is an open-source industrial communication library targeting HslCommunication replacement. 41 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
+Nexus is an open-source industrial communication library targeting HslCommunication replacement. ~54 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
 
 ### Layer Structure
 
 ```
 Nexus.Core (netstandard2.0)              — Unified interfaces & base classes
-  └── Nexus.{Protocol} (netstandard2.0)  — Protocol client libraries (41 total)
+  └── Nexus.{Protocol} (netstandard2.0)  — Protocol client libraries (~54 total)
         └── Nexus.App (net8.0-windows)   — WPF debugger application
 ```
 
@@ -46,7 +46,7 @@ Nexus.Core (netstandard2.0)              — Unified interfaces & base classes
 - **`DataConverter`** — Big-endian byte encoding/decoding. Uses `unsafe` pointer casts for float↔int conversion (netstandard2.0 lacks `BitConverter.Int32BitsToSingle`).
 - **`CrcCalculator`** — CRC16-Modbus (lookup table) and LRC for Modbus RTU/ASCII.
 - **`Endianness`** — Four byte orders: BigEndian(ABCD), LittleEndian(DCBA), MidBigEndian(BADC), MidLittleEndian(CDAB).
-- **`ConnectionPool<T>` / `IConnectionPool<T>`** — Thread-safe per-key pooling with `ConcurrentDictionary<string, DeviceBucket>`, idle cleanup timer, and `SemaphoreSlim` concurrency limit. Currently exists in Core but not yet consumed by any protocol client.
+- **`ConnectionPool<T>` / `IConnectionPool<T>`** — Thread-safe per-key pooling with `ConcurrentDictionary<string, DeviceBucket>`, idle cleanup timer, and `SemaphoreSlim` concurrency limit. Consumed by ~40 protocols via per-protocol `*ConnectionPool.cs` wrappers (e.g. `ModbusTcpConnectionPool`, `SiemensS7ConnectionPool`, `FinsTcpConnectionPool`).
 - **`DtuClient`** — DTU transparent transmission (4G/Ethernet serial-over-TCP), common in Chinese factory deployments.
 - **`ILogger`** / `IMessageLogger` — Logging abstractions with `NullLogger` and `ConsoleLogger` defaults.
 
@@ -68,7 +68,7 @@ Most protocol libraries reference only `Nexus.Core`. Exception:
 ### WPF App (Nexus.App)
 
 - **MVVM**: CommunityToolkit.Mvvm `[ObservableProperty]` + `[RelayCommand]`
-- **`ProtocolViewModelBase`** — All 29 protocol page VMs inherit this; provides Connect/Disconnect/Read/Write commands, address validation via `AddressValidator`, write confirmation via `WriteConfirmationService`, Chinese error diagnostics via `ChineseDiagnostics`, timestamped log (500-line FIFO ObservableCollection).
+- **`ProtocolViewModelBase`** — All ~44 protocol page VMs inherit this; provides Connect/Disconnect/Read/Write commands, address validation via `AddressValidator`, write confirmation via `WriteConfirmationService`, Chinese error diagnostics via `ChineseDiagnostics`, timestamped log (500-line FIFO ObservableCollection).
 - **Page/VM wiring**: Frame creates Pages via reflection → code-behind resolves VM via `App.Services.GetRequiredService<TViewModel>()` → sets DataContext. Pages have no constructor injection.
 - **DI registration**: VMs as `AddTransient<T>()` in `App.xaml.cs`; services as singletons. `MainViewModel` is singleton.
 - **Navigation**: Defined by `NavGroup`/`NavItem` collections in `MainViewModel.cs`. Each NavItem maps to a Page Type.
@@ -87,7 +87,7 @@ Most protocol libraries reference only `Nexus.Core`. Exception:
 
 ### Virtual Servers
 
-13 protocols have TCP virtual servers for integration testing without hardware: AllenBradley (CIP, PCCC), Fatek, Fuji, GeSrtp, Inovance, Mitsubishi (MC3E, A1E), Modbus, Omron (FINS, HostLink), Siemens (S7, FetchWrite), Yaskawa (Memobus), Yokogawa.
+36 protocols ship TCP virtual servers for integration testing without hardware, including: Modbus, Siemens (S7, FetchWrite, PPI), Omron (FINS, HostLink), AllenBradley (CIP, PCCC), Mitsubishi (MC3E, A1E), Keyence, Beckhoff, Panasonic, Delta, Fuji, Fatek, LsElectric, Inovance, Schneider, GeSrtp, Fanuc, Kuka, Yaskawa (Memobus), Yokogawa, Dnp3, Iec104, Iec61850, Secs, Rkc, Toledo, Xinje, and the robot families (Kuka, Fanuc, Yaskawa, Yamaha, Efort, Ur, Staubli).
 
 ## Hard Constraints
 
@@ -112,8 +112,12 @@ Full plan in `OVERTAKE_HSL_PLAN.md` — 6-phase plan to surpass HslCommunication
 
 ## Current Implementation Status
 
-**Deep implementations (A-tier)**: Modbus TCP, Siemens S7 (with S7String/WString, batch read/write, PLC control commands)
+> Numbers below are authoritative — refreshed 2026-06-19 against the actual tree. Root planning docs (BATTLEPLAN, EXECUTION_PLAN, etc.) may lag; trust this section and `OVERTAKE_HSL_PLAN.md`'s status snapshot.
 
-**Solid implementations (B-tier)**: Modbus RTU/ASCII/UDP/RtuOverTcp, Mitsubishi MC3E Binary, Omron FINS TCP, AllenBradley CIP + PCCC
+**Phase 0 is complete** — zero protocol-level `NotImplementedException` remains. The four former stubs (Mitsubishi MC3E Ascii, MC3E UDP, FX Serial, Siemens PPI) are now full implementations with `IBatchReadWrite` + `ISubscribeDevice`.
 
-**Partial/stub implementations**: Mitsubishi MC3E Ascii (all reads throw NotImplementedException), MC3E UDP (all methods throw), FX Serial (partial), Siemens PPI (partial) — see `OVERTAKE_HSL_PLAN.md` Phase 0 for the full list of 65 stubs to fill.
+**Deep implementations (A-tier)**: Modbus TCP/RTU/ASCII/UDP/RtuOverTcp, Siemens S7 (S7String/WString, batch read/write, PLC control) + FetchWrite + PPI, Mitsubishi MC3E Binary/Ascii/UDP + A1E + FX Serial, Omron FINS TCP/UDP + HostLink, AllenBradley CIP + PCCC.
+
+**Solid implementations (B-tier)**: Beckhoff ADS, Panasonic Mewtocol, Keyence KV, Schneider Modicon, Yokogawa, Yaskawa Memobus, Inovance, Fatek, LsElectric, GeSrtp, Delta, Xinje, Dnp3, Iec104, Iec61850, Bacnet, OpcUa, Secs, plus robot clients (Kuka, Fanuc, ABB, UR, Yaskawa, Yamaha, Staubli, Efort, Estun).
+
+**Long tail**: instrumentation/meter protocols (Rkc, Toledo, YuDian, Yamatake, Vigor, Sam, Delixi, EcFan, MegMeet, Geniitek, Knx, ToyoPuc, Freedom, OpenProtocol, Dlt, Cjt) and IoT (Mqtt, Redis, Ftp) — implemented and tested, with thinner feature depth. See `OVERTAKE_HSL_PLAN.md` for long-term depth targets.

@@ -13,9 +13,15 @@ namespace Nexus.Robot.Ur
         private readonly int _timeout;
         private readonly ILogger _logger;
 
+        // These events are part of the connection-pool public API surface (mirroring the
+        // AllenBradley/Pccc pools) but UrClient emits data-level events (OnDataChanged) rather
+        // than message-level Sent/Received/Error, so there is nothing to bridge them to today.
+        // They are retained for API symmetry and future use.
+#pragma warning disable CS0067
         public event EventHandler<string>? OnMessageSent;
         public event EventHandler<string>? OnMessageReceived;
         public event EventHandler<string>? OnError;
+#pragma warning restore CS0067
 
         public UrConnectionPool(string ip, int port = 30003, int timeout = 5000, int maxPoolSize = 5, TimeSpan? idleTimeout = null, TimeSpan? cleanupInterval = null, ILogger? logger = null)
         {

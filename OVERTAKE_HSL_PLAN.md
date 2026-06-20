@@ -6,6 +6,22 @@
 >
 > **HSL 基线**: ~100 协议模块 / 300 万 NuGet 下载 / 10 年生产验证 / 数万用户
 
+## ✅ 当前进度快照（2026-06-19 实测，权威）
+
+> 以下为本次校准实测数据；下面的分阶段计划（Phase 0–6）保留为历史规划与长期方向，**具体进度以本表与 `CLAUDE.md` 为准**。
+
+| 指标 | 计划基线 | 当前实测 |
+|------|---------|---------|
+| 协议库数量 | 41 | **~54**（58 个 src 工程 − App/Core/Bridge/VirtualPlc）|
+| NotImplementedException（协议层）| 65 | **0** — Phase 0 已完成 |
+| IBatchReadWrite | 7 | **~87**（远超目标 25）|
+| ISubscribeDevice | 3 | **~40** |
+| VirtualServer | 13 | **36** |
+| 单元/集成测试 | 1098 | **3236**（跨 ~57 个测试工程）|
+| ConnectionPool 接入 | 0 | **40** 个协议已消费 |
+
+**Phase 0 已完成**：Mitsubishi MC3E Ascii / MC3E UDP / FX Serial、Siemens PPI 全部实现，零协议层空壳。
+
 ---
 
 ## Phase 0: 止血 — 消灭空壳，交付可用 MVP（2 周）
