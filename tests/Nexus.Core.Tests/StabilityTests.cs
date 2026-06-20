@@ -17,6 +17,23 @@ public class StabilityTests
         return port;
     }
 
+    /// <summary>
+    /// 轮询等待条件成立，替代固定 <c>Thread.Sleep</c>/<c>Task.Delay</c>。
+    /// 用于异步重连/心跳等时序敏感断言：在 deadline 内每 100ms 检查一次条件，
+    /// 条件成立立即返回 true；超时返回 false（由调用方断言）。
+    /// 这把"等事件发生"从"等固定时长"解耦，消除 CI 负载抖动导致的 flaky。
+    /// </summary>
+    private static async Task<bool> WaitForAsync(Func<bool> condition, TimeSpan deadline)
+    {
+        var deadlineUtc = DateTime.UtcNow + deadline;
+        while (DateTime.UtcNow < deadlineUtc)
+        {
+            if (condition()) return true;
+            await Task.Delay(100);
+        }
+        return condition();
+    }
+
     [Fact]
     public async Task ConcurrentReads_NoDeadlock_NoExceptions()
     {
@@ -101,14 +118,18 @@ public class StabilityTests
         var newServer = new ModbusTcpServer(port);
         newServer.Start();
 
-        await Task.Delay(3000);
-        Assert.True(client.IsConnected);
+        // Poll for reconnection instead of a fixed delay: AutoReconnect fires on a timer
+        // (ReconnectInterval) whose scheduling jitters under CI load. A fixed Task.Delay(3000)
+        // could fire the assertion before the reconnect attempt landed — a known flake source.
+        // Allow up to ~10s (well above 10 attempts × 500ms) for the reconnection to register.
+        bool reconnected = await WaitForAsync(() => client.IsConnected, TimeSpan.FromSeconds(10));
+        Assert.True(reconnected, $"Client did not reconnect within 10s after server restart (IsConnected={client.IsConnected})");
 
         newServer.Dispose();
     }
 
     [Fact]
-    public void Heartbeat_KeepsConnectionAlive()
+    public async Task Heartbeat_KeepsConnectionAlive()
     {
         var port = GetFreePort();
         using var server = new ModbusTcpServer(port);
@@ -120,7 +141,16 @@ public class StabilityTests
         client.HeartbeatInterval = 1000;
         client.Connect();
 
-        Thread.Sleep(5000);
+        // Heartbeat fires every HeartbeatInterval on a timer; under CI load the timer can
+        // drift. Instead of a fixed Thread.Sleep(5000) + assert, poll that the connection
+        // stays alive for the full window (sampling every 500ms over ~6s). The connection
+        // is expected to stay connected throughout, so each sample must be true.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(6);
+        while (DateTime.UtcNow < deadline)
+        {
+            Assert.True(client.IsConnected, "Connection dropped during heartbeat window");
+            await Task.Delay(500);
+        }
         Assert.True(client.IsConnected);
     }
 

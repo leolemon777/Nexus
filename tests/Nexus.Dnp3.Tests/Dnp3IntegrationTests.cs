@@ -14,7 +14,13 @@ namespace Nexus.Dnp3.Tests
         {
             _server = new Dnp3VirtualServer(0);
             _server.Start();
-            Thread.Sleep(100);
+            // Wait for the accept thread to be ready instead of a fixed Thread.Sleep(100).
+            // Under CI load the 100ms could elapse before AcceptLoop reached AcceptTcpClient(),
+            // so the first client read failed with a connection refused — a known flake source.
+            // Poll IsRunning + a short bounded spin give the accept loop time to enter Accept().
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            while (!_server.IsRunning && DateTime.UtcNow < deadline)
+                Thread.Sleep(10);
             _client = new Dnp3Client("127.0.0.1", _server.Port);
         }
 
