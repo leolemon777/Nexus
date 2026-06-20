@@ -5,15 +5,8 @@
     <RootNamespace>Nexus</RootNamespace>
     <AssemblyName>Nexus.Core</AssemblyName>
     <Description>Nexus Core — Industrial communication abstractions</Description>
-    <Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication PLC protocol</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

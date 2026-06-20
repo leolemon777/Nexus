@@ -20,7 +20,15 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <!-- MinVer: automatic version from git tags -->
+    <!--
+      Canonical version source for the WHOLE solution.
+      Versioning is driven by MinVer from git tags (prefix `v`, e.g. `v1.0.0`, `v1.1.0-beta.1`).
+      Do NOT add a literal <Version> here — that would override MinVer.
+      Individual csproj files MUST also avoid hardcoding <Version>; doing so silently overrides
+      MinVer for that project (historically most src/*.csproj did this — see docs/RELEASE_RUNBOOK.md
+      "Known packaging inconsistencies"). With no git tags present, MinVer falls back to
+      <VersionPrefix>1.0.0</VersionPrefix> plus commit-count prerelease metadata.
+    -->
     <VersionPrefix>1.0.0</VersionPrefix>
     <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>

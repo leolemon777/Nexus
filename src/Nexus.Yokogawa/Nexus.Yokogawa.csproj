@@ -5,16 +5,9 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Nexus.Yokogawa</RootNamespace>
     <Description>Yokogawa binary link protocol client for Nexus industrial communication library.</Description>
-<Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication PLC Yokogawa Vnet Centum DCS protocol</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>

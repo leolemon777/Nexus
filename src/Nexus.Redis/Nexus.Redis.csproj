@@ -5,16 +5,9 @@
     <RootNamespace>Nexus.Redis</RootNamespace>
     <AssemblyName>Nexus.Redis</AssemblyName>
     <Description>Nexus Redis — Redis client with connection pooling and full command support</Description>
-<Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication PLC protocol Redis</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>

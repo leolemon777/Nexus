@@ -5,16 +5,9 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Nexus.Robot.Kuka</RootNamespace>
     <Description>Nexus Robot KUKA — KUKA 机器人 TCP/VarProxy 通讯客户端</Description>
-    <Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication robot KUKA protocol</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>

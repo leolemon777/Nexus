@@ -5,16 +5,9 @@
     <RootNamespace>Nexus.Iec104</RootNamespace>
     <AssemblyName>Nexus.Iec104</AssemblyName>
     <Description>Nexus IEC 104 — IEC 60870-5-104 protocol implementation for power/energy SCADA systems</Description>
-<Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication PLC protocol Iec104</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

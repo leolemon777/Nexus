@@ -4,15 +4,8 @@
     <RootNamespace>Nexus.MegMeet</RootNamespace>
     <AssemblyName>Nexus.MegMeet</AssemblyName>
     <Description>Nexus MegMeet (麦格米特) Modbus-variant protocol implementation</Description>
-    <Version>1.0.0</Version>
-    <Authors>Nexus Contributors</Authors>
-    <Company>Nexus</Company>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/nexus-industrial/nexus</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
     <PackageTags>industrial-communication PLC protocol MegMeet</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>
