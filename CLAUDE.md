@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build entire solution (uses .slnx format, NOT .sln)
 dotnet build Nexus.slnx
 
-# Run all tests (~3236 tests across ~57 test projects)
+# Run all tests (~3886 tests across ~64 test projects)
 dotnet test Nexus.slnx
 
 # Run a single test project

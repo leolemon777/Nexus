@@ -8,7 +8,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 # Build entire solution (uses .slnx format, NOT .sln)
 dotnet build Nexus.slnx
 
-# Run all tests (~1342 tests across 39 test projects)
+# Run all tests (~3886 tests across ~64 test projects)
 dotnet test Nexus.slnx
 
 # Run a single test project
@@ -29,7 +29,7 @@ dotnet run --project tests/Nexus.Benchmarks -c Release
 
 ## Architecture Overview
 
-Nexus is an open-source industrial communication library targeting HslCommunication replacement. 41 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
+Nexus is an open-source industrial communication library targeting HslCommunication replacement. ~54 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
 
 ### Layer Structure
 
