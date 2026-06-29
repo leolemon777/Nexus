@@ -71,6 +71,13 @@
     <Project Path="src/Nexus.Siemens.MPI/Nexus.Siemens.MPI.csproj" />
     <Project Path="src/Nexus.BacnetIp/Nexus.BacnetIp.csproj" />
     <Project Path="src/Nexus.Iec101/Nexus.Iec101.csproj" />
+    <Project Path="src/Nexus.Mitsubishi.IqR/Nexus.Mitsubishi.IqR.csproj" />
+    <Project Path="src/Nexus.Omron.FinsSerial/Nexus.Omron.FinsSerial.csproj" />
+    <Project Path="src/Nexus.CcLink/Nexus.CcLink.csproj" />
+    <Project Path="src/Nexus.EtherCAT/Nexus.EtherCAT.csproj" />
+    <Project Path="src/Nexus.CANopen/Nexus.CANopen.csproj" />
+    <Project Path="src/Nexus.ProfibusDP/Nexus.ProfibusDP.csproj" />
+    <Project Path="src/Nexus.CoAP/Nexus.CoAP.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
