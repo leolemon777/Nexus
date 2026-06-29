@@ -17,5 +17,6 @@
     <ProjectReference Include="..\..\src\Nexus.ProfinetIO\Nexus.ProfinetIO.csproj" />
     <ProjectReference Include="..\..\src\Nexus.Siemens.MPI\Nexus.Siemens.MPI.csproj" />
     <ProjectReference Include="..\..\src\Nexus.BacnetIp\Nexus.BacnetIp.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.Iec101\Nexus.Iec101.csproj" />
   </ItemGroup>
 </Project>

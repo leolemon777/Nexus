@@ -70,6 +70,7 @@
     <Project Path="src/Nexus.ProfinetIO/Nexus.ProfinetIO.csproj" />
     <Project Path="src/Nexus.Siemens.MPI/Nexus.Siemens.MPI.csproj" />
     <Project Path="src/Nexus.BacnetIp/Nexus.BacnetIp.csproj" />
+    <Project Path="src/Nexus.Iec101/Nexus.Iec101.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">

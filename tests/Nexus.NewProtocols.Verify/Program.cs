@@ -10,6 +10,7 @@ using Nexus.Hart;
 using Nexus.ProfinetIO;
 using Nexus.Siemens.MPI;
 using Nexus.BacnetIp;
+using Nexus.Iec101;
 
 int pass = 0, fail = 0;
 
@@ -109,6 +110,14 @@ Test("Parse 1001.0:0.85", () => { var a = bacnetParser.Parse("1001.0:0.85"); if 
 Test("Parse 1001.2:0", () => { var a = bacnetParser.Parse("1001.2:0"); if (a.DeviceId != 1001 || a.ObjectType != 2 || a.PropertyId != 85) throw new Exception("Expected default property 85"); });
 Test("Parse 1:1001.0:0.85", () => { var a = bacnetParser.Parse("1:1001.0:0.85"); if (a.Network != 1 || a.DeviceId != 1001) throw new Exception("Parse failed"); });
 Test("Create BacnetIpClient", () => { var c = new BacnetIpClient("127.0.0.1", 47808, 1000); if (c == null) throw new Exception("null"); });
+
+// ── IEC 60870-5-101 ──────────────────
+Console.WriteLine("\n=== IEC 60870-5-101 ===");
+var iec101Parser = new Iec101AddressParser();
+Test("Parse M_ME_NC_1.100", () => { var a = iec101Parser.Parse("M_ME_NC_1.100"); if (a.Type != AsduType.M_ME_NC_1 || a.Ioa != 100) throw new Exception("Parse failed"); });
+Test("Parse 13.100", () => { var a = iec101Parser.Parse("13.100"); if (a.Type != AsduType.M_ME_NC_1 || a.Ioa != 100) throw new Exception("Expected type 13"); });
+Test("Parse C_SC_NA_1.1@0", () => { var a = iec101Parser.Parse("C_SC_NA_1.1@0"); if (a.Ca != 0 || a.Ioa != 1) throw new Exception("Parse failed"); });
+Test("Parse M_SP_NA_1.50", () => { var a = iec101Parser.Parse("M_SP_NA_1.50"); if (a.Type != AsduType.M_SP_NA_1 || a.Ioa != 50) throw new Exception("Parse failed"); });
 
 // ── Summary ──────────────────
 Console.WriteLine($"\n=== 结果: {pass} 通过, {fail} 失败 ===");
