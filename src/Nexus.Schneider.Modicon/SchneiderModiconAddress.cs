@@ -60,12 +60,10 @@ namespace Nexus.Schneider.Modicon
             char type = body[1];
             string numPart = body.Substring(2);
 
-            bool isBit = false;
             int bitOffset = 0;
             int dotIdx = numPart.IndexOf('.');
             if (dotIdx >= 0)
             {
-                isBit = true;
                 bitOffset = int.Parse(numPart.Substring(dotIdx + 1));
                 numPart = numPart.Substring(0, dotIdx);
             }

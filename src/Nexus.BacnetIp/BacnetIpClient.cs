@@ -208,7 +208,7 @@ namespace Nexus.BacnetIp
             byte[] objectIdentifier = new byte[]
             {
                 (byte)((objectType >> 2) | 0xC0), // Tag 0, context, length 2
-                (byte)(((objectType & 0x03) << 6) | ((instance >> 16) & 0x3F)),
+                (byte)(((uint)(objectType & 0x03) << 6) | (uint)((instance >> 16) & 0x3F)),
                 (byte)((instance >> 8) & 0xFF),
                 (byte)(instance & 0xFF)
             };
@@ -245,7 +245,7 @@ namespace Nexus.BacnetIp
             byte[] objectIdentifier = new byte[]
             {
                 (byte)((objectType >> 2) | 0xC0),
-                (byte)(((objectType & 0x03) << 6) | ((instance >> 16) & 0x3F)),
+                (byte)(((uint)(objectType & 0x03) << 6) | (uint)((instance >> 16) & 0x3F)),
                 (byte)((instance >> 8) & 0xFF),
                 (byte)(instance & 0xFF)
             };
