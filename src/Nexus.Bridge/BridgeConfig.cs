@@ -82,5 +82,29 @@ namespace Nexus.Bridge
 
         /// <summary>桥接点列表。</summary>
         public List<BridgePoint> Points { get; set; } = new List<BridgePoint>();
+
+        /// <summary>是否启用历史数据存储。</summary>
+        public bool EnableHistory { get; set; }
+
+        /// <summary>历史数据存储目录。</summary>
+        public string HistoryDataDirectory { get; set; } = "data/history";
+
+        /// <summary>历史数据压缩方式: None, Deadband, SwingDoor。</summary>
+        public string HistoryCompression { get; set; } = "Deadband";
+
+        /// <summary>历史数据死区阈值。</summary>
+        public double HistoryDeadbandThreshold { get; set; } = 0.01;
+
+        /// <summary>历史数据保留天数。</summary>
+        public int HistoryRetentionDays { get; set; } = 30;
+
+        /// <summary>历史数据最大内存记录数。</summary>
+        public int HistoryMaxMemoryRecords { get; set; } = 100000;
+
+        /// <summary>历史数据自动落盘间隔（秒）。</summary>
+        public int HistoryFlushIntervalSeconds { get; set; } = 60;
+
+        /// <summary>历史数据变化检测阈值（变化量超过此值才记录）。</summary>
+        public double HistoryChangeThreshold { get; set; } = 0.0;
     }
 }

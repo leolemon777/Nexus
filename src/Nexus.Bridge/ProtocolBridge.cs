@@ -24,12 +24,17 @@ namespace Nexus.Bridge
         private readonly BridgeConfig _config;
         private readonly IReadWriteDevice _source;
         private readonly IBridgeTarget _target;
+        private readonly HistoricalDataStore? _historyStore;
+        private readonly Dictionary<string, double> _lastValues = new Dictionary<string, double>();
         private CancellationTokenSource? _cts;
         private Task? _pollTask;
         private bool _disposed;
 
         /// <summary>已桥接的数据点数。</summary>
         public long BridgedCount { get; private set; }
+
+        /// <summary>历史记录数。</summary>
+        public long HistoryCount => _historyStore?.TotalRecords ?? 0;
 
         /// <summary>最后错误信息。</summary>
         public string? LastError { get; private set; }
@@ -51,6 +56,9 @@ namespace Nexus.Bridge
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _target = target ?? throw new ArgumentNullException(nameof(target));
+
+            if (_config.EnableHistory)
+                _historyStore = CreateHistoryStore(_config);
         }
 
         /// <summary>
@@ -61,6 +69,9 @@ namespace Nexus.Bridge
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _source = CreateSource(config);
             _target = CreateTarget(config);
+
+            if (_config.EnableHistory)
+                _historyStore = CreateHistoryStore(_config);
         }
 
         /// <summary>启动桥接。</summary>
@@ -97,6 +108,35 @@ namespace Nexus.Bridge
 
             try { _target.Disconnect(); } catch { }
             try { _source.Disconnect(); } catch { }
+
+            // 落盘历史数据
+            _historyStore?.Flush();
+        }
+
+        /// <summary>获取历史数据存储（用于查询）。</summary>
+        public HistoricalDataStore? GetHistoryStore() => _historyStore;
+
+        private static HistoricalDataStore CreateHistoryStore(BridgeConfig config)
+        {
+            var compressionType = config.HistoryCompression?.ToLowerInvariant() switch
+            {
+                "deadband" => CompressionType.Deadband,
+                "swingdoor" => CompressionType.SwingDoor,
+                "improvedswingdoor" => CompressionType.ImprovedSwingDoor,
+                _ => CompressionType.None
+            };
+
+            return new HistoricalDataStore(new HistoryStoreConfig
+            {
+                DataDirectory = config.HistoryDataDirectory,
+                Compression = compressionType,
+                DeadbandThreshold = config.HistoryDeadbandThreshold,
+                RetentionDays = config.HistoryRetentionDays,
+                MaxMemoryRecords = config.HistoryMaxMemoryRecords,
+                AutoFlush = true,
+                AutoFlushIntervalSeconds = config.HistoryFlushIntervalSeconds,
+                EnableAggregation = true
+            });
         }
 
         private async Task PollLoop(CancellationToken ct)
@@ -127,9 +167,31 @@ namespace Nexus.Bridge
                             Timestamp = DateTime.Now
                         };
 
+                        // 推送到目标
                         _target.Publish(data);
                         BridgedCount++;
                         OnDataBridged?.Invoke(this, new BridgeDataEventArgs(data));
+
+                        // 历史数据记录（数据变化时自动记录）
+                        if (_historyStore != null)
+                        {
+                            string tagName = string.IsNullOrEmpty(point.Tag) ? point.Address : point.Tag;
+                            bool shouldRecord = true;
+
+                            // 变化检测：只有值变化超过阈值才记录
+                            if (_config.HistoryChangeThreshold > 0 && _lastValues.ContainsKey(tagName))
+                            {
+                                double delta = Math.Abs(numericValue - _lastValues[tagName]);
+                                if (delta < _config.HistoryChangeThreshold)
+                                    shouldRecord = false;
+                            }
+
+                            if (shouldRecord)
+                            {
+                                _historyStore.Write(tagName, numericValue, data.Timestamp, "Good", point.DataType);
+                                _lastValues[tagName] = numericValue;
+                            }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -224,6 +286,7 @@ namespace Nexus.Bridge
             if (_disposed) return;
             _disposed = true;
             Stop();
+            _historyStore?.Dispose();
             (_source as IDisposable)?.Dispose();
             (_target as IDisposable)?.Dispose();
         }
