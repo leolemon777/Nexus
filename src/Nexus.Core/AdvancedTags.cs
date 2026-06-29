@@ -14,7 +14,10 @@ public enum AdvancedTagType
     Clamped,
     Deadband,
     RateOfChange,
-    MovingAverage
+    MovingAverage,
+    ExponentialMovingAverage,
+    Totalizer,
+    PeakTracker
 }
 
 public enum AggregationFunction
@@ -104,6 +107,15 @@ public sealed class AdvancedTagEngine
                     break;
                 case AdvancedTagType.MovingAverage:
                     newValue = EvaluateMovingAverage(tag, sourceValues);
+                    break;
+                case AdvancedTagType.ExponentialMovingAverage:
+                    newValue = EvaluateExponentialMovingAverage(tag, sourceValues);
+                    break;
+                case AdvancedTagType.Totalizer:
+                    newValue = EvaluateTotalizer(tag, sourceValues);
+                    break;
+                case AdvancedTagType.PeakTracker:
+                    newValue = EvaluatePeakTracker(tag, sourceValues);
                     break;
                 default:
                     newValue = 0;
@@ -215,6 +227,43 @@ public sealed class AdvancedTagEngine
             if (hist.Count > tag.WindowSize) hist.RemoveAt(0);
             return hist.Average();
         }
+    }
+
+    private double EvaluateExponentialMovingAverage(AdvancedTag tag, Dictionary<string, double> source)
+    {
+        if (tag.SourceTagNames.Length == 0) return 0;
+        double raw = source.TryGetValue(tag.SourceTagNames[0], out var v) ? v : 0;
+        double alpha = 2.0 / (tag.WindowSize + 1); // 标准 EMA 系数
+        double lastEma = _lastValue.GetOrAdd(tag.Name, raw);
+        double ema = alpha * raw + (1 - alpha) * lastEma;
+        _lastValue[tag.Name] = ema;
+        return ema;
+    }
+
+    private double EvaluateTotalizer(AdvancedTag tag, Dictionary<string, double> source)
+    {
+        if (tag.SourceTagNames.Length == 0) return 0;
+        double raw = source.TryGetValue(tag.SourceTagNames[0], out var v) ? v : 0;
+        var now = DateTime.UtcNow;
+        var lastTime = _lastUpdateTime.GetOrAdd(tag.Name, now);
+        double lastTotal = _lastValue.GetOrAdd(tag.Name, 0);
+        double timeDelta = (now - lastTime).TotalHours; // 小时
+        if (timeDelta < 0.0001) return lastTotal;
+        // 梯形积分
+        double total = lastTotal + (raw + lastTotal) / 2 * timeDelta;
+        _lastValue[tag.Name] = total;
+        _lastUpdateTime[tag.Name] = now;
+        return total;
+    }
+
+    private double EvaluatePeakTracker(AdvancedTag tag, Dictionary<string, double> source)
+    {
+        if (tag.SourceTagNames.Length == 0) return 0;
+        double raw = source.TryGetValue(tag.SourceTagNames[0], out var v) ? v : 0;
+        double lastPeak = _lastValue.GetOrAdd(tag.Name, raw);
+        double peak = Math.Max(lastPeak, raw);
+        _lastValue[tag.Name] = peak;
+        return peak;
     }
 
     internal static double EvaluateSimpleMath(string expr)
