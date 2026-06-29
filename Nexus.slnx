@@ -58,6 +58,15 @@
     <Project Path="src/Nexus.EcFan/Nexus.EcFan.csproj" />
     <Project Path="src/Nexus.YuDian/Nexus.YuDian.csproj" />
     <Project Path="src/Nexus.Delixi/Nexus.Delixi.csproj" />
+    <Project Path="src/Nexus.Schneider.Modicon/Nexus.Schneider.Modicon.csproj" />
+    <Project Path="src/Nexus.Mitsubishi.Fx5u/Nexus.Mitsubishi.Fx5u.csproj" />
+    <Project Path="src/Nexus.Inovance.H5u/Nexus.Inovance.H5u.csproj" />
+    <Project Path="src/Nexus.Siemens.S7Plus/Nexus.Siemens.S7Plus.csproj" />
+    <Project Path="src/Nexus.Omron.NxNj/Nexus.Omron.NxNj.csproj" />
+    <Project Path="src/Nexus.EtherNetIp/Nexus.EtherNetIp.csproj" />
+    <Project Path="src/Nexus.CcLinkIe/Nexus.CcLinkIe.csproj" />
+    <Project Path="src/Nexus.Bacnet.Mstp/Nexus.Bacnet.Mstp.csproj" />
+    <Project Path="src/Nexus.Hart/Nexus.Hart.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
@@ -121,5 +130,6 @@
     <Project Path="tests/Nexus.Freedom.Tests/Nexus.Freedom.Tests.csproj" />
     <Project Path="tests/Nexus.Geniitek.Tests/Nexus.Geniitek.Tests.csproj" />
     <Project Path="tests/Nexus.Knx.Tests/Nexus.Knx.Tests.csproj" />
+    <Project Path="tests/Nexus.NewProtocols.Verify/Nexus.NewProtocols.Verify.csproj" />
   </Folder>
 </Solution>
