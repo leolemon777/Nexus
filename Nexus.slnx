@@ -102,6 +102,7 @@
     <Project Path="src/Nexus.Modbus.Ascii.Serial/Nexus.Modbus.Ascii.Serial.csproj" />
     <Project Path="src/Nexus.Siemens.MpiOverTcp/Nexus.Siemens.MpiOverTcp.csproj" />
     <Project Path="src/Nexus.Omron.FinsOverTcp/Nexus.Omron.FinsOverTcp.csproj" />
+    <Project Path="src/Nexus.Iec103/Nexus.Iec103.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
