@@ -7,6 +7,7 @@ using Nexus.Omron.NxNj;
 using Nexus.EtherNetIp;
 using Nexus.CcLinkIe;
 using Nexus.Hart;
+using Nexus.ProfinetIO;
 
 int pass = 0, fail = 0;
 
@@ -80,6 +81,14 @@ var hartParser = new HartAddressParser();
 Test("Parse short address 0", () => { var a = hartParser.Parse("0"); if (!a.UseShortAddress || a.ShortAddress != 0) throw new Exception("Parse failed"); });
 Test("Parse short address 15", () => { var a = hartParser.Parse("15"); if (a.ShortAddress != 15) throw new Exception("Parse failed"); });
 Test("Parse long address", () => { var a = hartParser.Parse("0x1234567890"); if (a.UseShortAddress) throw new Exception("Expected long address"); });
+
+// ── Profinet IO ──────────────────
+Console.WriteLine("\n=== Profinet IO ===");
+var profinetParser = new ProfinetAddressParser();
+Test("Parse 0:1:0:0", () => { var a = profinetParser.Parse("0:1:0:0"); if (a.Api != 0 || a.Slot != 1 || a.Subslot != 0 || a.Offset != 0) throw new Exception("Parse failed"); });
+Test("Parse 1:0", () => { var a = profinetParser.Parse("1:0"); if (a.Slot != 1 || a.Offset != 0) throw new Exception("Parse failed"); });
+Test("Parse 1:0:5", () => { var a = profinetParser.Parse("1:0:5"); if (a.Slot != 1 || a.Subslot != 0 || a.Offset != 5) throw new Exception("Parse failed"); });
+Test("Create ProfinetIOClient", () => { var c = new ProfinetIOClient("127.0.0.1", 34964, 1000); if (c == null) throw new Exception("null"); });
 
 // ── Summary ──────────────────
 Console.WriteLine($"\n=== 结果: {pass} 通过, {fail} 失败 ===");

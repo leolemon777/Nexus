@@ -67,6 +67,7 @@
     <Project Path="src/Nexus.CcLinkIe/Nexus.CcLinkIe.csproj" />
     <Project Path="src/Nexus.Bacnet.Mstp/Nexus.Bacnet.Mstp.csproj" />
     <Project Path="src/Nexus.Hart/Nexus.Hart.csproj" />
+    <Project Path="src/Nexus.ProfinetIO/Nexus.ProfinetIO.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">

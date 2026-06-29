@@ -71,7 +71,6 @@ namespace Nexus.Schneider.Modicon
             }
 
             ushort addr = ushort.Parse(numPart.TrimStart('0').Length == 0 ? "0" : numPart.TrimStart('0'));
-
             return (prefix, type) switch
             {
                 ('M', 'X') => new SchneiderModiconAddress(original, SchneiderArea.Coil, addr, 0x01, 0x05, true, bitOffset),

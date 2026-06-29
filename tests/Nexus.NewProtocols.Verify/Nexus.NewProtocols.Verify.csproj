@@ -14,5 +14,6 @@
     <ProjectReference Include="..\..\src\Nexus.EtherNetIp\Nexus.EtherNetIp.csproj" />
     <ProjectReference Include="..\..\src\Nexus.CcLinkIe\Nexus.CcLinkIe.csproj" />
     <ProjectReference Include="..\..\src\Nexus.Hart\Nexus.Hart.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.ProfinetIO\Nexus.ProfinetIO.csproj" />
   </ItemGroup>
 </Project>
