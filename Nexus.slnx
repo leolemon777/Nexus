@@ -78,6 +78,14 @@
     <Project Path="src/Nexus.CANopen/Nexus.CANopen.csproj" />
     <Project Path="src/Nexus.ProfibusDP/Nexus.ProfibusDP.csproj" />
     <Project Path="src/Nexus.CoAP/Nexus.CoAP.csproj" />
+    <Project Path="src/Nexus.LonWorks/Nexus.LonWorks.csproj" />
+    <Project Path="src/Nexus.ASi/Nexus.ASi.csproj" />
+    <Project Path="src/Nexus.DeviceNet/Nexus.DeviceNet.csproj" />
+    <Project Path="src/Nexus.AMQP/Nexus.AMQP.csproj" />
+    <Project Path="src/Nexus.WebSocket/Nexus.WebSocket.csproj" />
+    <Project Path="src/Nexus.ModbusPlus/Nexus.ModbusPlus.csproj" />
+    <Project Path="src/Nexus.CcLinkIEField/Nexus.CcLinkIEField.csproj" />
+    <Project Path="src/Nexus.Powerlink/Nexus.Powerlink.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
