@@ -8,6 +8,7 @@ using Nexus.EtherNetIp;
 using Nexus.CcLinkIe;
 using Nexus.Hart;
 using Nexus.ProfinetIO;
+using Nexus.Siemens.MPI;
 
 int pass = 0, fail = 0;
 
@@ -89,6 +90,16 @@ Test("Parse 0:1:0:0", () => { var a = profinetParser.Parse("0:1:0:0"); if (a.Api
 Test("Parse 1:0", () => { var a = profinetParser.Parse("1:0"); if (a.Slot != 1 || a.Offset != 0) throw new Exception("Parse failed"); });
 Test("Parse 1:0:5", () => { var a = profinetParser.Parse("1:0:5"); if (a.Slot != 1 || a.Subslot != 0 || a.Offset != 5) throw new Exception("Parse failed"); });
 Test("Create ProfinetIOClient", () => { var c = new ProfinetIOClient("127.0.0.1", 34964, 1000); if (c == null) throw new Exception("null"); });
+
+// ── Siemens MPI ──────────────────
+Console.WriteLine("\n=== Siemens MPI ===");
+var mpiParser = new MpiAddressParser();
+Test("Parse I0.0", () => { var a = mpiParser.Parse("I0.0"); if (a.Area != MpiArea.I || a.StartByte != 0 || a.BitOffset != 0) throw new Exception("Parse failed"); });
+Test("Parse Q0.5", () => { var a = mpiParser.Parse("Q0.5"); if (a.Area != MpiArea.Q || a.BitOffset != 5) throw new Exception("Parse failed"); });
+Test("Parse M10", () => { var a = mpiParser.Parse("M10"); if (a.Area != MpiArea.M || a.StartByte != 10) throw new Exception("Parse failed"); });
+Test("Parse DB1.DBW0", () => { var a = mpiParser.Parse("DB1.DBW0"); if (a.Area != MpiArea.DB || a.DbNumber != 1) throw new Exception("Parse failed"); });
+Test("Parse DB1.DBX0.5", () => { var a = mpiParser.Parse("DB1.DBX0.5"); if (a.BitOffset != 5) throw new Exception("Parse failed"); });
+Test("Parse V0", () => { var a = mpiParser.Parse("V0"); if (a.Area != MpiArea.V) throw new Exception("Expected V"); });
 
 // ── Summary ──────────────────
 Console.WriteLine($"\n=== 结果: {pass} 通过, {fail} 失败 ===");
