@@ -9,6 +9,7 @@ using Nexus.CcLinkIe;
 using Nexus.Hart;
 using Nexus.ProfinetIO;
 using Nexus.Siemens.MPI;
+using Nexus.BacnetIp;
 
 int pass = 0, fail = 0;
 
@@ -100,6 +101,14 @@ Test("Parse M10", () => { var a = mpiParser.Parse("M10"); if (a.Area != MpiArea.
 Test("Parse DB1.DBW0", () => { var a = mpiParser.Parse("DB1.DBW0"); if (a.Area != MpiArea.DB || a.DbNumber != 1) throw new Exception("Parse failed"); });
 Test("Parse DB1.DBX0.5", () => { var a = mpiParser.Parse("DB1.DBX0.5"); if (a.BitOffset != 5) throw new Exception("Parse failed"); });
 Test("Parse V0", () => { var a = mpiParser.Parse("V0"); if (a.Area != MpiArea.V) throw new Exception("Expected V"); });
+
+// ── BACnet IP ──────────────────
+Console.WriteLine("\n=== BACnet IP ===");
+var bacnetParser = new BacnetIpAddressParser();
+Test("Parse 1001.0:0.85", () => { var a = bacnetParser.Parse("1001.0:0.85"); if (a.DeviceId != 1001 || a.ObjectType != 0 || a.PropertyId != 85) throw new Exception("Parse failed"); });
+Test("Parse 1001.2:0", () => { var a = bacnetParser.Parse("1001.2:0"); if (a.DeviceId != 1001 || a.ObjectType != 2 || a.PropertyId != 85) throw new Exception("Expected default property 85"); });
+Test("Parse 1:1001.0:0.85", () => { var a = bacnetParser.Parse("1:1001.0:0.85"); if (a.Network != 1 || a.DeviceId != 1001) throw new Exception("Parse failed"); });
+Test("Create BacnetIpClient", () => { var c = new BacnetIpClient("127.0.0.1", 47808, 1000); if (c == null) throw new Exception("null"); });
 
 // ── Summary ──────────────────
 Console.WriteLine($"\n=== 结果: {pass} 通过, {fail} 失败 ===");
