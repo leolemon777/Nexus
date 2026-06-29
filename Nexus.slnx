@@ -98,6 +98,10 @@
     <Project Path="src/Nexus.ABB.EGM/Nexus.ABB.EGM.csproj" />
     <Project Path="src/Nexus.Siemens.WebApi/Nexus.Siemens.WebApi.csproj" />
     <Project Path="src/Nexus.Mitsubishi.ASeries/Nexus.Mitsubishi.ASeries.csproj" />
+    <Project Path="src/Nexus.Modbus.Rtu.Serial/Nexus.Modbus.Rtu.Serial.csproj" />
+    <Project Path="src/Nexus.Modbus.Ascii.Serial/Nexus.Modbus.Ascii.Serial.csproj" />
+    <Project Path="src/Nexus.Siemens.MpiOverTcp/Nexus.Siemens.MpiOverTcp.csproj" />
+    <Project Path="src/Nexus.Omron.FinsOverTcp/Nexus.Omron.FinsOverTcp.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
