@@ -86,6 +86,18 @@
     <Project Path="src/Nexus.ModbusPlus/Nexus.ModbusPlus.csproj" />
     <Project Path="src/Nexus.CcLinkIEField/Nexus.CcLinkIEField.csproj" />
     <Project Path="src/Nexus.Powerlink/Nexus.Powerlink.csproj" />
+    <Project Path="src/Nexus.FF_H1/Nexus.FF_H1.csproj" />
+    <Project Path="src/Nexus.ProfibusPA/Nexus.ProfibusPA.csproj" />
+    <Project Path="src/Nexus.Modbus.RtuOverUdp/Nexus.Modbus.RtuOverUdp.csproj" />
+    <Project Path="src/Nexus.Modbus.AsciiOverTcp/Nexus.Modbus.AsciiOverTcp.csproj" />
+    <Project Path="src/Nexus.Omron.HostLinkUdp/Nexus.Omron.HostLinkUdp.csproj" />
+    <Project Path="src/Nexus.Mitsubishi.IqR.Serial/Nexus.Mitsubishi.IqR.Serial.csproj" />
+    <Project Path="src/Nexus.Xinje.Serial/Nexus.Xinje.Serial.csproj" />
+    <Project Path="src/Nexus.Delta.Ascii/Nexus.Delta.Ascii.csproj" />
+    <Project Path="src/Nexus.Fanuc.PCDK/Nexus.Fanuc.PCDK.csproj" />
+    <Project Path="src/Nexus.ABB.EGM/Nexus.ABB.EGM.csproj" />
+    <Project Path="src/Nexus.Siemens.WebApi/Nexus.Siemens.WebApi.csproj" />
+    <Project Path="src/Nexus.Mitsubishi.ASeries/Nexus.Mitsubishi.ASeries.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
