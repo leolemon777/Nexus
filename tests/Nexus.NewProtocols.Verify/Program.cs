@@ -11,6 +11,7 @@ using Nexus.ProfinetIO;
 using Nexus.Siemens.MPI;
 using Nexus.BacnetIp;
 using Nexus.Iec101;
+using Nexus.Mqtt;
 
 int pass = 0, fail = 0;
 
@@ -118,6 +119,30 @@ Test("Parse M_ME_NC_1.100", () => { var a = iec101Parser.Parse("M_ME_NC_1.100");
 Test("Parse 13.100", () => { var a = iec101Parser.Parse("13.100"); if (a.Type != AsduType.M_ME_NC_1 || a.Ioa != 100) throw new Exception("Expected type 13"); });
 Test("Parse C_SC_NA_1.1@0", () => { var a = iec101Parser.Parse("C_SC_NA_1.1@0"); if (a.Ca != 0 || a.Ioa != 1) throw new Exception("Parse failed"); });
 Test("Parse M_SP_NA_1.50", () => { var a = iec101Parser.Parse("M_SP_NA_1.50"); if (a.Type != AsduType.M_SP_NA_1 || a.Ioa != 50) throw new Exception("Parse failed"); });
+
+// ── MQTT 5.0 ──────────────────
+Console.WriteLine("\n=== MQTT 5.0 ===");
+Test("Mqtt5Client create", () => { var c = new Mqtt5Client(); if (c == null) throw new Exception("null"); });
+Test("MqttProperties encode/decode", () =>
+{
+    var props = new MqttProperties { SessionExpiryInterval = 3600, ReasonString = "OK" };
+    props.UserProperties.Add(("key1", "value1"));
+    var buffer = new System.Collections.Generic.List<byte>();
+    props.Encode(buffer);
+    if (buffer.Count == 0) throw new Exception("Encode failed");
+});
+Test("Mqtt5ReasonCode constants", () =>
+{
+    if (Mqtt5ReasonCode.Success != 0x00) throw new Exception("Success != 0x00");
+    if (Mqtt5ReasonCode.NotAuthorized != 0x87) throw new Exception("NotAuthorized != 0x87");
+    if (Mqtt5ReasonCode.PacketTooLarge != 0x95) throw new Exception("PacketTooLarge != 0x95");
+});
+Test("MqttSubscriptionOptions defaults", () =>
+{
+    var opts = new MqttSubscriptionOptions();
+    if (opts.MaximumQoS != 2) throw new Exception("Default MaximumQoS != 2");
+    if (opts.NoLocal != false) throw new Exception("Default NoLocal != false");
+});
 
 // ── Summary ──────────────────
 Console.WriteLine($"\n=== 结果: {pass} 通过, {fail} 失败 ===");

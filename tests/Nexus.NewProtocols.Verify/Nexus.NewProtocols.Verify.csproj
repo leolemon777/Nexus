@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\Nexus.Siemens.MPI\Nexus.Siemens.MPI.csproj" />
     <ProjectReference Include="..\..\src\Nexus.BacnetIp\Nexus.BacnetIp.csproj" />
     <ProjectReference Include="..\..\src\Nexus.Iec101\Nexus.Iec101.csproj" />
+    <ProjectReference Include="..\..\src\Nexus.Mqtt\Nexus.Mqtt.csproj" />
   </ItemGroup>
 </Project>

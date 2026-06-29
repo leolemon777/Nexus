@@ -19,7 +19,8 @@ namespace Nexus.Mqtt
         UnsubAck = 11,
         PingReq = 12,
         PingResp = 13,
-        Disconnect = 14
+        Disconnect = 14,
+        Auth = 15
     }
 
     public enum MqttQoS : byte
