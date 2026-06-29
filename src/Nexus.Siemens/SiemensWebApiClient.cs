@@ -143,8 +143,8 @@ namespace Nexus.Siemens
                 Log.Debug($"GET {url}");
                 RaiseMessageSent($"GET {url}");
 
-                var response = _httpClient.GetAsync(url).GetAwaiter().GetResult();
-                string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                var response = Task.Run(() => _httpClient.GetAsync(url)).GetAwaiter().GetResult();
+                string body = Task.Run(() => response.Content.ReadAsStringAsync()).GetAwaiter().GetResult();
 
                 Log.Debug($"HTTP {(int)response.StatusCode} {body}");
                 RaiseMessageReceived(body);
@@ -198,8 +198,8 @@ namespace Nexus.Siemens
                 RaiseMessageSent($"POST {url} body={jsonBody}");
 
                 var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-                var response = _httpClient.PostAsync(url, content).GetAwaiter().GetResult();
-                string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                var response = Task.Run(() => _httpClient.PostAsync(url, content)).GetAwaiter().GetResult();
+                string body = Task.Run(() => response.Content.ReadAsStringAsync()).GetAwaiter().GetResult();
 
                 Log.Debug($"HTTP {(int)response.StatusCode} {body}");
                 RaiseMessageReceived(body);

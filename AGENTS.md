@@ -8,7 +8,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 # Build entire solution (uses .slnx format, NOT .sln)
 dotnet build Nexus.slnx
 
-# Run all tests (~3886 tests across ~64 test projects)
+# Run all tests (~3400+ tests across ~59 test projects)
 dotnet test Nexus.slnx
 
 # Run a single test project
@@ -29,13 +29,13 @@ dotnet run --project tests/Nexus.Benchmarks -c Release
 
 ## Architecture Overview
 
-Nexus is an open-source industrial communication library targeting HslCommunication replacement. ~54 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
+Nexus is an open-source industrial communication library targeting HslCommunication replacement. ~56 protocol libraries target netstandard2.0 with zero external dependencies. A WPF debugger app (Nexus.App) targets net8.0-windows.
 
 ### Layer Structure
 
 ```
 Nexus.Core (netstandard2.0)              — Unified interfaces & base classes
-  └── Nexus.{Protocol} (netstandard2.0)  — Protocol client libraries (41 total)
+  └── Nexus.{Protocol} (netstandard2.0)  — Protocol client libraries (56 total)
         └── Nexus.App (net8.0-windows)   — WPF debugger application
 ```
 
@@ -49,7 +49,7 @@ Nexus.Core (netstandard2.0)              — Unified interfaces & base classes
 - **`DataConverter`** — Big-endian byte encoding/decoding. Uses `unsafe` pointer casts for float↔int conversion (netstandard2.0 lacks `BitConverter.Int32BitsToSingle`).
 - **`CrcCalculator`** — CRC16-Modbus (lookup table) and LRC for Modbus RTU/ASCII.
 - **`Endianness`** — Four byte orders: BigEndian(ABCD), LittleEndian(DCBA), MidBigEndian(BADC), MidLittleEndian(CDAB).
-- **`ConnectionPool<T>` / `IConnectionPool<T>`** — Thread-safe per-key pooling with `ConcurrentDictionary<string, DeviceBucket>`, idle cleanup timer, and `SemaphoreSlim` concurrency limit. Currently exists in Core but not yet consumed by any protocol client.
+- **`ConnectionPool<T>` / `IConnectionPool<T>`** — Thread-safe per-key pooling with `ConcurrentDictionary<string, DeviceBucket>`, idle cleanup timer, and `SemaphoreSlim` concurrency limit. Consumed by multiple protocol clients for connection reuse.
 - **`DtuClient`** — DTU transparent transmission (4G/Ethernet serial-over-TCP), common in Chinese factory deployments.
 - **`ILogger`** / `IMessageLogger` — Logging abstractions with `NullLogger` and `ConsoleLogger` defaults.
 
@@ -65,8 +65,9 @@ Each protocol library follows this structure:
 
 ### Cross-Project Dependencies
 
-Most protocol libraries reference only `Nexus.Core`. Exception:
+Most protocol libraries reference only `Nexus.Core`. Exceptions:
 - `Nexus.Robot.Estun` → `Nexus.Modbus` (Estun robot uses Modbus TCP internally)
+- `Nexus.Mitsubishi` → `Nexus.AllenBradley` (Mitsubishi uses AllenBradley CIP for some features)
 
 ### WPF App (Nexus.App)
 
@@ -90,7 +91,7 @@ Most protocol libraries reference only `Nexus.Core`. Exception:
 
 ### Virtual Servers
 
-13 protocols have TCP virtual servers for integration testing without hardware: AllenBradley (CIP, PCCC), Fatek, Fuji, GeSrtp, Inovance, Mitsubishi (MC3E, A1E), Modbus, Omron (FINS, HostLink), Siemens (S7, FetchWrite), Yaskawa (Memobus), Yokogawa.
+36 protocols have TCP virtual servers for integration testing without hardware: AllenBradley (CIP, PCCC), Fatek, Fuji, GeSrtp, Inovance, Mitsubishi (MC3E, A1E), Modbus, Omron (FINS, HostLink), Siemens (S7, PPI, FetchWrite), Yaskawa (Memobus), Yokogawa, and more.
 
 ## Hard Constraints
 

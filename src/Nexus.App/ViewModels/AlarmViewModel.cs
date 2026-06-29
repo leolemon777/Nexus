@@ -11,6 +11,7 @@ namespace Nexus.App.ViewModels;
 public partial class AlarmViewModel : ObservableObject, IDisposable
 {
     private readonly AlarmService _alarmService;
+    private readonly IDialogService _dialog;
 
     [ObservableProperty] private string _tagName = string.Empty;
     [ObservableProperty] private string _address = string.Empty;
@@ -36,9 +37,10 @@ public partial class AlarmViewModel : ObservableObject, IDisposable
     public ObservableCollection<AlarmRecord> ActiveAlarms { get; } = new();
     public ObservableCollection<AlarmRecord> HistoryRecords { get; } = new();
 
-    public AlarmViewModel(AlarmService alarmService)
+    public AlarmViewModel(AlarmService alarmService, IDialogService dialog)
     {
         _alarmService = alarmService;
+        _dialog = dialog;
         _alarmService.AlarmTriggered += OnAlarmTriggered;
         _alarmService.AlarmAcknowledged += OnAlarmAcknowledged;
 
@@ -60,7 +62,7 @@ public partial class AlarmViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(TagName) || string.IsNullOrWhiteSpace(Address))
         {
-            MessageBox.Show("请填写标签名和地址", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _dialog.ShowWarning("请填写标签名和地址");
             return;
         }
 

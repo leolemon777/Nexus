@@ -62,7 +62,7 @@ namespace Nexus
         protected readonly object _lock = new object();
         /// <summary>异步收发互斥信号量 — 串口半双工，Write 与 Read 必须在一次完整收发期间独占端口。</summary>
         protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
-        protected bool _persistentMode;
+        protected volatile bool _persistentMode;
 
         // ── 可配置属性 ──────────────────────────────
 

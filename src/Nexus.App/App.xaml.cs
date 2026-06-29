@@ -95,6 +95,7 @@ public partial class App : Application
                 services.AddSingleton<IConfirmationDialog, MessageBoxConfirmationDialog>();
                 services.AddSingleton<IWriteAuditSink, WriteAuditSink>();
                 services.AddSingleton<IWriteConfirmationService, WriteConfirmationService>();
+                services.AddSingleton<IDialogService, DialogService>();
 
                 // WS-A: Settings 页 ViewModel（Transient —— 每次导航新建，Unloaded 时 Dispose）。
                 services.AddTransient<SettingsViewModel>();

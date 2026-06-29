@@ -86,6 +86,7 @@ namespace Nexus.Modbus
         /// </summary>
         private OperateResult<byte[]> RtuSendAndReceive(byte[] pdu)
         {
+            AcquireIoLock();
             try
             {
                 bool wasConnected;
@@ -152,6 +153,10 @@ namespace Nexus.Modbus
                 if (!_persistentMode) lock (_lock) DisconnectCore();
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
+            finally
+            {
+                ReleaseIoLock();
+            }
         }
 
         /// <summary>
@@ -160,6 +165,7 @@ namespace Nexus.Modbus
         /// </summary>
         private async Task<OperateResult<byte[]>> RtuSendAndReceiveAsync(byte[] pdu, CancellationToken ct = default)
         {
+            await AcquireIoLockAsync(ct).ConfigureAwait(false);
             try
             {
                 bool wasConnected;
@@ -229,6 +235,10 @@ namespace Nexus.Modbus
                 RaiseError(ex.Message);
                 if (!_persistentMode) lock (_lock) DisconnectCore();
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
+            }
+            finally
+            {
+                ReleaseIoLockAsync();
             }
         }
 
@@ -858,7 +868,7 @@ namespace Nexus.Modbus
         public new int RetryInterval { get; set; } = 1000;
 
         /// <summary>带重试的连接。</summary>
-        public new OperateResult Connect()
+        public override OperateResult Connect()
         {
             OperateResult? lastResult = null;
             for (int i = 0; i <= RetryCount; i++)
@@ -875,7 +885,7 @@ namespace Nexus.Modbus
         }
 
         /// <summary>带重试的异步连接。</summary>
-        public new async Task<OperateResult> ConnectAsync()
+        public override async Task<OperateResult> ConnectAsync()
         {
             OperateResult? lastResult = null;
             for (int i = 0; i <= RetryCount; i++)
@@ -902,6 +912,7 @@ namespace Nexus.Modbus
         /// </summary>
         public OperateResult<byte[]> SendCustomModbus(byte[] pdu)
         {
+            AcquireIoLock();
             try
             {
                 bool wasConnected;
@@ -968,6 +979,10 @@ namespace Nexus.Modbus
                 RaiseError(ex.Message);
                 if (!_persistentMode) lock (_lock) DisconnectCore();
                 return OperateResult<byte[]>.Failed(ex.Message);
+            }
+            finally
+            {
+                ReleaseIoLock();
             }
         }
 

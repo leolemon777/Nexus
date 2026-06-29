@@ -1,17 +1,23 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Nexus;
+using Nexus.App.Services;
 
 namespace Nexus.App.ViewModels;
 
 public partial class TagConfigViewModel : ObservableObject
 {
     private readonly TagDatabase _db = new();
+    private readonly IDialogService _dialog;
+
+    public TagConfigViewModel(IDialogService dialog)
+    {
+        _dialog = dialog;
+    }
 
     public ObservableCollection<DeviceTag> Tags { get; } = new();
 
@@ -41,7 +47,7 @@ public partial class TagConfigViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(NewFullName))
         {
-            MessageBox.Show("请输入标签全名", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _dialog.ShowWarning("请输入标签全名");
             return;
         }
         var tag = new DeviceTag
@@ -63,7 +69,7 @@ public partial class TagConfigViewModel : ObservableObject
     private void RemoveTag(DeviceTag? tag)
     {
         if (tag == null) return;
-        if (MessageBox.Show($"确定删除标签 '{tag.FullName}'？", "确认", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (!_dialog.ShowConfirmation($"确定删除标签 '{tag.FullName}'？")) return;
         _db.RemoveTag(tag.FullName);
         RefreshList();
     }
@@ -78,11 +84,11 @@ public partial class TagConfigViewModel : ObservableObject
             {
                 int count = _db.ImportFromJson(dialog.FileName);
                 RefreshList();
-                MessageBox.Show($"已导入 {count} 个标签", "导入成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                _dialog.ShowInfo($"已导入 {count} 个标签", "导入成功");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                _dialog.ShowError($"导入失败: {ex.Message}");
             }
         }
     }
@@ -96,11 +102,11 @@ public partial class TagConfigViewModel : ObservableObject
             try
             {
                 _db.ExportToJson(dialog.FileName);
-                MessageBox.Show($"已导出 {Tags.Count} 个标签", "导出成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                _dialog.ShowInfo($"已导出 {Tags.Count} 个标签", "导出成功");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                _dialog.ShowError($"导出失败: {ex.Message}");
             }
         }
     }
@@ -115,11 +121,11 @@ public partial class TagConfigViewModel : ObservableObject
             {
                 int count = _db.ImportFromCsv(dialog.FileName);
                 RefreshList();
-                MessageBox.Show($"已导入 {count} 个标签", "导入成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                _dialog.ShowInfo($"已导入 {count} 个标签", "导入成功");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                _dialog.ShowError($"导入失败: {ex.Message}");
             }
         }
     }
@@ -133,11 +139,11 @@ public partial class TagConfigViewModel : ObservableObject
             try
             {
                 _db.ExportToCsv(dialog.FileName);
-                MessageBox.Show($"已导出 {Tags.Count} 个标签", "导出成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                _dialog.ShowInfo($"已导出 {Tags.Count} 个标签", "导出成功");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                _dialog.ShowError($"导出失败: {ex.Message}");
             }
         }
     }
@@ -160,7 +166,7 @@ public partial class TagConfigViewModel : ObservableObject
     [RelayCommand]
     private void ClearAll()
     {
-        if (MessageBox.Show("确定清空所有标签？", "确认", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (!_dialog.ShowConfirmation("确定清空所有标签？")) return;
         _db.Clear();
         Tags.Clear();
         OnPropertyChanged(nameof(TagCount));

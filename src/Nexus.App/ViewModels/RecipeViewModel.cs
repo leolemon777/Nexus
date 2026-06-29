@@ -1,7 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Nexus.App.Services;
@@ -11,6 +10,7 @@ namespace Nexus.App.ViewModels;
 public partial class RecipeViewModel : ObservableObject, IDisposable
 {
     private readonly RecipeService _recipeService;
+    private readonly IDialogService _dialog;
 
     [ObservableProperty] private string _recipeName = string.Empty;
     [ObservableProperty] private string _recipeDescription = string.Empty;
@@ -31,9 +31,10 @@ public partial class RecipeViewModel : ObservableObject, IDisposable
 
     private Recipe? _currentRecipe;
 
-    public RecipeViewModel(RecipeService recipeService)
+    public RecipeViewModel(RecipeService recipeService, IDialogService dialog)
     {
         _recipeService = recipeService;
+        _dialog = dialog;
         RefreshList();
     }
 
@@ -51,7 +52,7 @@ public partial class RecipeViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(RecipeName))
         {
-            MessageBox.Show("请输入配方名称", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _dialog.ShowWarning("请输入配方名称");
             return;
         }
         _currentRecipe = new Recipe
@@ -88,7 +89,7 @@ public partial class RecipeViewModel : ObservableObject, IDisposable
     private void DeleteRecipe(string? name)
     {
         if (string.IsNullOrEmpty(name)) return;
-        if (MessageBox.Show($"确定删除配方 '{name}'？", "确认", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (!_dialog.ShowConfirmation($"确定删除配方 '{name}'？")) return;
         _recipeService.DeleteRecipe(name);
         AppendLog($"[OK] 已删除配方: {name}");
         RefreshList();
@@ -99,7 +100,7 @@ public partial class RecipeViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(ParamName) || string.IsNullOrWhiteSpace(ParamAddress))
         {
-            MessageBox.Show("请填写参数名和地址", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _dialog.ShowWarning("请填写参数名和地址");
             return;
         }
         CurrentParameters.Add(new RecipeParameter

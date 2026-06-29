@@ -263,5 +263,82 @@ namespace Nexus.Core.Tests
                 Assert.Empty(errors);
             }
         }
+
+        [Fact]
+        public async Task ShortConnection_ConcurrentSendAndReceive_NoInterleaving()
+        {
+            // 短连接模式：每次收发后断开。验证多线程并发不会因连接生命周期管理出错。
+            using (var server = new LengthPrefixEchoServer())
+            using (var device = new LengthPrefixTcpDevice("127.0.0.1", server.Port))
+            {
+                // 不预连接，让每个 SendAndReceive 自动连接+断开。
+                const int threadCount = 4;
+                const int opsPerThread = 10;
+                var errors = new List<string>();
+                var errorLock = new object();
+
+                var tasks = new Task[threadCount];
+                for (int t = 0; t < threadCount; t++)
+                {
+                    int tid = t;
+                    tasks[t] = Task.Run(() =>
+                    {
+                        for (int i = 0; i < opsPerThread; i++)
+                        {
+                            int tag = (tid << 16) | i;
+                            var payload = BitConverter.GetBytes(tag);
+                            byte[] request = new byte[8];
+                            BitConverter.GetBytes(IPAddress.HostToNetworkOrder(4)).CopyTo(request, 0);
+                            payload.CopyTo(request, 4);
+
+                            var resp = device.DoSendAndReceive(request);
+                            if (!resp.IsSuccess)
+                            {
+                                lock (errorLock) errors.Add($"thread {tid} op {i}: {resp.Message}");
+                                continue;
+                            }
+
+                            byte[] data = resp.Content;
+                            int respTag = BitConverter.ToInt32(data, 4);
+                            if (respTag != tag)
+                            {
+                                lock (errorLock)
+                                    errors.Add($"thread {tid} op {i}: tag mismatch — sent {tag:X8}, got {respTag:X8}");
+                            }
+                        }
+                    });
+                }
+
+                await Task.WhenAll(tasks);
+                Assert.Empty(errors);
+            }
+        }
+
+        [Fact]
+        public async Task Connect_Disconnect_Cycle_NoDeadlock()
+        {
+            // 快速连接/断开循环 — 验证 Dispose 和 Connect/Disconnect 不会死锁或抛异常。
+            using (var server = new LengthPrefixEchoServer())
+            {
+                for (int cycle = 0; cycle < 5; cycle++)
+                {
+                    using (var device = new LengthPrefixTcpDevice("127.0.0.1", server.Port))
+                    {
+                        var connect = device.Connect();
+                        Assert.True(connect.IsSuccess, connect.Message);
+
+                        // 发一次数据确认连接可用。
+                        byte[] request = new byte[8];
+                        BitConverter.GetBytes(IPAddress.HostToNetworkOrder(4)).CopyTo(request, 0);
+                        BitConverter.GetBytes(cycle).CopyTo(request, 4);
+                        var resp = device.DoSendAndReceive(request);
+                        Assert.True(resp.IsSuccess, resp.Message);
+
+                        device.Disconnect();
+                        Assert.False(device.IsConnected);
+                    }
+                }
+            }
+        }
     }
 }

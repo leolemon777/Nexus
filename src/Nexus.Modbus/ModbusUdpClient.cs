@@ -577,7 +577,7 @@ namespace Nexus.Modbus
         public int RetryCount { get; set; } = 3;
         public int RetryInterval { get; set; } = 1000;
 
-        public new OperateResult Connect()
+        public override OperateResult Connect()
         {
             OperateResult? lastResult = null;
             for (int i = 0; i <= RetryCount; i++)
@@ -593,7 +593,7 @@ namespace Nexus.Modbus
             return lastResult ?? OperateResult.Failed("连接失败");
         }
 
-        public new async Task<OperateResult> ConnectAsync()
+        public override async Task<OperateResult> ConnectAsync()
         {
             OperateResult? lastResult = null;
             for (int i = 0; i <= RetryCount; i++)

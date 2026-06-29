@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -57,6 +59,88 @@ public class ModbusTcpConnectionPoolTests
         Assert.True(firstResult.IsSuccess, firstResult.Message);
         Assert.True(secondResult.IsSuccess, secondResult.Message);
         Assert.Equal((ushort)0x5678, secondResult.Content);
+    }
+
+    [Fact]
+    public async Task ConcurrentAcquireRelease_MultipleThreads_NoErrors()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new ModbusTcpServer(port);
+        server.SetHoldingRegister(0, 0xABCD);
+        server.Start();
+
+        using var pool = new ModbusTcpConnectionPool("127.0.0.1", port, station: 1, maxPoolSize: 4);
+
+        const int threadCount = 8;
+        const int opsPerThread = 20;
+        var errors = new List<string>();
+        var errorLock = new object();
+
+        var tasks = new Task[threadCount];
+        for (int t = 0; t < threadCount; t++)
+        {
+            int tid = t;
+            tasks[t] = Task.Run(() =>
+            {
+                for (int i = 0; i < opsPerThread; i++)
+                {
+                    try
+                    {
+                        var result = pool.ReadUInt16("40001");
+                        if (!result.IsSuccess)
+                        {
+                            lock (errorLock) errors.Add($"t{i} i{i}: {result.Message}");
+                        }
+                        else if (result.Content != 0xABCD)
+                        {
+                            lock (errorLock) errors.Add($"t{tid} i{i}: unexpected value 0x{result.Content:X4}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        lock (errorLock) errors.Add($"t{tid} i{i}: exception {ex.Message}");
+                    }
+                }
+            });
+        }
+
+        await Task.WhenAll(tasks);
+        Assert.Empty(errors);
+        Assert.Equal(0, pool.ActiveCount);
+    }
+
+    [Fact]
+    public void Pool_ReturnsConnection_AfterDispose()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new ModbusTcpServer(port);
+        server.Start();
+
+        var pool = new ModbusTcpConnectionPool("127.0.0.1", port, station: 1, maxPoolSize: 2);
+
+        var result = pool.ReadUInt16("40001");
+        Assert.True(result.IsSuccess, result.Message);
+
+        pool.Dispose();
+
+        // After dispose, operations should fail gracefully (not throw).
+        var resultAfterDispose = pool.ReadUInt16("40001");
+        Assert.False(resultAfterDispose.IsSuccess);
+    }
+
+    [Fact]
+    public void Execute_ReturnsFuncResult_Correctly()
+    {
+        int port = GetFreeTcpPort();
+        using var server = new ModbusTcpServer(port);
+        server.SetHoldingRegister(0, 999);
+        server.Start();
+
+        using var pool = new ModbusTcpConnectionPool("127.0.0.1", port, station: 1, maxPoolSize: 1);
+
+        var result = pool.Execute(client => client.ReadUInt16("40001"));
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal((ushort)999, result.Content);
     }
 
     private static int GetFreeTcpPort()
