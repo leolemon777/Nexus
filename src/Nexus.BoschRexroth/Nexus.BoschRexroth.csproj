@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.BoschRexroth</RootNamespace>
+    <AssemblyName>Nexus.BoschRexroth</AssemblyName>
+    <Description>Nexus Bosch Rexroth ctrlX EtherNet/IP CIP protocol implementation</Description>
+    <PackageTags>industrial-communication PLC protocol Bosch Rexroth ctrlX CIP</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
+    <ProjectReference Include="..\Nexus.AllenBradley\Nexus.AllenBradley.csproj"/>
+  </ItemGroup>
+</Project>

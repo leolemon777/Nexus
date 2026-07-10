@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.Honeywell</RootNamespace>
+    <AssemblyName>Nexus.Honeywell</AssemblyName>
+    <Description>Nexus Honeywell HC900 Modbus-variant protocol implementation</Description>
+    <PackageTags>industrial-communication PLC protocol Honeywell HC900</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj"/>
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj"/>
+  </ItemGroup>
+</Project>
