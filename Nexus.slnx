@@ -103,6 +103,15 @@
     <Project Path="src/Nexus.Siemens.MpiOverTcp/Nexus.Siemens.MpiOverTcp.csproj" />
     <Project Path="src/Nexus.Omron.FinsOverTcp/Nexus.Omron.FinsOverTcp.csproj" />
     <Project Path="src/Nexus.Iec103/Nexus.Iec103.csproj" />
+    <Project Path="src/Nexus.AbbPlc/Nexus.AbbPlc.csproj" />
+    <Project Path="src/Nexus.BoschRexroth/Nexus.BoschRexroth.csproj" />
+    <Project Path="src/Nexus.BrPowerlink/Nexus.BrPowerlink.csproj" />
+    <Project Path="src/Nexus.Hitachi/Nexus.Hitachi.csproj" />
+    <Project Path="src/Nexus.Honeywell/Nexus.Honeywell.csproj" />
+    <Project Path="src/Nexus.Idec/Nexus.Idec.csproj" />
+    <Project Path="src/Nexus.Phoenix/Nexus.Phoenix.csproj" />
+    <Project Path="src/Nexus.Toshiba/Nexus.Toshiba.csproj" />
+    <Project Path="src/Nexus.Wago/Nexus.Wago.csproj" />
     <Project Path="tests/Nexus.Bridge.Tests/Nexus.Bridge.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">

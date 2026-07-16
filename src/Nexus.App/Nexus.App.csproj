@@ -110,6 +110,15 @@
     <ProjectReference Include="..\Nexus.Robot.Abb\Nexus.Robot.Abb.csproj" />
     <ProjectReference Include="..\Nexus.Robot.Estun\Nexus.Robot.Estun.csproj" />
     <ProjectReference Include="..\Nexus.Ftp\Nexus.Ftp.csproj" />
+    <ProjectReference Include="..\Nexus.AbbPlc\Nexus.AbbPlc.csproj" />
+    <ProjectReference Include="..\Nexus.BoschRexroth\Nexus.BoschRexroth.csproj" />
+    <ProjectReference Include="..\Nexus.BrPowerlink\Nexus.BrPowerlink.csproj" />
+    <ProjectReference Include="..\Nexus.Hitachi\Nexus.Hitachi.csproj" />
+    <ProjectReference Include="..\Nexus.Honeywell\Nexus.Honeywell.csproj" />
+    <ProjectReference Include="..\Nexus.Idec\Nexus.Idec.csproj" />
+    <ProjectReference Include="..\Nexus.Phoenix\Nexus.Phoenix.csproj" />
+    <ProjectReference Include="..\Nexus.Toshiba\Nexus.Toshiba.csproj" />
+    <ProjectReference Include="..\Nexus.Wago\Nexus.Wago.csproj" />
   </ItemGroup>
 
 </Project>
