@@ -1,16 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
     <RootNamespace>Nexus.ToyoPuc</RootNamespace>
-    <Description>Nexus ToyoPuc — ToyoPuc PLC TCP 通讯协议实现</Description>
-    <PackageTags>industrial-communication ToyoPuc PLC protocol</PackageTags>
+    <AssemblyName>Nexus.ToyoPuc</AssemblyName>
+    <Description>Nexus ToyoPuc — Toyota-Puc welder/controller over TCP (Phase D-4)</Description>
+    <PackageTags>industrial-communication toyota puc welder</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>
     <DebugType>portable</DebugType>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
