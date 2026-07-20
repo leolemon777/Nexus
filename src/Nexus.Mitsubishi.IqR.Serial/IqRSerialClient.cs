@@ -1,76 +1,46 @@
+// MELSEC iQ-R RS-232 client via MelsecA3CNet protocol.
+// iQ-R series (R08CPU, R16CPU, etc.) computer-link over RS-232 uses the same
+// A3C protocol frame as the legacy AnS/Q series, with iQ-R specific extensions
+// for higher device-address ranges. This client delegates to MelsecA3CNetClient.
+
 using Nexus;
+using Nexus.Mitsubishi;
 
 namespace Nexus.Mitsubishi.IqR.Serial
 {
     /// <summary>
-    /// 三菱 MELSEC iQ-R 系列 RS-232 串口客户端 — <b>当前为 stub</b>。
+    /// 三菱 MELSEC iQ-R 系列 RS-232 串口客户端。
     /// </summary>
     /// <remarks>
-    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。
-    /// <para><b>临时替代</b>:iQ-R 系列同时支持 MC3E 二进制协议,推荐使用
-    /// <c>Nexus.Mitsubishi</c> 的 TCP 客户端,或在串口场景下使用
-    /// <c>Nexus.Mitsubishi.MelsecA3CNet</c>(已实现)。</para>
-    /// <para><b>深化计划</b>:iQ-R 串口协议 ≈ MC3E binary 帧封装到 RS-232 链路,
-    /// 可复用现有 MC3E 帧构造器。预计 2-3 天。</para>
+    /// <b>实现说明</b>(Phase C-4):iQ-R 系列 PLC(R08CPU、R16CPU、R32CPU 等)的 RS-232
+    /// 计算机链接协议与 AnS/Q 系列的 A3C 协议高度兼容 — 仅在设备地址范围、特殊寄存器上
+    /// 有 iQ-R 扩展。本客户端直接继承 <see cref="MelsecA3CNetClient"/>,
+    /// 获得完整的 A3C 串口通讯能力(读写字/位/字符串、批量、CRC 校验、自动重连)。
+    /// <para>
+    /// <b>变更说明</b>:本类从纯 OperateResult.Failed 占位升级为基于
+    /// <see cref="MelsecA3CNetClient"/> 的真实实现。
+    /// </para>
+    /// <para><b>iQ-R 专有特性</b>(超出 A3C 范围,本类不实现):
+    /// <list type="bullet">
+    ///   <item>RD(扩展文件寄存器)间接寻址 — 需 iQ-R 固件支持,见 iQ-R 通讯手册。</item>
+    ///   <item>SLMP 串口封装 — iQ-R 支持 SLMP-over-serial,可用 MC3E 二进制帧。</item>
+    /// </list>
+    /// 如需这些特性,推荐使用 <c>Nexus.Mitsubishi.Mc3EBinaryClient</c>(TCP/SLMP)。</para>
     /// </remarks>
-    public class IqRSerialClient : SerialDeviceBase, IBatchReadWrite
+    public class IqRSerialClient : MelsecA3CNetClient
     {
-        public IqRSerialClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
-        protected override int ResponseHeaderLength => 9;
-        protected override int GetResponsePayloadLength(byte[] header) => 0;
+        /// <summary>
+        /// 构造 iQ-R 串口客户端。
+        /// </summary>
+        /// <param name="port">已配置好参数的 ISerialPort(典型:9600/8/E/1,与 iQ-R 内置 RS-232 默认一致)。</param>
+        /// <param name="station">PLC 站号(0-31,默认 0)。</param>
+        /// <param name="timeout">通讯超时(毫秒)。</param>
+        public IqRSerialClient(ISerialPort port, byte station = 0, int timeout = 5000)
+            : base(port, station, timeout)
+        {
+        }
 
-        public override OperateResult<bool> ReadBool(string address) => OperateResult<bool>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<short> ReadInt16(string address) => OperateResult<short>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<ushort> ReadUInt16(string address) => OperateResult<ushort>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<int> ReadInt32(string address) => OperateResult<int>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<uint> ReadUInt32(string address) => OperateResult<uint>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<long> ReadInt64(string address) => OperateResult<long>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<ulong> ReadUInt64(string address) => OperateResult<ulong>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<float> ReadFloat(string address) => OperateResult<float>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<string> ReadString(string address, ushort length) => OperateResult<string>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-        public override OperateResult<byte[]> ReadBytes(string address, ushort length) => OperateResult<byte[]>.Failed("iQ-R 串口协议暂不支持直接读取，请使用 TCP 客户端");
-
-        public override OperateResult Write(string address, bool value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, short value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, ushort value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, int value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, uint value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, long value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, ulong value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, float value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, double value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, string value) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-        public override OperateResult Write(string address, byte[] data) => OperateResult.Failed("iQ-R 串口协议暂不支持直接写入，请使用 TCP 客户端");
-
-        public override Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
-        public override Task<OperateResult<short>> ReadInt16Async(string address) => Task.Run(() => ReadInt16(address));
-        public override Task<OperateResult<ushort>> ReadUInt16Async(string address) => Task.Run(() => ReadUInt16(address));
-        public override Task<OperateResult<int>> ReadInt32Async(string address) => Task.Run(() => ReadInt32(address));
-        public override Task<OperateResult<uint>> ReadUInt32Async(string address) => Task.Run(() => ReadUInt32(address));
-        public override Task<OperateResult<long>> ReadInt64Async(string address) => Task.Run(() => ReadInt64(address));
-        public override Task<OperateResult<ulong>> ReadUInt64Async(string address) => Task.Run(() => ReadUInt64(address));
-        public override Task<OperateResult<float>> ReadFloatAsync(string address) => Task.Run(() => ReadFloat(address));
-        public override Task<OperateResult<double>> ReadDoubleAsync(string address) => Task.Run(() => ReadDouble(address));
-        public override Task<OperateResult<string>> ReadStringAsync(string address, ushort length) => Task.Run(() => ReadString(address, length));
-        public override Task<OperateResult<byte[]>> ReadBytesAsync(string address, ushort length) => Task.Run(() => ReadBytes(address, length));
-        public override Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
-
-        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses) => OperateResult<Dictionary<string, object?>>.Failed("iQ-R 串口协议暂不支持批量读取");
-        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(IEnumerable<string> addresses, CancellationToken ct = default) => Task.FromResult(BatchRead(addresses));
-        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses) => OperateResult<Dictionary<string, byte[]>>.Failed("iQ-R 串口协议暂不支持随机读取");
-        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(IEnumerable<string> addresses, CancellationToken ct = default) => Task.FromResult(RandomRead(addresses));
-        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items) => OperateResult.Failed("iQ-R 串口协议暂不支持批量写入");
-        public Task<OperateResult> BatchWriteAsync(IEnumerable<KeyValuePair<string, object>> items, CancellationToken ct = default) => Task.FromResult(BatchWrite(items));
+        /// <inheritdoc />
+        public override string ToString() => $"IqRSerialClient[Station={Station:D2}]";
     }
 }

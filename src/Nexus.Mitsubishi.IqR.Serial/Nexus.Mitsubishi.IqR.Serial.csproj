@@ -4,9 +4,11 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Nexus Mitsubishi.IqR.Serial protocol client library</Description>
+    <Description>Nexus Mitsubishi.IqR.Serial — MELSEC iQ-R RS-232 client via MelsecA3CNet (Phase C-4)</Description>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Mitsubishi\Nexus.Mitsubishi.csproj" />
   </ItemGroup>
 </Project>
