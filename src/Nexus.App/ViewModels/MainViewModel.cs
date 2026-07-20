@@ -244,6 +244,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🌡", "RKC 温控", "rkc", typeof(Views.RkcPage))
             .Add("⚖", "Toledo 称重", "toledo", typeof(Views.ToledoPage)),
 
+        new NavGroup("📡", "RFID & 特殊设备", null)
+            .Add("📡", "Turck RFID", "turck", typeof(Views.TurckReaderPage))
+            .Add("🌐", "S7 Web API", "siemens-webapi", typeof(Views.SiemensWebApiPage)),
+
 
         new NavGroup("🤖", "机器人")
             .Add("🤖", "埃夫特 Efort", "robot-efort", typeof(Views.RobotEfortPage))
@@ -253,6 +257,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Add("🤖", "安川 Yaskawa", "robot-yaskawa", typeof(Views.RobotYaskawaPage))
             .Add("🤖", "雅马哈 Yamaha", "robot-yamaha", typeof(Views.RobotYamahaPage))
             .Add("🤖", "史陶比尔 Staubli", "robot-staubli", typeof(Views.RobotStaubliPage)),
+
+        // ═══════════════════════════════════════════
+        //  新协议 — 待归类的最新协议
+        // ═══════════════════════════════════════════
+
+        new NavGroup("💡", "新协议", null)
+            .Add("💡", "ShineIn 光源", "shinein", typeof(Views.ShineInPage))
+            .Add("🪪", "SAM 身份证", "sam", typeof(Views.SamPage)),
+
         // ═══════════════════════════════════════════
         //  工具
         // ═══════════════════════════════════════════

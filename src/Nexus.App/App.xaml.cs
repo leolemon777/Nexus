@@ -140,6 +140,8 @@ public partial class App : Application
                 services.AddTransient<SecsViewModel>();
                 services.AddTransient<RkcViewModel>();
                 services.AddTransient<ToledoViewModel>();
+                services.AddTransient<TurckReaderViewModel>();
+                services.AddTransient<SiemensWebApiViewModel>();
                 services.AddTransient<RobotEfortViewModel>();
                 services.AddTransient<RobotFanucViewModel>();
                 services.AddTransient<RobotKukaViewModel>();
@@ -162,6 +164,8 @@ public partial class App : Application
                 services.AddSingleton<VirtualPlcManager>();
                 services.AddTransient<HmiViewModel>();
                 services.AddTransient<TagConfigViewModel>();
+                services.AddTransient<ShineInViewModel>();
+                services.AddTransient<SamViewModel>();
 
                 // Views
                 services.AddSingleton<MainWindow>();

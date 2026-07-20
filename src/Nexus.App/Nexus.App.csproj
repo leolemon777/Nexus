@@ -119,6 +119,10 @@
     <ProjectReference Include="..\Nexus.Phoenix\Nexus.Phoenix.csproj" />
     <ProjectReference Include="..\Nexus.Toshiba\Nexus.Toshiba.csproj" />
     <ProjectReference Include="..\Nexus.Wago\Nexus.Wago.csproj" />
+    <ProjectReference Include="..\Nexus.ShineIn\Nexus.ShineIn.csproj" />
+    <ProjectReference Include="..\Nexus.Sam\Nexus.Sam.csproj" />
+    <ProjectReference Include="..\Nexus.Turck\Nexus.Turck.csproj" />
+    <ProjectReference Include="..\Nexus.Siemens.WebApi\Nexus.Siemens.WebApi.csproj" />
   </ItemGroup>
 
 </Project>
