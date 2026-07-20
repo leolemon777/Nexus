@@ -479,7 +479,7 @@ namespace Nexus.Core.Tests
                         }
                     });
 
-                    await Task.WhenAll(ioTask, cycleTask).ConfigureAwait(false);
+                    await Task.WhenAll(ioTask, cycleTask);
                     Assert.True(errors.Count == 0,
                         "ConnectAsync 并发竞态污染基类:\n" + string.Join("\n", errors));
                 }

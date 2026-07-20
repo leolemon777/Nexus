@@ -19,7 +19,15 @@ namespace Nexus
 
         private UdpClient? _client;
         protected readonly object _lock = new object();
+        /// <summary>
+        /// 收发互斥信号量 — A3 修复:UDP 虽然是无连接的,但同一 UdpClient 实例的 Send+Receive
+        /// 必须串行化,否则两个并发 SendAndReceive 会把对方响应错配到自己的请求上。
+        /// 同步路径用 <see cref="SemaphoreSlim.Wait()"/>,异步路径用 <see cref="SemaphoreSlim.WaitAsync(CancellationToken)"/>,
+        /// 两者共用此 SemaphoreSlim(避免 SerialDeviceBase 曾经的双锁不一致 bug)。
+        /// </summary>
+        protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
         private bool _connected;
+        private volatile bool _disposed;
 
         // ── 事件 ──────────────────────────────────
 
@@ -62,6 +70,7 @@ namespace Nexus
 
         public virtual OperateResult Connect()
         {
+            if (_disposed) return OperateResult.Failed("UDP 设备已释放");
             try
             {
                 lock (_lock)
@@ -87,8 +96,15 @@ namespace Nexus
         }
 
         public virtual Task<OperateResult> ConnectAsync()
+            => ConnectAsync(CancellationToken.None);
+
+        public virtual Task<OperateResult> ConnectAsync(CancellationToken cancellationToken)
         {
-            return Task.Run(() => Connect());
+            // UdpClient.Connect 只是设置默认远端,不真发包(无连接),所以同步执行即可。
+            // 不再使用 Task.Run 包装(避免线程池盗窃)。
+            if (_disposed) return Task.FromResult(OperateResult.Failed("UDP 设备已释放"));
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Connect());
         }
 
         public void Disconnect()
@@ -125,6 +141,11 @@ namespace Nexus
 
         protected OperateResult<byte[]> SendAndReceive(byte[] request)
         {
+            // A3 修复:整个 Send+Receive 必须在 _asyncLock 内串行执行。
+            // 原实现:lock(_lock) 内只取 client 引用就释放,Send/Receive 在锁外。
+            // 两个并发 SendAndReceive 都拿到同一 client,各自 Send 后 Receive 任意一方响应,
+            // 导致响应错配到错误的请求(UDP 无序、无连接,出错尤其严重)。
+            _asyncLock.Wait();
             try
             {
                 UdpClient? client;
@@ -165,12 +186,20 @@ namespace Nexus
                 OnError?.Invoke(this, ex.Message);
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
             }
+            finally
+            {
+                // Release 必须放在 finally:catch 块提前 return 后仍要释放锁。
+                // 若 Release 抛 ObjectDisposedException(Dispose 已销毁信号量),吞掉避免掩盖业务异常。
+                try { _asyncLock.Release(); } catch (ObjectDisposedException) { }
+            }
         }
 
         /// <summary>异步发送请求并接收响应。</summary>
         protected async Task<OperateResult<byte[]>> SendAndReceiveAsync(
             byte[] request, CancellationToken cancellationToken = default)
         {
+            // A3 修复:与同步路径同样的并发保护,使用 _asyncLock.WaitAsync。
+            await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 UdpClient? client;
@@ -197,9 +226,9 @@ namespace Nexus
 
                 if (completed != receiveTask)
                 {
-                    // M3 修复：超时后孤儿 receiveTask 仍在后台运行，持有旧 UdpClient 并可能
-                    // 偷吃下一个响应包。重建 socket（Close 旧 client 让 receiveTask 终止），
-                    // 下次收发会重新连接。注意需在 _lock 内调用 DisconnectCore。
+                    // 超时后孤儿 receiveTask 仍在后台运行,持有旧 UdpClient 并可能偷吃下一个响应包。
+                    // 重建 socket(Close 旧 client 让 receiveTask 终止),下次收发会重新连接。
+                    // A3: 现已持 _asyncLock,只需 DisconnectCore 清理 socket 即可。
                     Log.Error($"UDP 接收超时 — {Ip}:{Port}");
                     OnError?.Invoke(this, "接收超时");
                     lock (_lock) DisconnectCore();
@@ -229,6 +258,10 @@ namespace Nexus
                 Log.Error($"UDP 通讯异常 — {ex.Message}");
                 OnError?.Invoke(this, ex.Message);
                 return OperateResult<byte[]>.Failed($"通讯异常: {ex.Message}");
+            }
+            finally
+            {
+                try { _asyncLock.Release(); } catch (ObjectDisposedException) { }
             }
         }
 
@@ -348,7 +381,31 @@ namespace Nexus
         public virtual Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
 
-        public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
-        protected virtual void Dispose(bool disposing) { if (disposing) Disconnect(); }
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            if (disposing)
+            {
+                // A3 修复:Dispose 时先尝试取得 _asyncLock 等待进行中的 IO 结束(最多 5 秒),
+                // 再 Disconnect,最后释放 SemaphoreSlim 自身。
+                try
+                {
+                    if (!_asyncLock.Wait(TimeSpan.FromSeconds(5)))
+                        Log.Warn("Dispose: 5 秒内未能取得 UDP IO 锁,强制释放");
+                }
+                catch (ObjectDisposedException) { }
+
+                Disconnect();
+
+                try { _asyncLock.Dispose(); } catch (ObjectDisposedException) { }
+            }
+        }
     }
 }
