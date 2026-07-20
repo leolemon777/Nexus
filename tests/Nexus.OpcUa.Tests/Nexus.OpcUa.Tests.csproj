@@ -14,4 +14,9 @@
     <ProjectReference Include="..\..\src\Nexus.OpcUa\Nexus.OpcUa.csproj" />
     <ProjectReference Include="..\..\src\Nexus.Core\Nexus.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

@@ -16,4 +16,10 @@
     <ProjectReference Include="..\..\src\Nexus.Mitsubishi\Nexus.Mitsubishi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
