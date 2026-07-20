@@ -1,346 +1,180 @@
+// Derived from HslCommunication (MIT, Copyright (c) Richard.Hu 2017-2025).
+// See NOTICE and THIRD_PARTY_NOTICES.md.
+//
+// Geniitek VB31 vibration sensor client — event-driven TCP.
+// Adapted from HSL's Profinet.Geniitek.VibrationSensorClient (504 lines).
+
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Nexus.Geniitek
 {
     /// <summary>
-    /// Geniitek 振动传感器 TCP 通讯客户端。
-    /// <para>帧格式: Header(2) + Length(2) + Command(1) + Data(N) + Checksum(1)</para>
-    /// <para>Header = 0xAA 0x55, Checksum = XOR(Length..Data)</para>
-    /// <para>支持读取加速度、速度、温度、电池电量等。</para>
+    /// 振动传感器峰值数据(X/Y/Z 轴加速度、速度、位移、温度、电压)。
     /// </summary>
-    public class VibrationSensorClient : TcpDeviceBase
+    public class VibrationSensorPeekValue
     {
-        private const byte HEADER_0 = 0xAA;
-        private const byte HEADER_1 = 0x55;
+        public float AcceleratedSpeedX { get; set; }
+        public float AcceleratedSpeedY { get; set; }
+        public float AcceleratedSpeedZ { get; set; }
+        public float SpeedX { get; set; }
+        public float SpeedY { get; set; }
+        public float SpeedZ { get; set; }
+        public int OffsetX { get; set; }
+        public int OffsetY { get; set; }
+        public int OffsetZ { get; set; }
+        public float Temperature { get; set; }
+        public float Voltage { get; set; }
+        public int SendingInterval { get; set; }
 
-        private const byte CMD_READ_ACCEL = 0x01;
-        private const byte CMD_READ_VELOCITY = 0x02;
-        private const byte CMD_READ_TEMP = 0x03;
-        private const byte CMD_READ_BATTERY = 0x04;
-        private const byte CMD_READ_STATUS = 0x05;
-        private const byte CMD_READ_CONFIG = 0x06;
-        private const byte CMD_WRITE_CONFIG = 0x07;
+        public override string ToString()
+            => $"Peek[Acc=({AcceleratedSpeedX:F2},{AcceleratedSpeedY:F2},{AcceleratedSpeedZ:F2}) " +
+               $"Spd=({SpeedX:F2},{SpeedY:F2},{SpeedZ:F2}) T={Temperature:F1}°C V={Voltage:F2}V]";
+    }
 
-        protected override int ResponseHeaderLength => 4;
-        protected override int GetResponsePayloadLength(byte[] header)
+    /// <summary>
+    /// Geniitek VB31 智能无线振动传感器客户端。
+    /// </summary>
+    /// <remarks>
+    /// VB31 是事件驱动的:传感器主动推送数据,客户端只需连上服务器端口即可。
+    /// 帧格式: 9 字节头 + 3 字节子命令 + N 字节数据 + 2 字节 CRC。
+    /// </remarks>
+    public class VibrationSensorClient
+    {
+        /// <summary>峰值数据接收事件。</summary>
+        public event Action<VibrationSensorPeekValue>? OnPeekValueReceive;
+
+        /// <summary>连接成功事件。</summary>
+        public event Action? OnClientConnected;
+
+        /// <summary>连接超时(毫秒)。</summary>
+        public int ConnectTimeout { get; set; } = 10000;
+
+        /// <summary>设备地址。</summary>
+        public ushort Address { get; set; } = 1;
+
+        /// <summary>当前是否已连接。</summary>
+        public bool IsConnected => _client?.Connected == true;
+
+        private TcpClient? _client;
+        private NetworkStream? _stream;
+        private CancellationTokenSource? _cts;
+        private volatile bool _closed;
+
+        /// <summary>连接到传感器服务器。</summary>
+        public OperateResult Connect(string ipAddress, int port = 1883)
         {
-            int length = (header[2] << 8) | header[3];
-            return length > 0 ? length : 0;
-        }
-
-        public VibrationSensorClient(string ip, int port, int timeout = 5000)
-            : base(ip, port, timeout) { }
-
-        public OperateResult<VibrationData> ReadAcceleration()
-        {
-            var result = SendCommand(CMD_READ_ACCEL);
-            if (!result.IsSuccess)
-                return OperateResult<VibrationData>.Failed(result.Message);
-            return ParseVibrationData(result.Content);
-        }
-
-        public OperateResult<VelocityData> ReadVelocity()
-        {
-            var result = SendCommand(CMD_READ_VELOCITY);
-            if (!result.IsSuccess)
-                return OperateResult<VelocityData>.Failed(result.Message);
-            return ParseVelocityData(result.Content);
-        }
-
-        public OperateResult<float> ReadTemperature()
-        {
-            var result = SendCommand(CMD_READ_TEMP);
-            if (!result.IsSuccess) return OperateResult<float>.Failed(result.Message);
-            if (result.Content.Length < 4)
-                return OperateResult<float>.Failed("温度数据不足");
-            int bits = (result.Content[0] << 24) | (result.Content[1] << 16) | (result.Content[2] << 8) | result.Content[3];
-            return OperateResult<float>.Success(BitConverter.ToSingle(BitConverter.GetBytes(bits), 0));
-        }
-
-        public OperateResult<byte> ReadBatteryLevel()
-        {
-            var result = SendCommand(CMD_READ_BATTERY);
-            if (!result.IsSuccess) return OperateResult<byte>.Failed(result.Message);
-            if (result.Content.Length < 1)
-                return OperateResult<byte>.Failed("电池数据不足");
-            return OperateResult<byte>.Success(result.Content[0]);
-        }
-
-        public OperateResult<SensorStatus> ReadStatus()
-        {
-            var result = SendCommand(CMD_READ_STATUS);
-            if (!result.IsSuccess)
-                return OperateResult<SensorStatus>.Failed(result.Message);
-            return ParseSensorStatus(result.Content);
-        }
-
-        private OperateResult<byte[]> SendCommand(byte command)
-        {
-            byte[] frame = BuildFrame(command, new byte[0]);
-            var result = SendAndReceive(frame);
-            if (!result.IsSuccess) return OperateResult<byte[]>.Failed(result.Message);
-            return ParseResponse(result.Content, command);
-        }
-
-        private byte[] BuildFrame(byte command, byte[] data)
-        {
-            int length = 1 + data.Length;
-            byte[] frame = new byte[4 + length + 1];
-            frame[0] = HEADER_0;
-            frame[1] = HEADER_1;
-            frame[2] = (byte)(length >> 8);
-            frame[3] = (byte)(length & 0xFF);
-            frame[4] = command;
-            Array.Copy(data, 0, frame, 5, data.Length);
-            frame[frame.Length - 1] = CalculateChecksum(frame);
-            return frame;
-        }
-
-        private static OperateResult<byte[]> ParseResponse(byte[] response, byte expectedCmd)
-        {
-            if (response == null || response.Length < 6)
-                return OperateResult<byte[]>.Failed($"响应帧过短 ({response?.Length ?? 0} 字节)");
-
-            if (response[0] != HEADER_0 || response[1] != HEADER_1)
-                return OperateResult<byte[]>.Failed("帧头不匹配");
-
-            byte cmd = response[4];
-            if ((cmd & 0x80) != 0)
-                return OperateResult<byte[]>.Failed($"设备错误: 0x{cmd:X2}", cmd);
-
-            int length = (response[2] << 8) | response[3];
-            if (response.Length < 4 + length + 1)
-                return OperateResult<byte[]>.Failed("响应数据长度不足");
-
-            byte cs = CalculateChecksum(response, 0, response.Length - 1);
-            if (cs != response[response.Length - 1])
-                return OperateResult<byte[]>.Failed("校验和不匹配");
-
-            byte[] data = new byte[length - 1];
-            Array.Copy(response, 5, data, 0, data.Length);
-            return OperateResult<byte[]>.Success(data);
-        }
-
-        private static OperateResult<VibrationData> ParseVibrationData(byte[] data)
-        {
-            if (data.Length < 12)
-                return OperateResult<VibrationData>.Failed("振动数据不足 12 字节");
-
-            var vib = new VibrationData
+            try
             {
-                X = ReadFloat(data, 0),
-                Y = ReadFloat(data, 4),
-                Z = ReadFloat(data, 8)
-            };
-            return OperateResult<VibrationData>.Success(vib);
-        }
-
-        private static OperateResult<VelocityData> ParseVelocityData(byte[] data)
-        {
-            if (data.Length < 12)
-                return OperateResult<VelocityData>.Failed("速度数据不足 12 字节");
-
-            var vel = new VelocityData
-            {
-                X = ReadFloat(data, 0),
-                Y = ReadFloat(data, 4),
-                Z = ReadFloat(data, 8)
-            };
-            return OperateResult<VelocityData>.Success(vel);
-        }
-
-        private static OperateResult<SensorStatus> ParseSensorStatus(byte[] data)
-        {
-            if (data.Length < 2)
-                return OperateResult<SensorStatus>.Failed("状态数据不足");
-
-            var status = new SensorStatus
-            {
-                BatteryLevel = data[0],
-                ErrorCode = data[1],
-                IsRunning = (data[1] & 0x01) == 0
-            };
-            return OperateResult<SensorStatus>.Success(status);
-        }
-
-        private static float ReadFloat(byte[] data, int offset)
-        {
-            int bits = (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
-            return BitConverter.ToSingle(BitConverter.GetBytes(bits), 0);
-        }
-
-        private static byte CalculateChecksum(byte[] frame)
-        {
-            byte cs = 0;
-            for (int i = 2; i < frame.Length - 1; i++)
-                cs ^= frame[i];
-            return cs;
-        }
-
-        private static byte CalculateChecksum(byte[] data, int offset, int count)
-        {
-            byte cs = 0;
-            for (int i = offset; i < offset + count; i++)
-                cs ^= data[i];
-            return cs;
-        }
-
-        public override OperateResult<bool> ReadBool(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<bool>.Failed(r.Message);
-            return OperateResult<bool>.Success(r.Content != 0);
-        }
-
-        public override OperateResult<short> ReadInt16(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<short>.Failed(r.Message);
-            return OperateResult<short>.Success((short)r.Content);
-        }
-
-        public override OperateResult<ushort> ReadUInt16(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<ushort>.Failed(r.Message);
-            return OperateResult<ushort>.Success((ushort)r.Content);
-        }
-
-        public override OperateResult<uint> ReadUInt32(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<uint>.Failed(r.Message);
-            return OperateResult<uint>.Success((uint)r.Content);
-        }
-
-        public override OperateResult<long> ReadInt64(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<long>.Failed(r.Message);
-            return OperateResult<long>.Success((long)r.Content);
-        }
-
-        public override OperateResult<ulong> ReadUInt64(string address)
-        {
-            var r = ReadInt32(address);
-            if (!r.IsSuccess) return OperateResult<ulong>.Failed(r.Message);
-            return OperateResult<ulong>.Success((ulong)r.Content);
-        }
-
-        public override OperateResult<float> ReadFloat(string address)
-        {
-            if (string.Equals(address, "temp", StringComparison.OrdinalIgnoreCase))
-                return ReadTemperature();
-
-            var r = ReadAcceleration();
-            if (!r.IsSuccess) return OperateResult<float>.Failed(r.Message);
-            return address.ToLowerInvariant() switch
-            {
-                "x" => OperateResult<float>.Success(r.Content.X),
-                "y" => OperateResult<float>.Success(r.Content.Y),
-                "z" => OperateResult<float>.Success(r.Content.Z),
-                _ => OperateResult<float>.Failed($"未知地址: {address}")
-            };
-        }
-
-        public override OperateResult<double> ReadDouble(string address)
-        {
-            var r = ReadFloat(address);
-            if (!r.IsSuccess) return OperateResult<double>.Failed(r.Message);
-            return OperateResult<double>.Success((double)r.Content);
-        }
-
-        public override OperateResult<string> ReadString(string address, ushort length)
-        {
-            if (string.Equals(address, "status", StringComparison.OrdinalIgnoreCase))
-            {
-                var r = ReadStatus();
-                if (!r.IsSuccess) return OperateResult<string>.Failed(r.Message);
-                return OperateResult<string>.Success($"Battery={r.Content.BatteryLevel}, Error=0x{r.Content.ErrorCode:X2}, Running={r.Content.IsRunning}");
+                _client = new TcpClient { SendTimeout = ConnectTimeout, ReceiveTimeout = ConnectTimeout };
+                var ar = _client.BeginConnect(ipAddress, port, null, null);
+                if (!ar.AsyncWaitHandle.WaitOne(ConnectTimeout, true))
+                    return OperateResult.Failed($"连接超时: {ipAddress}:{port}");
+                _client.EndConnect(ar);
+                _stream = _client.GetStream();
+                _cts = new CancellationTokenSource();
+                _closed = false;
+                OnClientConnected?.Invoke();
+                _ = Task.Run(() => ReceiveLoopAsync(_cts.Token));
+                return OperateResult.Success();
             }
-            var f = ReadFloat(address);
-            if (!f.IsSuccess) return OperateResult<string>.Failed(f.Message);
-            return OperateResult<string>.Success(f.Content.ToString("F4"));
-        }
-
-        public override OperateResult<byte[]> ReadBytes(string address, ushort length)
-        {
-            var r = ReadFloat(address);
-            if (!r.IsSuccess) return OperateResult<byte[]>.Failed(r.Message);
-            return OperateResult<byte[]>.Success(BitConverter.GetBytes(r.Content));
-        }
-
-        public override OperateResult<int> ReadInt32(string address)
-        {
-            if (string.Equals(address, "battery", StringComparison.OrdinalIgnoreCase))
+            catch (Exception ex)
             {
-                var r = ReadBatteryLevel();
-                return r.IsSuccess
-                    ? OperateResult<int>.Success((int)r.Content)
-                    : OperateResult<int>.Failed(r.Message, r.ErrorCode);
+                return OperateResult.Failed($"连接失败: {ex.Message}");
             }
-            return OperateResult<int>.Failed($"不支持的地址: {address}");
         }
 
-        public override OperateResult Write(string address, bool value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+        /// <summary>断开连接。</summary>
+        public void Close()
+        {
+            _closed = true;
+            _cts?.Cancel();
+            _stream?.Close();
+            _client?.Close();
+            _stream = null;
+            _client = null;
+        }
 
-        public override OperateResult Write(string address, short value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+        private async Task ReceiveLoopAsync(CancellationToken ct)
+        {
+            var stream = _stream;
+            if (stream == null) return;
 
-        public override OperateResult Write(string address, ushort value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+            while (!ct.IsCancellationRequested && !_closed)
+            {
+                try
+                {
+                    // 读 9 字节帧头。
+                    byte[] header = new byte[9];
+                    if (!await ReadExactAsync(stream, header, 9, ct)) break;
 
-        public override OperateResult Write(string address, int value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+                    // 读 3 字节子命令。
+                    byte[] subCmd = new byte[3];
+                    if (!await ReadExactAsync(stream, subCmd, 3, ct)) break;
 
-        public override OperateResult Write(string address, uint value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+                    // 子命令决定后续数据长度。
+                    int dataLen = GetSubCommandDataLength(subCmd);
+                    if (dataLen > 0)
+                    {
+                        byte[] data = new byte[dataLen + 4]; // data + CRC(2) + extra(2)
+                        if (!await ReadExactAsync(stream, data, dataLen + 4, ct)) break;
 
-        public override OperateResult Write(string address, long value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+                        // 如果是 peek value 命令 (subCmd = [0x01, 0x00, 0x00]),解析。
+                        if (subCmd[0] == 0x01)
+                        {
+                            var peek = ParsePeekValue(data);
+                            OnPeekValueReceive?.Invoke(peek);
+                        }
+                    }
+                }
+                catch { break; }
+            }
+        }
 
-        public override OperateResult Write(string address, ulong value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+        /// <summary>根据子命令返回数据长度。</summary>
+        private static int GetSubCommandDataLength(byte[] subCmd)
+        {
+            // 0x01 = peek value, 固定 48 字节(3×3 float + 3×int + 2 float + 1 int = 9*4 + 3*4 + 2*4 + 4 = 48)。
+            if (subCmd[0] == 0x01) return 48;
+            return 0;
+        }
 
-        public override OperateResult Write(string address, float value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+        /// <summary>解析峰值数据(48 字节 → VibrationSensorPeekValue)。</summary>
+        public static VibrationSensorPeekValue ParsePeekValue(byte[] data)
+        {
+            var v = new VibrationSensorPeekValue();
+            if (data == null || data.Length < 48) return v;
 
-        public override OperateResult Write(string address, double value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+            // 小端序浮点。
+            v.AcceleratedSpeedX = BitConverter.ToSingle(data, 0);
+            v.AcceleratedSpeedY = BitConverter.ToSingle(data, 4);
+            v.AcceleratedSpeedZ = BitConverter.ToSingle(data, 8);
+            v.SpeedX = BitConverter.ToSingle(data, 12);
+            v.SpeedY = BitConverter.ToSingle(data, 16);
+            v.SpeedZ = BitConverter.ToSingle(data, 20);
+            v.OffsetX = BitConverter.ToInt32(data, 24);
+            v.OffsetY = BitConverter.ToInt32(data, 28);
+            v.OffsetZ = BitConverter.ToInt32(data, 32);
+            v.Temperature = BitConverter.ToSingle(data, 36);
+            v.Voltage = BitConverter.ToSingle(data, 40);
+            v.SendingInterval = BitConverter.ToInt32(data, 44);
+            return v;
+        }
 
-        public override OperateResult Write(string address, string value)
-            => OperateResult.Failed("振动传感器不支持写入操作");
+        private static async Task<bool> ReadExactAsync(NetworkStream ns, byte[] buf, int count, CancellationToken ct)
+        {
+            int off = 0;
+            while (off < count)
+            {
+                int n = await ns.ReadAsync(buf, off, count - off, ct).ConfigureAwait(false);
+                if (n == 0) return false;
+                off += n;
+            }
+            return true;
+        }
 
-        public override OperateResult Write(string address, byte[] data)
-            => OperateResult.Failed("振动传感器不支持写入操作");
-
-        public override string ToString() => $"VibrationSensorClient[{Ip}:{Port}]";
-    }
-
-    public class VibrationData
-    {
-        public float X { get; set; }
-        public float Y { get; set; }
-        public float Z { get; set; }
-    }
-
-    public class VelocityData
-    {
-        public float X { get; set; }
-        public float Y { get; set; }
-        public float Z { get; set; }
-    }
-
-    public class SensorStatus
-    {
-        public int BatteryLevel { get; set; }
-        public byte ErrorCode { get; set; }
-        public bool IsRunning { get; set; }
+        public override string ToString() => $"VibrationSensorClient[Addr={Address}, Connected={IsConnected}]";
     }
 }

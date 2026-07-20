@@ -1,16 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
     <RootNamespace>Nexus.Geniitek</RootNamespace>
-    <Description>Nexus Geniitek — Geniitek 振动传感器通讯协议实现</Description>
-    <PackageTags>industrial-communication Geniitek vibration-sensor protocol</PackageTags>
+    <AssemblyName>Nexus.Geniitek</AssemblyName>
+    <Description>Nexus Geniitek — VB31 vibration sensor client (Phase D-7)</Description>
+    <PackageTags>industrial-communication vibration sensor geniitek</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <IncludeSource>true</IncludeSource>
     <DebugType>portable</DebugType>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
