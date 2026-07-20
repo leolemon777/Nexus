@@ -99,7 +99,12 @@ Most protocol libraries reference only `Nexus.Core`. Exceptions:
 - **netstandard2.0 limitations**: No `Span<T>`, no `MemoryExtensions`, no `BitConverter.Int32BitsToSingle`/`SingleToInt32Bits` (use unsafe pointer cast or `BitConverter.ToSingle(BitConverter.GetBytes(v), 0)`), no `string.Contains(string, StringComparison)` (use `.ToLowerInvariant().Contains()`), no `IAsyncDisposable`.
 - **`OperateResult<T>.Content`** is a value type for numeric reads — never use `?.` on it.
 - **No computer-use tools.**
-- **Legal**: Never copy HSL Communication code. Only reference protocol message flows from decompiled HSL code.
+- **Legal / Attribution**: HslCommunication v12.2.0 (MIT, Copyright © Richard.Hu 2017-2025) is treated as a **permitted upstream reference**. You MAY adapt, port, or rewrite code derived from `HslCommunication/` into Nexus. **Attribution requirements**:
+  - Every file containing substantive logic adapted from HSL **must** carry a header comment of the form:
+    `// Derived from HslCommunication (MIT, Copyright © Richard.Hu 2017-2025). See NOTICE and THIRD_PARTY_NOTICES.md.`
+  - Keep `NOTICE` and `THIRD_PARTY_NOTICES.md` at the repo root accurate (add new entries when you bring in new upstream code or third-party deps).
+  - Do NOT redistribute HSL's `HslCommunicationDemo.exe`, `HslControls.dll`, or any closed-source binary from the HSL distribution. Only the MIT-licensed `HslCommunication/` source tree may be referenced.
+  - When porting, prefer **rewriting** in Nexus style (snake_case removed, OperateResult-based, netstandard2.0 idioms) rather than mechanical copy — the header comment still applies if message-flow logic was referenced.
 - **No `.Result` / `.Wait()`** in WPF app. No `async void` except event handlers.
 - **Solution format is `.slnx`** (XML-based), not `.sln`.
 

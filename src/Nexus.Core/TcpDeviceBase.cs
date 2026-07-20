@@ -207,34 +207,46 @@ namespace Nexus
 
         public virtual async Task<OperateResult> ConnectAsync(CancellationToken ct)
         {
+            // A2 修复：整个 Connect 流程在 _asyncLock 内完成。
+            // 原实现分段持锁（先 DisconnectCore 释放、再裸创建 _client 调 ConnectAsync、再取锁赋 _stream），
+            // 中间窗口里并发 SendAndReceive 会读到 _client != null 但 _stream == null 的半初始化状态，
+            // 进入临界区后 ns=null 走 "连接已断开" 路径，或更糟地 _client 被另一个 Connect 重置。
+            // SemaphoreSlim 支持持锁期间 await，所以一次性持锁即可，无需分段释放。
             try
             {
                 await _asyncLock.WaitAsync(ct).ConfigureAwait(false);
-                try { DisconnectCore(); }
-                finally { _asyncLock.Release(); }
-
-                _client = new TcpClient { SendTimeout = Timeout, ReceiveTimeout = Timeout };
-                using (ct.Register(() => { try { _client?.Close(); } catch { } }))
+                bool connected = false;
+                try
                 {
-                    await _client.ConnectAsync(Ip, Port).ConfigureAwait(false);
+                    DisconnectCore();
+
+                    _client = new TcpClient { SendTimeout = Timeout, ReceiveTimeout = Timeout };
+                    // ct 取消时关闭 _client 以解除 await _client.ConnectAsync 的阻塞。
+                    using (ct.Register(() => { try { _client?.Close(); } catch { } }))
+                    {
+                        await _client.ConnectAsync(Ip, Port).ConfigureAwait(false);
+                    }
+                    ct.ThrowIfCancellationRequested();
+
+                    _stream = _client.GetStream();
+                    _stream.ReadTimeout = Timeout;
+                    _stream.WriteTimeout = Timeout;
+                    connected = true;
                 }
-                ct.ThrowIfCancellationRequested();
+                finally
+                {
+                    // 若中途异常（含取消）—— _client/_stream 已被 DisconnectCore 兜底清理；
+                    // 成功路径下 finally 仅释放锁，不影响赋值结果。
+                    if (!connected) DisconnectCore();
+                    _asyncLock.Release();
+                }
 
-                await _asyncLock.WaitAsync(ct).ConfigureAwait(false);
-                try { _stream = _client.GetStream(); }
-                finally { _asyncLock.Release(); }
-
-                _stream.ReadTimeout = Timeout;
-                _stream.WriteTimeout = Timeout;
                 Log.Info($"已连接 {Ip}:{Port}");
                 OnConnected?.Invoke(this, EventArgs.Empty);
                 return OperateResult.Success();
             }
             catch (OperationCanceledException)
             {
-                await _asyncLock.WaitAsync().ConfigureAwait(false);
-                try { DisconnectCore(); }
-                finally { _asyncLock.Release(); }
                 return OperateResult.Failed($"连接已取消: {Ip}:{Port}");
             }
             catch (Exception ex)

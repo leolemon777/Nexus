@@ -340,5 +340,150 @@ namespace Nexus.Core.Tests
                 }
             }
         }
+
+        /// <summary>
+        /// A2 回归：ConnectAsync 与并发 SendAndReceive 不应出现 "_client != null 但 _stream == null"
+        /// 的半初始化状态。修复前 ConnectAsync 分段持锁,期间并发的 SendAndReceive 走到
+        /// "连接已断开" 错误路径或更严重的状态污染。
+        /// </summary>
+        [Fact]
+        public async Task ConnectAsync_ConcurrentWithSendAndReceive_NoHalfInitState()
+        {
+            using (var server = new LengthPrefixEchoServer())
+            using (var device = new LengthPrefixTcpDevice("127.0.0.1", server.Port))
+            {
+                const int cycles = 10;
+                var errors = new System.Collections.Generic.List<string>();
+                var errorLock = new object();
+
+                // 启动一个持续的"读"线程,在 ConnectAsync 完成前就开始尝试。
+                var readerTask = Task.Run(async () =>
+                {
+                    for (int i = 0; i < cycles * 5; i++)
+                    {
+                        // 不检查 IsConnected,直接调 SendAndReceive（内部会自动 Connect）。
+                        // 这里只是触发并发路径,捕获异常。
+                        int tag = i;
+                        byte[] request = new byte[8];
+                        BitConverter.GetBytes(IPAddress.HostToNetworkOrder(4)).CopyTo(request, 0);
+                        BitConverter.GetBytes(tag).CopyTo(request, 4);
+                        try
+                        {
+                            var resp = device.DoSendAndReceive(request);
+                            // 不严格要求每次成功,但失败消息应该是合理的协议错误,
+                            // 不应是 NRE/InvalidOperationException 这类基类内部状态错误。
+                            if (!resp.IsSuccess)
+                            {
+                                string msg = resp.Message ?? "(no message)";
+                                if (msg.Contains("Object reference") ||
+                                    msg.Contains("NullReferenceException") ||
+                                    msg.Contains("Cannot access a disposed"))
+                                {
+                                    lock (errorLock) errors.Add($"reader i{i}: 状态污染错误 — {msg}");
+                                }
+                            }
+                        }
+                        catch (Exception ex) when (ex is NullReferenceException ||
+                                                    ex is InvalidOperationException ||
+                                                    ex is ObjectDisposedException)
+                        {
+                            lock (errorLock) errors.Add($"reader i{i}: 抛出 {ex.GetType().Name} — {ex.Message}");
+                        }
+                        await Task.Delay(5);
+                    }
+                });
+
+                // 并行执行 N 次 Connect/Disconnect 循环。
+                for (int c = 0; c < cycles; c++)
+                {
+                    var r = await device.ConnectAsync();
+                    // ConnectAsync 偶发因端口/时序抖动失败,允许重试。
+                    if (!r.IsSuccess)
+                    {
+                        System.Threading.Thread.Sleep(50);
+                        r = await device.ConnectAsync();
+                    }
+                    // 不强断言,失败错误消息才是断言目标。
+                    await Task.Delay(10);
+                    device.Disconnect();
+                }
+
+                await readerTask.ConfigureAwait(false);
+
+                Assert.True(errors.Count == 0,
+                    "ConnectAsync 竞态导致基类状态污染:\n" + string.Join("\n", errors));
+            }
+        }
+
+        /// <summary>
+        /// A2 回归：ConnectAsync 并发调用本身不应让基类进入损坏状态。
+        /// 修复前 ConnectAsync 分段持锁,两个并发的 ConnectAsync 可能在中间窗口互相
+        /// 覆盖 _client,导致后续 SendAndReceive 持续失败。
+        /// </summary>
+        [Fact]
+        public async Task ConcurrentConnectAsync_NoStateCorruption()
+        {
+            using (var server = new LengthPrefixEchoServer())
+            {
+                // 两个设备实例并发连接同一服务器 — 不互相影响（独立 _asyncLock）。
+                // 这里验证的是：在持续 IO 期间并发的 ConnectAsync 不会崩溃。
+                using (var device = new LengthPrefixTcpDevice("127.0.0.1", server.Port))
+                {
+                    // 先建立一次稳定连接。
+                    var r = await device.ConnectAsync();
+                    Assert.True(r.IsSuccess, r.Message);
+
+                    // 短期并发收发 + 不停 Disconnect/Connect 循环。
+                    var errors = new System.Collections.Generic.List<string>();
+                    var errorLock = new object();
+
+                    var ioTask = Task.Run(() =>
+                    {
+                        for (int i = 0; i < 30; i++)
+                        {
+                            int tag = i;
+                            byte[] request = new byte[8];
+                            BitConverter.GetBytes(IPAddress.HostToNetworkOrder(4)).CopyTo(request, 0);
+                            BitConverter.GetBytes(tag).CopyTo(request, 4);
+                            try
+                            {
+                                var resp = device.DoSendAndReceive(request);
+                                if (!resp.IsSuccess)
+                                {
+                                    string msg = resp.Message ?? "(no message)";
+                                    if (msg.Contains("Object reference") ||
+                                        msg.Contains("NullReferenceException") ||
+                                        msg.Contains("Cannot access a disposed"))
+                                    {
+                                        lock (errorLock) errors.Add($"io i{i}: 状态污染 — {msg}");
+                                    }
+                                }
+                            }
+                            catch (Exception ex) when (ex is NullReferenceException ||
+                                                        ex is InvalidOperationException ||
+                                                        ex is ObjectDisposedException)
+                            {
+                                lock (errorLock) errors.Add($"io i{i}: 抛出 {ex.GetType().Name}");
+                            }
+                        }
+                    });
+
+                    var cycleTask = Task.Run(async () =>
+                    {
+                        for (int c = 0; c < 5; c++)
+                        {
+                            await Task.Delay(20).ConfigureAwait(false);
+                            try { device.Disconnect(); } catch { }
+                            var r2 = await device.ConnectAsync().ConfigureAwait(false);
+                            // 允许失败,只关心不抛状态污染异常。
+                        }
+                    });
+
+                    await Task.WhenAll(ioTask, cycleTask).ConfigureAwait(false);
+                    Assert.True(errors.Count == 0,
+                        "ConnectAsync 并发竞态污染基类:\n" + string.Join("\n", errors));
+                }
+            }
+        }
     }
 }

@@ -60,9 +60,16 @@ namespace Nexus
         protected int Timeout { get; set; }
         protected ILogger Log { get; set; }
         protected readonly object _lock = new object();
-        /// <summary>异步收发互斥信号量 — 串口半双工，Write 与 Read 必须在一次完整收发期间独占端口。</summary>
+        /// <summary>
+        /// 异步收发互斥信号量 — 串口半双工，Write 与 Read 必须在一次完整收发期间独占端口。
+        /// <b>A1 修复</b>：同步路径 (<see cref="SendAndReceive"/>) 与异步路径
+        /// (<see cref="SendAndReceiveAsync"/>) 共用此 SemaphoreSlim。原实现同步用
+        /// <c>lock(_lock)</c>、异步用此 SemaphoreSlim，是<b>两把不同的锁</b>，
+        /// 同步+异步并发会破坏半双工。
+        /// </summary>
         protected readonly SemaphoreSlim _asyncLock = new SemaphoreSlim(1, 1);
         protected volatile bool _persistentMode;
+        private volatile bool _disposed;
 
         // ── 可配置属性 ──────────────────────────────
 
@@ -129,6 +136,7 @@ namespace Nexus
 
         public virtual OperateResult Connect()
         {
+            if (_disposed) return OperateResult.Failed("串口对象已释放");
             try
             {
                 lock (_lock)
@@ -177,57 +185,24 @@ namespace Nexus
         /// 串口收发 — 发送请求，等待指定长度响应。
         /// 失败时自动尝试重连一次。
         /// </summary>
+        /// <remarks>
+        /// <b>并发模型（A1 修复）</b>：同步路径用 <c>_asyncLock.Wait()</c>，异步路径用
+        /// <c>_asyncLock.WaitAsync()</c>，<b>两者共享同一把 SemaphoreSlim</b>。原实现同步路径用
+        /// <c>lock(_lock)</c>、异步路径用 <c>_asyncLock</c>，是<b>两把互不相干的锁</b>，导致
+        /// 同步+异步并发调用时半双工串口的 Write/Read 会交错，响应被偷吃。统一到 _asyncLock 后，
+        /// 所有路径（同步、异步、重连重试）串行化，符合半双工语义。<see cref="_lock"/> 仅保留给
+        /// 轻量属性 (<see cref="IsConnected"/>/<see cref="DtrEnable"/>/<see cref="RtsEnable"/>) 同步。
+        /// </remarks>
         protected OperateResult<byte[]> SendAndReceive(byte[] request)
         {
+            _asyncLock.Wait();
             try
             {
-                lock (_lock)
-                {
-                    if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开");
-
-                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                    OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                    Port.Write(request, 0, request.Length);
-
-                    if (InterFrameDelay > 0)
-                        Thread.Sleep(InterFrameDelay);
-
-                    // 读取响应头
-                    byte[] header = new byte[ResponseHeaderLength];
-                    int headerRead = ReadExactSerial(header, 0, ResponseHeaderLength);
-                    if (headerRead < ResponseHeaderLength)
-                        return OperateResult<byte[]>.Failed("读取串口响应头失败");
-
-                    int payloadLen = GetResponsePayloadLength(header);
-                    byte[] payload = new byte[payloadLen];
-                    if (payloadLen > 0)
-                    {
-                        int payloadRead = ReadExactSerial(payload, 0, payloadLen);
-                        if (payloadRead < payloadLen)
-                            return OperateResult<byte[]>.Failed("读取串口响应数据失败");
-                    }
-
-                    byte[] full = new byte[header.Length + payload.Length];
-                    Buffer.BlockCopy(header, 0, full, 0, header.Length);
-                    if (payload.Length > 0)
-                        Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
-
-                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                    OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                    return OperateResult<byte[]>.Success(full);
-                }
+                return SendAndReceiveCore(request, isAsync: false, CancellationToken.None).GetAwaiter().GetResult();
             }
-            catch (Exception ex)
+            finally
             {
-                Log.Error($"串口通讯异常 — {ex.Message}");
-                OnError?.Invoke(this, ex.Message);
-
-                var retry = TryReconnectAndRetry(request);
-                if (retry != null) return retry;
-
-                return OperateResult<byte[]>.Failed($"串口通讯异常: {ex.Message}");
+                _asyncLock.Release();
             }
         }
 
@@ -237,53 +212,68 @@ namespace Nexus
         protected async Task<OperateResult<byte[]>> SendAndReceiveAsync(
             byte[] request, CancellationToken cancellationToken = default)
         {
+            await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                // 异步锁覆盖整段 Write→Delay→Read（M2 修复）：串口半双工，一次完整收发必须独占端口。
-                // 原实现用 lock(_lock) 只保护了 Write，而 await ReadExactSerialAsync 在锁外
-                //（lock 不可跨 await），导致另一线程的 Write 可插入本次响应、响应被偷吃。
-                // 改用 SemaphoreSlim 贯穿整段收发，持锁期间的 await 会串行化其他调用方（符合半双工语义）。
-                await _asyncLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
+                return await SendAndReceiveCore(request, isAsync: true, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// 共享的收发核心 — 在调用方已持有 <c>_asyncLock</c> 的前提下执行一次完整事务。
+        /// 同步/异步路径统一走这里，消除 4 处复制粘贴。
+        /// </summary>
+        private async Task<OperateResult<byte[]>> SendAndReceiveCore(
+            byte[] request, bool isAsync, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开");
+
+                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
+                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
+
+                Port.Write(request, 0, request.Length);
+
+                if (InterFrameDelay > 0)
                 {
-                    if (!Port.IsOpen) return OperateResult<byte[]>.Failed("串口未打开");
-
-                    Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                    OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                    Port.Write(request, 0, request.Length);
-
-                    if (InterFrameDelay > 0)
+                    if (isAsync)
                         await Task.Delay(InterFrameDelay, cancellationToken).ConfigureAwait(false);
-
-                    byte[] header = new byte[ResponseHeaderLength];
-                    int headerRead = await ReadExactSerialAsync(header, 0, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
-                    if (headerRead < ResponseHeaderLength)
-                        return OperateResult<byte[]>.Failed("读取串口响应头失败");
-
-                    int payloadLen = GetResponsePayloadLength(header);
-                    byte[] payload = new byte[payloadLen];
-                    if (payloadLen > 0)
-                    {
-                        int payloadRead = await ReadExactSerialAsync(payload, 0, payloadLen, cancellationToken).ConfigureAwait(false);
-                        if (payloadRead < payloadLen)
-                            return OperateResult<byte[]>.Failed("读取串口响应数据失败");
-                    }
-
-                    byte[] full = new byte[header.Length + payload.Length];
-                    Buffer.BlockCopy(header, 0, full, 0, header.Length);
-                    if (payload.Length > 0)
-                        Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
-
-                    Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                    OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                    return OperateResult<byte[]>.Success(full);
+                    else
+                        Thread.Sleep(InterFrameDelay);
                 }
-                finally
+
+                byte[] header = new byte[ResponseHeaderLength];
+                int headerRead = isAsync
+                    ? await ReadExactSerialAsync(header, 0, ResponseHeaderLength, cancellationToken).ConfigureAwait(false)
+                    : ReadExactSerial(header, 0, ResponseHeaderLength);
+                if (headerRead < ResponseHeaderLength)
+                    return OperateResult<byte[]>.Failed("读取串口响应头失败");
+
+                int payloadLen = GetResponsePayloadLength(header);
+                byte[] payload = new byte[payloadLen];
+                if (payloadLen > 0)
                 {
-                    _asyncLock.Release();
+                    int payloadRead = isAsync
+                        ? await ReadExactSerialAsync(payload, 0, payloadLen, cancellationToken).ConfigureAwait(false)
+                        : ReadExactSerial(payload, 0, payloadLen);
+                    if (payloadRead < payloadLen)
+                        return OperateResult<byte[]>.Failed("读取串口响应数据失败");
                 }
+
+                byte[] full = new byte[header.Length + payload.Length];
+                Buffer.BlockCopy(header, 0, full, 0, header.Length);
+                if (payload.Length > 0)
+                    Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
+
+                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
+                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
+
+                return OperateResult<byte[]>.Success(full);
             }
             catch (OperationCanceledException)
             {
@@ -294,7 +284,10 @@ namespace Nexus
                 Log.Error($"串口通讯异常 — {ex.Message}");
                 OnError?.Invoke(this, ex.Message);
 
-                var retry = await TryReconnectAndRetryAsync(request, cancellationToken).ConfigureAwait(false);
+                // 重连重试仍在已持有的 _asyncLock 内执行，保证重试期间端口独占。
+                var retry = isAsync
+                    ? await TryReconnectAndRetryAsync(request, cancellationToken).ConfigureAwait(false)
+                    : TryReconnectAndRetry(request);
                 if (retry != null) return retry;
 
                 return OperateResult<byte[]>.Failed($"串口通讯异常: {ex.Message}");
@@ -334,64 +327,13 @@ namespace Nexus
         }
 
         /// <summary>
-        /// 异步重连并重试发送请求。
+        /// 异步重连并重试发送请求（调用方已持有 <c>_asyncLock</c>）。
         /// </summary>
         private async Task<OperateResult<byte[]>?> TryReconnectAndRetryAsync(byte[] request, CancellationToken cancellationToken)
         {
-            try
-            {
-                Log.Warn("尝试重连串口…");
-                DisconnectCore();
-
-                Port.ReadTimeout = Timeout;
-                Port.WriteTimeout = Timeout;
-                Port.Open();
-
-                Log.Info($"串口重连成功 {Port.PortName}");
-                OnConnected?.Invoke(this, EventArgs.Empty);
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                Port.Write(request, 0, request.Length);
-
-                if (InterFrameDelay > 0)
-                    await Task.Delay(InterFrameDelay, cancellationToken).ConfigureAwait(false);
-
-                byte[] header = new byte[ResponseHeaderLength];
-                int headerRead = await ReadExactSerialAsync(header, 0, ResponseHeaderLength, cancellationToken).ConfigureAwait(false);
-                if (headerRead < ResponseHeaderLength)
-                    return OperateResult<byte[]>.Failed("重连后读取响应头失败");
-
-                int payloadLen = GetResponsePayloadLength(header);
-                byte[] payload = new byte[payloadLen];
-                if (payloadLen > 0)
-                {
-                    int payloadRead = await ReadExactSerialAsync(payload, 0, payloadLen, cancellationToken).ConfigureAwait(false);
-                    if (payloadRead < payloadLen)
-                        return OperateResult<byte[]>.Failed("重连后读取响应数据失败");
-                }
-
-                byte[] full = new byte[header.Length + payload.Length];
-                Buffer.BlockCopy(header, 0, full, 0, header.Length);
-                if (payload.Length > 0)
-                    Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                return OperateResult<byte[]>.Success(full);
-            }
-            catch (OperationCanceledException)
-            {
-                return null;
-            }
-            catch (Exception retryEx)
-            {
-                Log.Error($"重连重试失败 — {retryEx.Message}");
-                OnError?.Invoke(this, retryEx.Message);
-                return null;
-            }
+            if (!await ReconnectAsync().ConfigureAwait(false)) return null;
+            // 重连成功后，复用 SendAndReceiveCore 完成事务（仍在 _asyncLock 内）。
+            return await SendAndReceiveCore(request, isAsync: true, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>发送原始报文并接收响应（自定义功能码场景）。</summary>
@@ -403,57 +345,49 @@ namespace Nexus
             byte[] request, CancellationToken cancellationToken = default)
             => SendAndReceiveAsync(request, cancellationToken);
 
+        /// <summary>同步重连并重试（调用方已持有 <c>_asyncLock</c>）。</summary>
         private OperateResult<byte[]>? TryReconnectAndRetry(byte[] request)
+        {
+            if (!ReconnectSync()) return null;
+            return SendAndReceiveCore(request, isAsync: false, CancellationToken.None).GetAwaiter().GetResult();
+        }
+
+        /// <summary>重连核心逻辑（同步版）。返回 true 表示重连成功可继续重试。</summary>
+        private bool ReconnectSync()
         {
             try
             {
                 Log.Warn("尝试重连串口…");
                 DisconnectCore();
-
                 Port.ReadTimeout = Timeout;
                 Port.WriteTimeout = Timeout;
                 Port.Open();
-
                 Log.Info($"串口重连成功 {Port.PortName}");
                 OnConnected?.Invoke(this, EventArgs.Empty);
-
-                Log.Debug($"TX → {DataConverter.ToHexString(request)}");
-                OnMessageSent?.Invoke(this, DataConverter.ToHexString(request));
-
-                Port.Write(request, 0, request.Length);
-
-                if (InterFrameDelay > 0)
-                    Thread.Sleep(InterFrameDelay);
-
-                byte[] header = new byte[ResponseHeaderLength];
-                int headerRead = ReadExactSerial(header, 0, ResponseHeaderLength);
-                if (headerRead < ResponseHeaderLength)
-                    return OperateResult<byte[]>.Failed("重连后读取响应头失败");
-
-                int payloadLen = GetResponsePayloadLength(header);
-                byte[] payload = new byte[payloadLen];
-                if (payloadLen > 0)
-                {
-                    int payloadRead = ReadExactSerial(payload, 0, payloadLen);
-                    if (payloadRead < payloadLen)
-                        return OperateResult<byte[]>.Failed("重连后读取响应数据失败");
-                }
-
-                byte[] full = new byte[header.Length + payload.Length];
-                Buffer.BlockCopy(header, 0, full, 0, header.Length);
-                if (payload.Length > 0)
-                    Buffer.BlockCopy(payload, 0, full, header.Length, payload.Length);
-
-                Log.Debug($"RX ← {DataConverter.ToHexString(full)}");
-                OnMessageReceived?.Invoke(this, DataConverter.ToHexString(full));
-
-                return OperateResult<byte[]>.Success(full);
+                return true;
             }
             catch (Exception retryEx)
             {
                 Log.Error($"重连重试失败 — {retryEx.Message}");
                 OnError?.Invoke(this, retryEx.Message);
-                return null;
+                return false;
+            }
+        }
+
+        /// <summary>重连核心逻辑（异步版，语义与同步版一致）。</summary>
+        private Task<bool> ReconnectAsync()
+        {
+            // ISerialPort.Open() 本身是同步阻塞操作，且不提供异步 API；
+            // 串口打开通常很快（< 100ms），不值得为此引入 Task.Run。
+            try
+            {
+                return Task.FromResult(ReconnectSync());
+            }
+            catch (Exception retryEx)
+            {
+                Log.Error($"重连重试失败 — {retryEx.Message}");
+                OnError?.Invoke(this, retryEx.Message);
+                return Task.FromResult(false);
             }
         }
 
@@ -538,7 +472,32 @@ namespace Nexus
         public virtual Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
         public virtual Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
 
-        public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
-        protected virtual void Dispose(bool disposing) { if (disposing) Disconnect(); }
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            if (disposing)
+            {
+                // 先标记 disposed，再尝试持有 _asyncLock 以确保没有正在进行的 IO；
+                // 若等不到锁（持锁方正在执行），最长等 5 秒后强制继续释放。
+                try
+                {
+                    if (!_asyncLock.Wait(TimeSpan.FromSeconds(5)))
+                        Log.Warn("Dispose: 5 秒内未能取得串口 IO 锁，强制释放");
+                }
+                catch (ObjectDisposedException) { }
+
+                Disconnect();
+
+                // _asyncLock 自身是 IDisposable — 显式释放避免 SemaphoreSlim 内部资源泄漏。
+                try { _asyncLock.Dispose(); } catch (ObjectDisposedException) { }
+            }
+        }
     }
 }
