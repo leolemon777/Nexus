@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.LengthPrefixTcp</RootNamespace>
+    <AssemblyName>Nexus.LengthPrefixTcp</AssemblyName>
+    <Description>Nexus LengthPrefixTcp — Reference protocol demonstrating new DeviceCommunication/Pipe/INetMessage bases (Phase B7)</Description>
+    <PackageTags>industrial-communication PLC protocol phase-b</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Nexus.App/Nexus.App.csproj" />
     <Project Path="src/Nexus.Core/Nexus.Core.csproj" />
+    <Project Path="src/Nexus.LengthPrefixTcp/Nexus.LengthPrefixTcp.csproj" />
     <Project Path="src/Nexus.Modbus/Nexus.Modbus.csproj" />
     <Project Path="src/Nexus.Siemens/Nexus.Siemens.csproj" />
     <Project Path="src/Nexus.Mitsubishi/Nexus.Mitsubishi.csproj" />
@@ -119,6 +120,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Core.Tests/Nexus.Core.Tests.csproj" />
+    <Project Path="tests/Nexus.LengthPrefixTcp.Tests/Nexus.LengthPrefixTcp.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.Tests/Nexus.Modbus.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.IntegrationTest/Nexus.Modbus.IntegrationTest.csproj" />
     <Project Path="tests/Nexus.Mitsubishi.Tests/Nexus.Mitsubishi.Tests.csproj" />
