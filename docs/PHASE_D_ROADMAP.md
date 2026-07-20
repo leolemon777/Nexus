@@ -7,8 +7,8 @@ or incomplete in Nexus. Phase D adds these to close the gap with HSL.
 
 | Protocol | HSL has | Nexus status | Action |
 |---|---|---|---|
-| DAM3601 analog module | ModbusRtu subclass | ✅ Added (this PR) | Done — `src/Nexus.Dam3601/` |
-| DcsNanJingAuto | ModbusTcp subclass | Stub class needed | Add — pure Modbus TCP wrapper for Nanjing Auto DCS register map |
+| DAM3601 analog module | ModbusRtu subclass | ✅ Added (Phase D-1) | Done — `src/Nexus.Dam3601/` |
+| DcsNanJingAuto | ModbusTcp subclass | ✅ Added (Phase D-2) | Done — `src/Nexus.DcsNanJingAuto/` — Nanjing Automation DCS over Modbus TCP with connect handshake |
 | Turck RFID (BLident) | ReaderNet + ReaderServer | Missing | Add — Turck BLident RFID reader protocol over TCP |
 | Sick ICR RFID | SickIcrTcpServer (server only) | Missing | Add client side — Sick ICR RFC protocol |
 | Toyota-Puc welder | ToyoPuc + ToyoPucServer | Missing | Add — Toyota-Puc welder controller protocol |

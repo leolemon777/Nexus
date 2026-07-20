@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.DcsNanJingAuto</RootNamespace>
+    <AssemblyName>Nexus.DcsNanJingAuto</AssemblyName>
+    <Description>Nexus DcsNanJingAuto — Nanjing Automation DCS over Modbus TCP (Phase D-2)</Description>
+    <PackageTags>industrial-communication PLC protocol dcs nanjing</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
+  </ItemGroup>
+</Project>

@@ -3,6 +3,7 @@
     <Project Path="src/Nexus.App/Nexus.App.csproj" />
     <Project Path="src/Nexus.Core/Nexus.Core.csproj" />
     <Project Path="src/Nexus.Dam3601/Nexus.Dam3601.csproj" />
+    <Project Path="src/Nexus.DcsNanJingAuto/Nexus.DcsNanJingAuto.csproj" />
     <Project Path="src/Nexus.LengthPrefixTcp/Nexus.LengthPrefixTcp.csproj" />
     <Project Path="src/Nexus.Modbus/Nexus.Modbus.csproj" />
     <Project Path="src/Nexus.Siemens/Nexus.Siemens.csproj" />
@@ -122,6 +123,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Core.Tests/Nexus.Core.Tests.csproj" />
     <Project Path="tests/Nexus.Dam3601.Tests/Nexus.Dam3601.Tests.csproj" />
+    <Project Path="tests/Nexus.DcsNanJingAuto.Tests/Nexus.DcsNanJingAuto.Tests.csproj" />
     <Project Path="tests/Nexus.Delta.Ascii.Tests/Nexus.Delta.Ascii.Tests.csproj" />
     <Project Path="tests/Nexus.LengthPrefixTcp.Tests/Nexus.LengthPrefixTcp.Tests.csproj" />
     <Project Path="tests/Nexus.Mitsubishi.ASeries.Tests/Nexus.Mitsubishi.ASeries.Tests.csproj" />
