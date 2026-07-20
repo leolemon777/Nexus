@@ -39,6 +39,18 @@ namespace Nexus
             public ConcurrentStack<PooledDevice> IdleDevices { get; } = new ConcurrentStack<PooledDevice>();
             public SemaphoreSlim Semaphore { get; }
             public int ActiveCount;
+            /// <summary>
+            /// A4 修复:bucket 被显式 Remove/Clear/Dispose 后置为 true。
+            /// Acquire/Release 在关键操作前检查此标志,避免在 Semaphore 被销毁后调用 Wait/Release
+            /// 抛出未处理的 ObjectDisposedException。
+            /// </summary>
+            public volatile bool Disposed;
+            /// <summary>
+            /// A4 修复:Dispose 时 Cancel 此 token,让所有正在 SemaphoreSlim.WaitAsync 等待的
+            /// 调用方立即收到 OperationCanceledException,而非依赖 SemaphoreSlim.Dispose 的 ODE 行为
+            /// (.NET 在 Wait 期间 Dispose SemaphoreSlim 的行为不可靠,可能死锁或崩溃)。
+            /// </summary>
+            public CancellationTokenSource DisposeCts { get; } = new CancellationTokenSource();
 
             public DeviceBucket(int maxPoolSize)
             {
@@ -109,10 +121,23 @@ namespace Nexus
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket(_maxPoolSize));
-            bucket.Semaphore.Wait();
+            // A4: 用 bucket.DisposeCts.Token 让 bucket 被销毁时 Wait 立即醒来抛 OCE,
+            // 而不是依赖 SemaphoreSlim.Dispose 的 ODE 行为(不可靠)。把 bucket 销毁导致的
+            // OCE 转为 ObjectDisposedException,与 AcquireAsync 保持一致的 API 契约。
+            try
+            {
+                bucket.Semaphore.Wait(bucket.DisposeCts.Token);
+            }
+            catch (OperationCanceledException) when (bucket.Disposed || _disposed)
+            {
+                throw new ObjectDisposedException(nameof(ConnectionPool<T>));
+            }
 
             try
             {
+                if (bucket.Disposed || _disposed)
+                    throw new ObjectDisposedException(nameof(ConnectionPool<T>));
+
                 while (true)
                 {
                     if (bucket.IdleDevices.TryPop(out var pooled))
@@ -165,7 +190,7 @@ namespace Nexus
             }
             catch
             {
-                bucket.Semaphore.Release();
+                try { if (!bucket.Disposed) bucket.Semaphore.Release(); } catch (ObjectDisposedException) { }
                 throw;
             }
         }
@@ -190,11 +215,22 @@ namespace Nexus
             if (key == null) throw new ArgumentNullException(nameof(key));
 
             var bucket = _pools.GetOrAdd(key, _ => new DeviceBucket(_maxPoolSize));
-            await bucket.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            // A4: 联合调用方 CT 和 bucket DisposeCts,任一触发都让 WaitAsync 醒来。
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, bucket.DisposeCts.Token);
+            try
+            {
+                await bucket.Semaphore.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (bucket.Disposed || _disposed)
+            {
+                throw new ObjectDisposedException(nameof(ConnectionPool<T>));
+            }
 
             try
             {
-                if (_disposed) throw new ObjectDisposedException(nameof(ConnectionPool<T>));
+                // A4 修复:WaitAsync 期间 bucket 可能已被 Remove/Clear/Dispose。
+                if (bucket.Disposed || _disposed)
+                    throw new ObjectDisposedException(nameof(ConnectionPool<T>));
 
                 if (bucket.IdleDevices.TryPop(out var pooled))
                 {
@@ -240,7 +276,7 @@ namespace Nexus
             }
             catch
             {
-                bucket.Semaphore.Release();
+                try { if (!bucket.Disposed) bucket.Semaphore.Release(); } catch (ObjectDisposedException) { }
                 throw;
             }
         }
@@ -289,11 +325,12 @@ namespace Nexus
             }
 
             // 归还配额（必须在 dispose 之前，确保 Acquire 不会因配额耗尽而永久阻塞）。
-            if (bucket != null)
+            if (bucket != null && !bucket.Disposed)
             {
                 Interlocked.Decrement(ref bucket.ActiveCount);
                 try { bucket.Semaphore.Release(); }
                 catch (SemaphoreFullException) { /* 池已被 Clear/Remove，配额已无效，忽略 */ }
+                catch (ObjectDisposedException) { /* A4: bucket 在归还途中被销毁 */ }
             }
 
             // 再决定：回填空闲池，还是直接 dispose。
@@ -322,9 +359,13 @@ namespace Nexus
 
             if (_pools.TryRemove(key, out var bucket))
             {
+                // A4: 先标记 + Cancel,让正在 Wait 的调用方醒来抛 OCE/ODE;再清理资源。
+                bucket.Disposed = true;
+                try { bucket.DisposeCts.Cancel(); } catch (ObjectDisposedException) { }
                 while (bucket.IdleDevices.TryPop(out var pooled))
                     TryDisposeDevice(pooled.Device);
                 bucket.Semaphore.Dispose();
+                bucket.DisposeCts.Dispose();
             }
         }
 
@@ -337,9 +378,12 @@ namespace Nexus
             {
                 if (_pools.TryRemove(kvp.Key, out var bucket))
                 {
+                    bucket.Disposed = true;
+                    try { bucket.DisposeCts.Cancel(); } catch (ObjectDisposedException) { }
                     while (bucket.IdleDevices.TryPop(out var pooled))
                         TryDisposeDevice(pooled.Device);
                     bucket.Semaphore.Dispose();
+                    bucket.DisposeCts.Dispose();
                 }
             }
         }
@@ -357,9 +401,12 @@ namespace Nexus
             {
                 if (_pools.TryRemove(kvp.Key, out var bucket))
                 {
+                    bucket.Disposed = true;
+                    try { bucket.DisposeCts.Cancel(); } catch (ObjectDisposedException) { }
                     while (bucket.IdleDevices.TryPop(out var pooled))
                         TryDisposeDevice(pooled.Device);
                     bucket.Semaphore.Dispose();
+                    bucket.DisposeCts.Dispose();
                 }
             }
         }

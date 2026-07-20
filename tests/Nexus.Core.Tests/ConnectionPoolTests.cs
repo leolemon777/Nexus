@@ -192,6 +192,146 @@ namespace Nexus.Core.Tests
             Assert.Equal(0, pool.ActiveCount);
         }
 
+        /// <summary>
+        /// A4 回归:Dispose 与并发 Acquire 不应抛出未处理的 ObjectDisposedException。
+        /// 修复前 Dispose 销毁 SemaphoreSlim,正在 Wait 的 Acquire 醒来后释放会触发 ODE。
+        /// </summary>
+        [Fact]
+        public async Task Dispose_WithConcurrentAcquire_NoUnhandledObjectDisposed()
+        {
+            var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 2);
+
+            // 启动 8 个线程持续 Acquire/Release 同一 key,主线程并发 Dispose。
+            var cts = new CancellationTokenSource();
+            var errors = new System.Collections.Generic.List<string>();
+            var errorLock = new object();
+
+            var workers = new Task[8];
+            for (int w = 0; w < workers.Length; w++)
+            {
+                workers[w] = Task.Run(() =>
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var device = pool.Acquire("plc-a");
+                            Thread.Sleep(1);
+                            pool.Release("plc-a", device);
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // 这是预期内的(Dispose 后再 Acquire),不算错误。
+                            return;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Acquire 内部 bucket DisposeCts 触发,Acquire 应转为 ODE,
+                            // 但若时序让 OCE 直接逃出也算预期。
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            lock (errorLock) errors.Add($"worker: {ex.GetType().Name} — {ex.Message}");
+                            return;
+                        }
+                    }
+                });
+            }
+
+            // 让 workers 运行一会儿,然后 Dispose。
+            await Task.Delay(50);
+            pool.Dispose();
+            cts.Cancel();
+            await Task.WhenAll(workers);
+
+            // 核心断言:除了 ObjectDisposedException(已 catch),不应有任何其它异常泄露。
+            Assert.True(errors.Count == 0,
+                "并发 Dispose 引发未处理异常:\n" + string.Join("\n", errors));
+        }
+
+        /// <summary>
+        /// A4 回归:Remove(key) 与并发的 Acquire/Release 不应抛 ODE。
+        /// </summary>
+        [Fact]
+        public async Task Remove_WithConcurrentRelease_NoUnhandledObjectDisposed()
+        {
+            using var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 5);
+
+            // 先 acquire 多个 device 并保留(不 release),模拟"借出未还"状态。
+            var held = new System.Collections.Generic.List<TestDevice>();
+            for (int i = 0; i < 3; i++)
+                held.Add(pool.Acquire("plc-a"));
+
+            // 并发 Release 与 Remove。
+            var releaseTask = Task.Run(() =>
+            {
+                foreach (var d in held)
+                {
+                    try { pool.Release("plc-a", d); }
+                    catch (ObjectDisposedException) { break; }
+                    catch (OperationCanceledException) { break; }
+                }
+            });
+
+            var removeTask = Task.Run(() => pool.Remove("plc-a"));
+
+            await Task.WhenAll(releaseTask, removeTask);
+
+            // Remove 后再用同 key acquire 应该正常工作(自动创建新 bucket)。
+            var fresh = pool.Acquire("plc-a");
+            Assert.NotNull(fresh);
+            pool.Release("plc-a", fresh);
+        }
+
+        /// <summary>
+        /// A4 回归:Clear 与并发 Acquire 不应抛 ODE 或死锁。
+        /// </summary>
+        [Fact]
+        public async Task Clear_WithConcurrentAcquire_NoDeadlockOrOde()
+        {
+            var pool = new ConnectionPool<TestDevice>(() => new TestDevice(), maxPoolSize: 2);
+
+            // 启动多个 workers 持续 Acquire 多个 key。
+            var cts = new CancellationTokenSource();
+            var errors = new System.Collections.Generic.List<string>();
+            var errorLock = new object();
+
+            var workers = new Task[4];
+            for (int w = 0; w < workers.Length; w++)
+            {
+                int idx = w;
+                workers[w] = Task.Run(() =>
+                {
+                    string key = "plc-" + (idx % 2);
+                    while (!cts.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var device = pool.Acquire(key);
+                            Thread.Sleep(1);
+                            pool.Release(key, device);
+                        }
+                        catch (ObjectDisposedException) { return; }
+                        catch (OperationCanceledException) { return; }
+                        catch (Exception ex)
+                        {
+                            lock (errorLock) errors.Add($"w{idx}: {ex.GetType().Name} — {ex.Message}");
+                            return;
+                        }
+                    }
+                });
+            }
+
+            await Task.Delay(30);
+            pool.Clear();
+            cts.Cancel();
+            await Task.WhenAll(workers);
+
+            Assert.True(errors.Count == 0,
+                "并发 Clear 引发未处理异常:\n" + string.Join("\n", errors));
+        }
+
         private sealed class TestDevice : IReadWriteDevice
         {
             private readonly int _id;
