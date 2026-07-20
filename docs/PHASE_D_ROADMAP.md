@@ -1,0 +1,59 @@
+# Phase D Roadmap — HSL-only Protocols
+
+This document tracks protocols present in HslCommunication v12.2.0 but missing
+or incomplete in Nexus. Phase D adds these to close the gap with HSL.
+
+## Status (after Phase D PR #1)
+
+| Protocol | HSL has | Nexus status | Action |
+|---|---|---|---|
+| DAM3601 analog module | ModbusRtu subclass | ✅ Added (this PR) | Done — `src/Nexus.Dam3601/` |
+| DcsNanJingAuto | ModbusTcp subclass | Stub class needed | Add — pure Modbus TCP wrapper for Nanjing Auto DCS register map |
+| Turck RFID (BLident) | ReaderNet + ReaderServer | Missing | Add — Turck BLident RFID reader protocol over TCP |
+| Sick ICR RFID | SickIcrTcpServer (server only) | Missing | Add client side — Sick ICR RFC protocol |
+| Toyota-Puc welder | ToyoPuc + ToyoPucServer | Missing | Add — Toyota-Puc welder controller protocol |
+| ShineIn light source | ShineInLightSourceController (serial) | Missing | Add — ShineIn light source serial protocol |
+| Geniitek vibration | VibrationSensorClient | Missing | Add — Geniitek vibration sensor protocol |
+| SAM ID card | SAMSerial + SAMTcpNet | Missing | Add — China 2nd-gen ID card SAM reader |
+
+## What's NOT in scope (HSL has, but Nexus deliberately defers)
+
+- **MQTT broker / WebSocket server / Redis / embedded file servers**: HSL ships
+  these as part of its "all-in-one" framework, but Nexus is focused on protocol
+  clients. MQTT/WebSocket/Redis already have first-class .NET libraries
+  (MQTTnet, System.Net.WebSockets, StackExchange.Redis). Reimplementing them is
+  low value.
+- **HSL "Enthernet" framework** (NetSimplifyClient, NetPushServer, etc.): HSL's
+  own RPC primitives. Not industrial protocols; out of scope for Nexus.
+
+## DAM3601 implementation notes (this PR)
+
+The DAM3601 implementation demonstrates the right pattern for adding Modbus-
+derivative devices:
+
+1. Create `src/Nexus.Dam3601/` referencing `Nexus.Modbus` (not Nexus.Core).
+2. Class wraps `ModbusRtuClient` rather than inheriting it — composition over
+   inheritance, keeps the Modbus API clean.
+3. Exposes device-specific accessors: `ReadRawValue(channel)`,
+   `ReadAllRawValues()`, `ReadRange()`, `ReadEngineeringValue()`.
+4. The engineering-unit conversion (`ConvertToEngineering`) is a pure static
+   function — trivially testable without any Modbus plumbing.
+5. Configurable register base addresses (`ChannelValueRegister`,
+   `ChannelRangeRegister`) accommodate vendor variants.
+
+Future Modbus-derivative additions (DcsNanJingAuto, etc.) should follow this
+template.
+
+## Recommended next steps for Phase D
+
+1. **DcsNanJingAuto** — copy DAM3601 pattern with the Nanjing-Auto register map.
+   1-2 hours.
+2. **Turck BLident** — TCP protocol with custom framing, needs HSL reference
+   for frame format. 2-3 days.
+3. **Toyota-Puc** — welder-specific, niche demand. 3-5 days.
+
+Each addition should include:
+- Device-specific register/command accessors
+- Pure-function conversions (testable in isolation)
+- Unit tests for parameter validation + conversion logic
+- A VirtualServer if the protocol has unique framing

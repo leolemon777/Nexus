@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.Dam3601</RootNamespace>
+    <AssemblyName>Nexus.Dam3601</AssemblyName>
+    <Description>Nexus DAM3601 — 8-channel analog input module (Modbus RTU based, Phase D)</Description>
+    <PackageTags>industrial-communication PLC protocol analog dam3601</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
+  </ItemGroup>
+
+</Project>
