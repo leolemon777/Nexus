@@ -54,6 +54,11 @@ namespace Nexus
     /// 串口设备基类 — 封装串口连接管理、超时、日志、事件、自动重连。
     /// 通过 ISerialPort 抽象串口操作，不直接依赖 System.IO.Ports。
     /// </summary>
+    /// <remarks>
+    /// <b>B8: 已过时</b>。新代码请使用 <c>Nexus.Device.DeviceSerialPort</c>(组合 <c>PipeSerialPort</c> +
+    /// <c>INetMessage</c> + <c>IByteTransform</c>)。本类保留是为了渐进迁移现有协议子类。
+    /// </remarks>
+    [Obsolete("新代码请使用 Nexus.Device.DeviceSerialPort(Phase B 重构)。本类保留仅为渐进迁移。")]
     public abstract class SerialDeviceBase : IReadWriteDevice
     {
         protected ISerialPort Port { get; }

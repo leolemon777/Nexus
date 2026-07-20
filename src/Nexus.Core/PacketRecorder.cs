@@ -4,6 +4,9 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
+// B8: PacketRecorder 仍支持旧 TcpDeviceBase,迁移完成后此 pragma 移除。
+#pragma warning disable CS0618
+
 namespace Nexus
 {
     /// <summary>

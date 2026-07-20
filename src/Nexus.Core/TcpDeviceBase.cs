@@ -11,6 +11,12 @@ namespace Nexus
     /// TCP 设备基类 — 封装短连接/长连接管理、超时、网络异常处理、日志、事件。
     /// 提供 SemaphoreSlim（_asyncLock）用于 async-safe 互斥；保留 _lock 供子类向后兼容。
     /// </summary>
+    /// <remarks>
+    /// <b>B8: 已过时</b>。新代码请使用 <c>Nexus.Device.DeviceTcpNet</c>(组合 <c>PipeTcpNet</c> +
+    /// <c>INetMessage</c> + <c>IByteTransform</c>)。本类保留是为了渐进迁移现有协议子类,
+    /// 计划在所有协议迁移完成后删除。详见 Phase B 重构说明。
+    /// </remarks>
+    [Obsolete("新代码请使用 Nexus.Device.DeviceTcpNet(Phase B 重构)。本类保留仅为渐进迁移。")]
     public abstract class TcpDeviceBase : IReadWriteDevice
     {
         protected string Ip { get; }

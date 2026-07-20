@@ -10,6 +10,11 @@ namespace Nexus
     /// <summary>
     /// UDP 设备基类 — 封装无连接 UDP 通讯、超时、网络异常处理、日志、事件、广播支持。
     /// </summary>
+    /// <remarks>
+    /// <b>B8: 已过时</b>。新代码请使用 <c>Nexus.Device.DeviceUdpNet</c>(组合 <c>PipeUdpNet</c> +
+    /// <c>INetMessage</c> + <c>IByteTransform</c>)。本类保留是为了渐进迁移现有协议子类。
+    /// </remarks>
+    [Obsolete("新代码请使用 Nexus.Device.DeviceUdpNet(Phase B 重构)。本类保留仅为渐进迁移。")]
     public abstract class UdpDeviceBase : IReadWriteDevice
     {
         protected string Ip { get; }

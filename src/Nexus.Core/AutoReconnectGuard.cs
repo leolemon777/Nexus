@@ -2,6 +2,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+// B8: AutoReconnectGuard 是旧 TcpDeviceBase 的伴生组件,自身也需要随 Phase B 重构迁出。
+// 在迁移完成前,我们屏蔽 CS0618 警告以避免污染 build 输出。
+#pragma warning disable CS0618
+
 namespace Nexus
 {
     /// <summary>
