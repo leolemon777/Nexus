@@ -4,9 +4,11 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Nexus Delta.Ascii protocol client library</Description>
+    <Description>Nexus Delta.Ascii — Delta DVP PLC over Modbus ASCII (Phase C-2 deepening)</Description>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
   </ItemGroup>
 </Project>

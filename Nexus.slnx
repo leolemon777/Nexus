@@ -122,6 +122,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Nexus.Core.Tests/Nexus.Core.Tests.csproj" />
     <Project Path="tests/Nexus.Dam3601.Tests/Nexus.Dam3601.Tests.csproj" />
+    <Project Path="tests/Nexus.Delta.Ascii.Tests/Nexus.Delta.Ascii.Tests.csproj" />
     <Project Path="tests/Nexus.LengthPrefixTcp.Tests/Nexus.LengthPrefixTcp.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.Tests/Nexus.Modbus.Tests.csproj" />
     <Project Path="tests/Nexus.Xinje.Serial.Tests/Nexus.Xinje.Serial.Tests.csproj" />

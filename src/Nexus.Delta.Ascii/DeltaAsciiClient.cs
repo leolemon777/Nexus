@@ -1,76 +1,141 @@
-using Nexus;
+// Delta DVP PLC over Modbus ASCII.
+// Implements Delta-specific address mapping (X/Y/M/S/T/C/D) on top of standard Modbus ASCII.
+// Based on public Delta DVP communication manual.
+
+using System;
+using Nexus.Modbus;
 
 namespace Nexus.Delta.Ascii
 {
     /// <summary>
-    /// 台达 DVP PLC ASCII 通讯协议客户端 — <b>当前为 stub</b>。
+    /// 台达 DVP 系列 PLC 客户端 — 基于台达官方 Modbus ASCII 兼容模式实现。
     /// </summary>
     /// <remarks>
-    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。所有读写方法返回
-    /// <see cref="OperateResult.Failed(string)"/>。
+    /// <b>实现说明</b>:台达 DVP 系列 PLC(SS2/SA2/SV2/EH3/ES2 等)出厂支持标准 Modbus ASCII 协议
+    /// (参考台达公开手册《DVP 应用手册 - 通讯篇》)。本客户端继承 <see cref="ModbusAsciiClient"/>
+    /// 获得完整的 Modbus ASCII 能力,并添加台达特定的地址映射。
     /// <para>
-    /// <b>临时替代</b>:台达 DVP 系列同时支持 Modbus RTU/TCP,推荐使用
-    /// <c>Nexus.Modbus.ModbusRtuClient</c> 或 <c>ModbusTcpClient</c>。
+    /// <b>地址映射</b>(基于台达手册公开内容,DVP-ES2/SV2 默认配置):
+    /// <list type="table">
+    ///   <listheader><term>台达地址</term><description>Modbus 类型</description><description>0-based 起始</description></listheader>
+    ///   <item><term>X0..X377 (输入,8 进制)</term><description>FC02 Input Status</description><description>0x0000</description></item>
+    ///   <item><term>Y0..Y377 (输出,8 进制)</term><description>FC01/FC05 Coil</description><description>0x0000</description></item>
+    ///   <item><term>M0..M4095 (辅助继电器)</term><description>FC01/FC05 Coil</description><description>0x0800</description></item>
+    ///   <item><term>S0..S1023 (步进继电器)</term><description>FC01/FC05 Coil</description><description>0x2800</description></item>
+    ///   <item><term>T0..T255 (定时器触点)</term><description>FC01/FC05 Coil</description><description>0x1800</description></item>
+    ///   <item><term>C0..C255 (计数器触点)</term><description>FC01/FC05 Coil</description><description>0x1C00</description></item>
+    ///   <item><term>D0..D9999 (数据寄存器)</term><description>FC03/FC06 Holding Register</description><description>0x0000</description></item>
+    ///   <item><term>T0..T255 (定时器当前值)</term><description>FC03/FC06 Holding Register</description><description>0x0600</description></item>
+    ///   <item><term>C0..C255 (计数器当前值)</term><description>FC03/FC06 Holding Register</description><description>0x0E00</description></item>
+    /// </list>
     /// </para>
-    /// <para>
-    /// <b>深化计划</b>:基于公开的台达 DVP 通讯手册(ASCI 模式,STX/ETX 帧)
-    /// 实现完整 Read/Write,加 VirtualServer + ~30 单元测试。预计 2-3 天。
-    /// </para>
+    /// <para><b>变更说明</b>(Phase C-2):本类从纯 OperateResult.Failed 占位升级为基于
+    /// Modbus ASCII 的真实实现。</para>
     /// </remarks>
-    public class DeltaAsciiClient : SerialDeviceBase, IBatchReadWrite
+    public class DeltaAsciiClient : ModbusAsciiClient
     {
-        public DeltaAsciiClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
-        protected override int ResponseHeaderLength => 4;
-        protected override int GetResponsePayloadLength(byte[] header) { if (header.Length < 4) return 0; return (header[2] << 8) | header[3]; }
-        public override OperateResult<bool> ReadBool(string address) => OperateResult<bool>.Failed("台达 ASCII 协议暂不支持，请使用 TCP/RTU 客户端");
-        public override OperateResult<short> ReadInt16(string address) => OperateResult<short>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<ushort> ReadUInt16(string address) => OperateResult<ushort>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<int> ReadInt32(string address) => OperateResult<int>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<uint> ReadUInt32(string address) => OperateResult<uint>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<long> ReadInt64(string address) => OperateResult<long>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<ulong> ReadUInt64(string address) => OperateResult<ulong>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<float> ReadFloat(string address) => OperateResult<float>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<double> ReadDouble(string address) => OperateResult<double>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<string> ReadString(string address, ushort length) => OperateResult<string>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult<byte[]> ReadBytes(string address, ushort length) => OperateResult<byte[]>.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, bool value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, short value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, ushort value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, int value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, uint value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, long value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, ulong value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, float value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, double value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, string value) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override OperateResult Write(string address, byte[] data) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public override Task<OperateResult<bool>> ReadBoolAsync(string address) => Task.Run(() => ReadBool(address));
-        public override Task<OperateResult<short>> ReadInt16Async(string address) => Task.Run(() => ReadInt16(address));
-        public override Task<OperateResult<ushort>> ReadUInt16Async(string address) => Task.Run(() => ReadUInt16(address));
-        public override Task<OperateResult<int>> ReadInt32Async(string address) => Task.Run(() => ReadInt32(address));
-        public override Task<OperateResult<uint>> ReadUInt32Async(string address) => Task.Run(() => ReadUInt32(address));
-        public override Task<OperateResult<long>> ReadInt64Async(string address) => Task.Run(() => ReadInt64(address));
-        public override Task<OperateResult<ulong>> ReadUInt64Async(string address) => Task.Run(() => ReadUInt64(address));
-        public override Task<OperateResult<float>> ReadFloatAsync(string address) => Task.Run(() => ReadFloat(address));
-        public override Task<OperateResult<double>> ReadDoubleAsync(string address) => Task.Run(() => ReadDouble(address));
-        public override Task<OperateResult<string>> ReadStringAsync(string address, ushort length) => Task.Run(() => ReadString(address, length));
-        public override Task<OperateResult<byte[]>> ReadBytesAsync(string address, ushort length) => Task.Run(() => ReadBytes(address, length));
-        public override Task<OperateResult> WriteAsync(string address, bool value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, short value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, ushort value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, int value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, uint value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, long value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, ulong value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, float value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, double value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, string value) => Task.Run(() => Write(address, value));
-        public override Task<OperateResult> WriteAsync(string address, byte[] data) => Task.Run(() => Write(address, data));
-        public OperateResult<Dictionary<string, object?>> BatchRead(IEnumerable<string> addresses) => OperateResult<Dictionary<string, object?>>.Failed("台达 ASCII 协议暂不支持");
-        public Task<OperateResult<Dictionary<string, object?>>> BatchReadAsync(IEnumerable<string> addresses, CancellationToken ct = default) => Task.FromResult(BatchRead(addresses));
-        public OperateResult<Dictionary<string, byte[]>> RandomRead(IEnumerable<string> addresses) => OperateResult<Dictionary<string, byte[]>>.Failed("台达 ASCII 协议暂不支持");
-        public Task<OperateResult<Dictionary<string, byte[]>>> RandomReadAsync(IEnumerable<string> addresses, CancellationToken ct = default) => Task.FromResult(RandomRead(addresses));
-        public OperateResult BatchWrite(IEnumerable<KeyValuePair<string, object>> items) => OperateResult.Failed("台达 ASCII 协议暂不支持");
-        public Task<OperateResult> BatchWriteAsync(IEnumerable<KeyValuePair<string, object>> items, CancellationToken ct = default) => Task.FromResult(BatchWrite(items));
+        public DeltaAsciiClient(ISerialPort port, byte station = 1, int timeout = 5000)
+            : base(port, station, timeout)
+        {
+            ByteOrder = Endianness.BigEndian;
+        }
+
+        // ── 地址映射(使用 Modbus 5 位数字编码,让 ParseAddressEx 自动选 FC)──────
+
+        /// <summary>把台达 X(输入,8 进制)地址转为 Modbus FC02 输入地址字符串。</summary>
+        public static string MapInputX(string deltaAddress)
+        {
+            int oct = ParseDeltaOctal(deltaAddress, 'X');
+            return "1" + (oct + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 Y(输出,8 进制)地址转为 Modbus FC01/FC05 线圈地址字符串。</summary>
+        public static string MapOutputY(string deltaAddress)
+        {
+            int oct = ParseDeltaOctal(deltaAddress, 'Y');
+            return "0" + (oct + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 M(辅助继电器)地址转为 Modbus 线圈地址字符串。</summary>
+        public static string MapAuxM(string deltaAddress)
+        {
+            int dec = ParseDeltaDecimal(deltaAddress, 'M');
+            return "0" + (0x0800 + dec + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 S(步进继电器)地址转为 Modbus 线圈地址字符串。</summary>
+        public static string MapStepS(string deltaAddress)
+        {
+            int dec = ParseDeltaDecimal(deltaAddress, 'S');
+            return "0" + (0x2800 + dec + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 D(数据寄存器)地址转为 Modbus 保持寄存器地址字符串。</summary>
+        public static string MapDataD(string deltaAddress)
+        {
+            int dec = ParseDeltaDecimal(deltaAddress, 'D');
+            return "4" + (dec + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 T(定时器当前值)地址转为 Modbus 保持寄存器地址字符串。</summary>
+        public static string MapTimerCurrentValueT(string deltaAddress)
+        {
+            int dec = ParseDeltaDecimal(deltaAddress, 'T');
+            return "4" + (0x0600 + dec + 1).ToString("D4");
+        }
+
+        /// <summary>把台达 C(计数器当前值)地址转为 Modbus 保持寄存器地址字符串。</summary>
+        public static string MapCounterCurrentValueC(string deltaAddress)
+        {
+            int dec = ParseDeltaDecimal(deltaAddress, 'C');
+            return "4" + (0x0E00 + dec + 1).ToString("D4");
+        }
+
+        // ── 台达原生 API ────────────────────────
+
+        public OperateResult<bool> ReadInputX(string address) => ReadBool(MapInputX(address));
+        public OperateResult<bool> ReadOutputY(string address) => ReadBool(MapOutputY(address));
+        public OperateResult WriteOutputY(string address, bool value) => Write(MapOutputY(address), value);
+        public OperateResult<bool> ReadAuxM(string address) => ReadBool(MapAuxM(address));
+        public OperateResult WriteAuxM(string address, bool value) => Write(MapAuxM(address), value);
+        public OperateResult<bool> ReadStepS(string address) => ReadBool(MapStepS(address));
+        public OperateResult<short> ReadDataD(string address) => ReadInt16(MapDataD(address));
+        public OperateResult WriteDataD(string address, short value) => Write(MapDataD(address), value);
+        public OperateResult<int> ReadDataD32(string address) => ReadInt32(MapDataD(address));
+        public OperateResult WriteDataD32(string address, int value) => Write(MapDataD(address), value);
+        public OperateResult<float> ReadDataDFloat(string address) => ReadFloat(MapDataD(address));
+        public OperateResult WriteDataDFloat(string address, float value) => Write(MapDataD(address), value);
+        public OperateResult<short> ReadTimerCurrentValue(string address) => ReadInt16(MapTimerCurrentValueT(address));
+        public OperateResult<short> ReadCounterCurrentValue(string address) => ReadInt16(MapCounterCurrentValueC(address));
+
+        // ── 内部地址解析 ─────────────────────────
+
+        private static int ParseDeltaOctal(string address, char prefix)
+        {
+            string digits = StripPrefix(address, prefix);
+            try { return Convert.ToInt32(digits, 8); }
+            catch (Exception ex)
+            {
+                throw new FormatException($"台达 {prefix} 地址无效(应为 8 进制数字): {address} — {ex.Message}");
+            }
+        }
+
+        private static int ParseDeltaDecimal(string address, char prefix)
+        {
+            string digits = StripPrefix(address, prefix);
+            if (!int.TryParse(digits, out int v))
+                throw new FormatException($"台达 {prefix} 地址无效(应为十进制数字): {address}");
+            return v;
+        }
+
+        private static string StripPrefix(string address, char prefix)
+        {
+            if (string.IsNullOrEmpty(address))
+                throw new FormatException("台达地址为空");
+            char first = char.ToUpperInvariant(address[0]);
+            if (first != char.ToUpperInvariant(prefix))
+                throw new FormatException($"台达地址前缀不匹配: 期望 '{prefix}', 实际 '{first}' — {address}");
+            return address.Substring(1);
+        }
     }
 }
