@@ -15,9 +15,9 @@ in the field; users will hit the "暂不支持" message and have no workaround.
 | `Nexus.Delta.Ascii` | ✅ **DONE in Phase C-2** — Delta DVP Modbus ASCII compatible client. Inherits ModbusAsciiClient, adds X/Y/M/S/T/C/D address mapping. 29 tests. | — | Done |
 | `Nexus.Mitsubishi.ASeries` | ✅ **DONE in Phase C-3** — AnA/AnS/Q02AS ASCII protocol command builders (WR/WW/BR/BW) + ENQ/CR frame encoding. High-level Read/Write API still returns Failed (AnA protocol full implementation needs manual field verification; PLC discontinued). 10 tests covering command-string construction + checksum + frame encoding. | — | Done (partial — command builders usable, high-level API documented as needing manual) |
 | `Nexus.Mitsubishi.IqR.Serial` | ✅ **DONE in Phase C-4** — iQ-R RS-232 client inherits MelsecA3CNetClient, gaining full A3C serial protocol (read/write word/bit/string, batch, CRC, auto-reconnect). iQ-R-specific extensions (RD indirect addressing, SLMP-over-serial) documented as not covered. 6 tests for inheritance + interface implementation + configuration. | — | Done |
-| `Nexus.Siemens.WebApi` | Stub, wrong base class (TcpDeviceBase for an HTTP protocol) | Re-implement on HttpClient + JSON parsing. S7-1200/1500 Web API uses `GET /api/json/reads?var=...` returning JSON. Needs BASIC auth. | 3-5 days |
+| `Nexus.Siemens.WebApi` | ✅ **DONE in Phase C-5** — S7-1200/1500 Web API HTTP client with BASIC auth + JSON reads/writes via /api/json/reads and /api/json/writes endpoints. No longer inherits TcpDeviceBase (Web API is HTTP, not raw TCP). Custom minimal JSON value extractor (no external JSON dep). 20 tests covering JSON parsing edge cases + constructor config + connection-failure graceful handling. | — | Done |
 
-**Effort estimate:** ~3-5 days for the last one (Siemens.WebApi needs JSON parser).
+**All 5 Priority-1 stubs DONE.** Phase C complete.
 
 ## Priority 2 — Brand wrappers needing verification
 

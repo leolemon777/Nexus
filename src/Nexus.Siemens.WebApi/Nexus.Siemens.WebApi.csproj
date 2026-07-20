@@ -4,7 +4,8 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Nexus Siemens.WebApi protocol client library</Description>
+    <Description>Nexus Siemens.WebApi — S7-1200/1500 Web API client over HTTP/JSON (Phase C-5)</Description>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
