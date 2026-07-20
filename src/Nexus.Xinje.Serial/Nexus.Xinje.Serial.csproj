@@ -4,9 +4,11 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Nexus Xinje.Serial protocol client library</Description>
+    <Description>Nexus Xinje.Serial — Xinje XC/XD PLC over Modbus RTU (Phase C-1 deepening)</Description>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+    <ProjectReference Include="..\Nexus.Modbus\Nexus.Modbus.csproj" />
   </ItemGroup>
 </Project>

@@ -11,14 +11,15 @@ in the field; users will hit the "暂不支持" message and have no workaround.
 
 | Library | Current state | Recommended implementation | Effort |
 |---|---|---|---|
+| `Nexus.Xinje.Serial` | ✅ **DONE in Phase C-1** — implemented as Xinje XC/XD Modbus RTU compatible client. Inherits ModbusRtuClient, adds X/Y/M/S/D/HD address mapping (octal/decimal). 37 unit/integration tests via fake serial port + CRC chain. | — | Done |
 | `Nexus.Siemens.WebApi` | Stub, wrong base class (TcpDeviceBase for an HTTP protocol) | Re-implement on HttpClient + JSON parsing. S7-1200/1500 Web API uses `GET /api/json/reads?var=...` returning JSON. Needs BASIC auth. | 3-5 days |
 | `Nexus.Mitsubishi.IqR.Serial` | Stub, returns Failed | MELSEC iQ-R over RS-232 — basically MC3E binary framing over serial. Reuse existing MC3E Binary frame builder. | 2-3 days |
 | `Nexus.Mitsubishi.ASeries` | Stub | Mitsubishi A-series (FX3U-era) computer link protocol. ASCII frames with STX/ETX. | 3-5 days |
-| `Nexus.Delta.Ascii` | Stub | Delta DVP ASCII protocol — similar to Modbus ASCII but with Delta-specific command set. | 2-3 days |
-| `Nexus.Xinje.Serial` | Stub, lacks both parent and own logic | Xinje XC/XD serial protocol. Documented in Xinje manual. | 3-5 days |
+| `Nexus.Delta.Ascii` | Stub | Delta DVP ASCII protocol — similar to Modbus ASCII but with Delta-specific command set. Could also follow Xinje.Serial pattern (Delta DVP supports Modbus RTU compatibility mode). | 1-2 days if via Modbus compat |
 
-**Effort estimate:** ~3-4 weeks total for all 5 if done by someone with the
-vendor manuals. Each requires a VirtualServer + ~30 unit tests for confidence.
+**Effort estimate:** ~2-3 weeks total for the remaining 4. Xinje.Serial proves
+the "inherit ModbusRtuClient + add device-specific address mapping" pattern works
+cleanly for any PLC that supports Modbus compatibility mode.
 
 ## Priority 2 — Brand wrappers needing verification
 
