@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.ShineIn</RootNamespace>
+    <AssemblyName>Nexus.ShineIn</AssemblyName>
+    <Description>Nexus ShineIn — ShineIn light source controller over serial (Phase D-6)</Description>
+    <PackageTags>industrial-communication light-source shinein</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+  </ItemGroup>
+</Project>
