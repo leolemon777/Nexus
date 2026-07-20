@@ -9,7 +9,7 @@ or incomplete in Nexus. Phase D adds these to close the gap with HSL.
 |---|---|---|---|
 | DAM3601 analog module | ModbusRtu subclass | ✅ Added (Phase D-1) | Done — `src/Nexus.Dam3601/` |
 | DcsNanJingAuto | ModbusTcp subclass | ✅ Added (Phase D-2) | Done — `src/Nexus.DcsNanJingAuto/` — Nanjing Automation DCS over Modbus TCP with connect handshake |
-| Turck RFID (BLident) | ReaderNet + ReaderServer | Missing | Add — Turck BLident RFID reader protocol over TCP |
+| Turck RFID (BLident) | ReaderNet + ReaderServer | ✅ Added (Phase D-3) | Done — `src/Nexus.Turck/` — BLident RFID reader client with 0xAA frame format, CRC-16 (poly 0x8408), ReadUid/ReadBlocks/WriteBlocks. 13 tests |
 | Sick ICR RFID | SickIcrTcpServer (server only) | Missing | Add client side — Sick ICR RFC protocol |
 | Toyota-Puc welder | ToyoPuc + ToyoPucServer | Missing | Add — Toyota-Puc welder controller protocol |
 | ShineIn light source | ShineInLightSourceController (serial) | Missing | Add — ShineIn light source serial protocol |

@@ -6,6 +6,7 @@
     <Project Path="src/Nexus.DcsNanJingAuto/Nexus.DcsNanJingAuto.csproj" />
     <Project Path="src/Nexus.LengthPrefixTcp/Nexus.LengthPrefixTcp.csproj" />
     <Project Path="src/Nexus.Modbus/Nexus.Modbus.csproj" />
+    <Project Path="src/Nexus.Turck/Nexus.Turck.csproj" />
     <Project Path="src/Nexus.Siemens/Nexus.Siemens.csproj" />
     <Project Path="src/Nexus.Mitsubishi/Nexus.Mitsubishi.csproj" />
     <Project Path="src/Nexus.Omron/Nexus.Omron.csproj" />
@@ -130,6 +131,7 @@
     <Project Path="tests/Nexus.Mitsubishi.IqR.Serial.Tests/Nexus.Mitsubishi.IqR.Serial.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.Tests/Nexus.Modbus.Tests.csproj" />
     <Project Path="tests/Nexus.Siemens.WebApi.Tests/Nexus.Siemens.WebApi.Tests.csproj" />
+    <Project Path="tests/Nexus.Turck.Tests/Nexus.Turck.Tests.csproj" />
     <Project Path="tests/Nexus.Xinje.Serial.Tests/Nexus.Xinje.Serial.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.IntegrationTest/Nexus.Modbus.IntegrationTest.csproj" />
     <Project Path="tests/Nexus.Mitsubishi.Tests/Nexus.Mitsubishi.Tests.csproj" />

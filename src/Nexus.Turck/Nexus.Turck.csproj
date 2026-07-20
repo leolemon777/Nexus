@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Nexus.Turck</RootNamespace>
+    <AssemblyName>Nexus.Turck</AssemblyName>
+    <Description>Nexus Turck — Turck BLident RFID reader over TCP (Phase D-3)</Description>
+    <PackageTags>industrial-communication rfid turck blident</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IncludeSource>true</IncludeSource>
+    <DebugType>portable</DebugType>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nexus.Core\Nexus.Core.csproj" />
+  </ItemGroup>
+</Project>
