@@ -2,6 +2,16 @@ using Nexus;
 
 namespace Nexus.Mitsubishi.ASeries
 {
+    /// <summary>
+    /// 三菱 A 系列(FX3U 时代)计算机链接协议客户端 — <b>当前为 stub</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。
+    /// <para><b>临时替代</b>:旧 A 系列设备若支持 MC 协议,推荐使用
+    /// <c>Nexus.Mitsubishi.MelsecA3CNet</c>。FX 系列用 <c>MelsecFxSerial</c>。</para>
+    /// <para><b>深化计划</b>:A 系列专有 ASCII 帧(STX/ETX + 站号 + 命令 + 校验),
+    /// 见三菱通讯手册。预计 3-5 天。</para>
+    /// </remarks>
     public class MitsubishiASeriesClient : SerialDeviceBase, IBatchReadWrite
     {
         public MitsubishiASeriesClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }

@@ -2,6 +2,17 @@ using Nexus;
 
 namespace Nexus.Mitsubishi.IqR.Serial
 {
+    /// <summary>
+    /// 三菱 MELSEC iQ-R 系列 RS-232 串口客户端 — <b>当前为 stub</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。
+    /// <para><b>临时替代</b>:iQ-R 系列同时支持 MC3E 二进制协议,推荐使用
+    /// <c>Nexus.Mitsubishi</c> 的 TCP 客户端,或在串口场景下使用
+    /// <c>Nexus.Mitsubishi.MelsecA3CNet</c>(已实现)。</para>
+    /// <para><b>深化计划</b>:iQ-R 串口协议 ≈ MC3E binary 帧封装到 RS-232 链路,
+    /// 可复用现有 MC3E 帧构造器。预计 2-3 天。</para>
+    /// </remarks>
     public class IqRSerialClient : SerialDeviceBase, IBatchReadWrite
     {
         public IqRSerialClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }

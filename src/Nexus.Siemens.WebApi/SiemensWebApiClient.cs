@@ -2,6 +2,16 @@ using Nexus;
 
 namespace Nexus.Siemens.WebApi
 {
+    /// <summary>
+    /// 西门子 S7-1200/1500 Web API 客户端 — <b>当前为 stub</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。注意当前基类
+    /// <see cref="TcpDeviceBase"/> 不正确 — Web API 是 HTTP 协议,需要 HttpClient 而非裸 TCP。
+    /// <para><b>临时替代</b>:推荐使用 <c>Nexus.Siemens.SiemensS7Net</c>(ISO-on-TCP,完整实现)。</para>
+    /// <para><b>深化计划</b>:S7 Web API 用 HTTP GET <c>/api/json/reads?var=...</c> 返回 JSON,
+    /// 需 BASIC 认证。重新基于 HttpClient 实现,不再继承 TcpDeviceBase。预计 3-5 天。</para>
+    /// </remarks>
     public class SiemensWebApiClient : TcpDeviceBase, IBatchReadWrite
     {
         public SiemensWebApiClient(string ip, int port = 443, int timeout = 5000) : base(ip, port, timeout) { }

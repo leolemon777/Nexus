@@ -2,6 +2,16 @@ using Nexus;
 
 namespace Nexus.Xinje.Serial
 {
+    /// <summary>
+    /// 信捷 XC/XD 系列 PLC 串口协议客户端 — <b>当前为 stub</b>(无任何协议逻辑)。
+    /// </summary>
+    /// <remarks>
+    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。本类既无父协议继承,
+    /// 也无自己的帧逻辑,是 5 个 Priority-1 stub 中最严重的"占位"。
+    /// <para><b>临时替代</b>:信捷 XC/XD 系列同时支持 Modbus RTU,推荐使用
+    /// <c>Nexus.Modbus.ModbusRtuClient</c>;若用 TCP 信捷客户端用 <c>Nexus.Xinje</c>。</para>
+    /// <para><b>深化计划</b>:信捷 XC/XD 专有串口协议见信捷手册。预计 3-5 天。</para>
+    /// </remarks>
     public class XinjeSerialClient : SerialDeviceBase, IBatchReadWrite
     {
         public XinjeSerialClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }

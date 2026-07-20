@@ -2,6 +2,21 @@ using Nexus;
 
 namespace Nexus.Delta.Ascii
 {
+    /// <summary>
+    /// 台达 DVP PLC ASCII 通讯协议客户端 — <b>当前为 stub</b>。
+    /// </summary>
+    /// <remarks>
+    /// <b>状态</b>:Phase C 待深化(见 <c>docs/PHASE_C_ROADMAP.md</c>)。所有读写方法返回
+    /// <see cref="OperateResult.Failed(string)"/>。
+    /// <para>
+    /// <b>临时替代</b>:台达 DVP 系列同时支持 Modbus RTU/TCP,推荐使用
+    /// <c>Nexus.Modbus.ModbusRtuClient</c> 或 <c>ModbusTcpClient</c>。
+    /// </para>
+    /// <para>
+    /// <b>深化计划</b>:基于公开的台达 DVP 通讯手册(ASCI 模式,STX/ETX 帧)
+    /// 实现完整 Read/Write,加 VirtualServer + ~30 单元测试。预计 2-3 天。
+    /// </para>
+    /// </remarks>
     public class DeltaAsciiClient : SerialDeviceBase, IBatchReadWrite
     {
         public DeltaAsciiClient(ISerialPort port, int timeout = 5000) : base(port, timeout) { }
