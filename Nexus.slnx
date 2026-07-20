@@ -124,6 +124,7 @@
     <Project Path="tests/Nexus.Dam3601.Tests/Nexus.Dam3601.Tests.csproj" />
     <Project Path="tests/Nexus.Delta.Ascii.Tests/Nexus.Delta.Ascii.Tests.csproj" />
     <Project Path="tests/Nexus.LengthPrefixTcp.Tests/Nexus.LengthPrefixTcp.Tests.csproj" />
+    <Project Path="tests/Nexus.Mitsubishi.ASeries.Tests/Nexus.Mitsubishi.ASeries.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.Tests/Nexus.Modbus.Tests.csproj" />
     <Project Path="tests/Nexus.Xinje.Serial.Tests/Nexus.Xinje.Serial.Tests.csproj" />
     <Project Path="tests/Nexus.Modbus.IntegrationTest/Nexus.Modbus.IntegrationTest.csproj" />
