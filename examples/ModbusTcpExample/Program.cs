@@ -1,61 +1,60 @@
-using System;
+// Nexus Modbus TCP 快速上手示例
+// 本示例演示如何连接 Modbus TCP 设备、读写寄存器
 using Nexus;
 using Nexus.Modbus;
 
-namespace ModbusTcpExample;
+Console.WriteLine("=== Nexus Modbus TCP 示例 ===\n");
 
-/// <summary>
-/// Modbus TCP 读写示例。
-/// 用法: dotnet run -- [ip] [port]
-/// 默认: 127.0.0.1:502
-/// </summary>
-class Program
+// 1. 创建客户端（替换为你的 PLC IP 地址）
+string ip = "192.168.1.100";
+int port = 502;
+byte station = 1;
+
+using var client = new ModbusTcpClient(ip, port, station, timeout: 3000);
+
+// 2. 连接
+Console.WriteLine($"正在连接 {ip}:{port} ...");
+var connect = client.Connect();
+if (!connect.IsSuccess)
 {
-    static void Main(string[] args)
-    {
-        string ip = args.Length > 0 ? args[0] : "127.0.0.1";
-        int port = args.Length > 1 ? int.Parse(args[1]) : 502;
-
-        Console.WriteLine($"=== Modbus TCP 示例 — 连接 {ip}:{port} ===");
-
-        using var client = new ModbusTcpClient(ip, port, station: 1);
-
-        // 1. 连接
-        var connect = client.Connect();
-        if (!connect.IsSuccess)
-        {
-            Console.WriteLine($"连接失败: {connect.Message}");
-            return;
-        }
-        Console.WriteLine("✓ 已连接");
-
-        // 2. 读取 Int16 (Holding Register D100)
-        var read16 = client.ReadInt16("100");
-        if (read16.IsSuccess)
-            Console.WriteLine($"读取 D100 (Int16): {read16.Content}");
-        else
-            Console.WriteLine($"读取失败: {read16.Message}");
-
-        // 3. 写入 Int16
-        var write16 = client.Write("200", (short)42);
-        Console.WriteLine(write16.IsSuccess ? "✓ 写入 D200 = 42" : $"写入失败: {write16.Message}");
-
-        // 4. 读取 Float
-        var readFloat = client.ReadFloat("300");
-        if (readFloat.IsSuccess)
-            Console.WriteLine($"读取 D300 (Float): {readFloat.Content:F2}");
-
-        // 5. 写入 Float
-        var writeFloat = client.Write("300", 3.14f);
-        Console.WriteLine(writeFloat.IsSuccess ? "✓ 写入 D300 = 3.14" : $"写入失败: {writeFloat.Message}");
-
-        // 6. 批量读取
-        var batch = client.ReadRegistersBatch(100, 5);
-        if (batch.IsSuccess)
-            Console.WriteLine($"批量读取 D100-D104: {BitConverter.ToString(batch.Content)}");
-
-        // 7. 断开
-        client.Disconnect();
-        Console.WriteLine("✓ 已断开");
-    }
+    Console.WriteLine($"❌ 连接失败: {connect.Message}");
+    Console.WriteLine("\n提示: 确保设备已开机、IP 正确、防火墙允许 502 端口。");
+    return;
 }
+Console.WriteLine("✅ 连接成功!");
+
+// 3. 读单个寄存器
+Console.WriteLine("\n--- 读保持寄存器 ---");
+var value = client.ReadUInt16("40001");  // 40001 = 第一个保持寄存器
+if (value.IsSuccess)
+    Console.WriteLine($"  寄存器 40001 = {value.Content}");
+else
+    Console.WriteLine($"  读取失败: {value.Message}");
+
+// 4. 读多个寄存器
+Console.WriteLine("\n--- 读多个寄存器 ---");
+var data = client.ReadBytes("40001", 10);  // 读 10 个寄存器 = 20 字节
+if (data.IsSuccess)
+    Console.WriteLine($"  读取 {data.Content.Length} 字节: {DataConverter.ToHexString(data.Content)}");
+else
+    Console.WriteLine($"  读取失败: {data.Message}");
+
+// 5. 写寄存器
+Console.WriteLine("\n--- 写保持寄存器 ---");
+var write = client.Write("40001", (short)1234);
+if (write.IsSuccess)
+    Console.WriteLine("  ✅ 写入成功 (40001 ← 1234)");
+else
+    Console.WriteLine($"  ❌ 写入失败: {write.Message}");
+
+// 6. 读线圈(布尔)
+Console.WriteLine("\n--- 读线圈 ---");
+var coil = client.ReadBool("00001");
+if (coil.IsSuccess)
+    Console.WriteLine($"  线圈 00001 = {(coil.Content ? "ON" : "OFF")}");
+else
+    Console.WriteLine($"  读取失败: {coil.Message}");
+
+// 7. 断开
+client.Disconnect();
+Console.WriteLine("\n✅ 已断开连接。示例完成!");

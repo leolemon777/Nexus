@@ -1,62 +1,39 @@
-using System;
+// Nexus Siemens S7 快速上手示例
 using Nexus;
 using Nexus.Siemens;
 
-namespace SiemensS7Example;
+Console.WriteLine("=== Nexus Siemens S7 示例 ===\n");
 
-/// <summary>
-/// Siemens S7 TCP 读写示例。
-/// 用法: dotnet run -- [ip] [rack] [slot]
-/// 默认: 192.168.1.100 rack=0 slot=1
-/// </summary>
-class Program
+string ip = "192.168.1.1";
+
+using var plc = new SiemensS7Net(ip, SiemensPLCS.S1200);
+
+Console.WriteLine($"正在连接 {ip} ...");
+var connect = plc.Connect();
+if (!connect.IsSuccess)
 {
-    static void Main(string[] args)
-    {
-        string ip = args.Length > 0 ? args[0] : "192.168.1.100";
-        int rack = args.Length > 1 ? int.Parse(args[1]) : 0;
-        int slot = args.Length > 2 ? int.Parse(args[2]) : 1;
-
-        Console.WriteLine($"=== Siemens S7 示例 — 连接 {ip}:102 ===");
-
-        using var client = new SiemensS7Client(SiemensPLCS.S7_1200, ip);
-
-        // 1. 连接
-        var connect = client.Connect();
-        if (!connect.IsSuccess)
-        {
-            Console.WriteLine($"连接失败: {connect.Message}");
-            return;
-        }
-        Console.WriteLine("✓ 已连接");
-
-        // 2. 读取 DB1.DBW0 (Int16)
-        var read16 = client.ReadInt16("DB1.DBW0");
-        if (read16.IsSuccess)
-            Console.WriteLine($"读取 DB1.DBW0 (Int16): {read16.Content}");
-        else
-            Console.WriteLine($"读取失败: {read16.Message}");
-
-        // 3. 写入 DB1.DBW2 (Int16)
-        var write16 = client.Write("DB1.DBW2", (short)100);
-        Console.WriteLine(write16.IsSuccess ? "✓ 写入 DB1.DBW2 = 100" : $"写入失败: {write16.Message}");
-
-        // 4. 读取 DB1.DBD4 (Float)
-        var readFloat = client.ReadFloat("DB1.DBD4");
-        if (readFloat.IsSuccess)
-            Console.WriteLine($"读取 DB1.DBD4 (Float): {readFloat.Content:F2}");
-
-        // 5. 写入 Float
-        var writeFloat = client.Write("DB1.DBD8", 25.5f);
-        Console.WriteLine(writeFloat.IsSuccess ? "✓ 写入 DB1.DBD8 = 25.5" : $"写入失败: {writeFloat.Message}");
-
-        // 6. 读取 PLC 时钟
-        var clock = client.ReadPlcClock();
-        if (clock.IsSuccess)
-            Console.WriteLine($"PLC 时钟: {clock.Content:yyyy-MM-dd HH:mm:ss}");
-
-        // 7. 断开
-        client.Disconnect();
-        Console.WriteLine("✓ 已断开");
-    }
+    Console.WriteLine($"连接失败: {connect.Message}");
+    return;
 }
+Console.WriteLine("连接成功!\n");
+
+// 读 DB 块数据
+Console.WriteLine("--- 读 DB1 数据 ---");
+var dbw0 = plc.ReadInt16("DB1.DBW0");
+Console.WriteLine($"  DB1.DBW0 (Int16) = {dbw0.IsSuccess ? dbw0.Content.ToString() : dbw0.Message}");
+
+var dbd0 = plc.ReadFloat("DB1.DBD0");
+Console.WriteLine($"  DB1.DBD0 (Float) = {dbd0.IsSuccess ? dbd0.Content.ToString("F2") : dbd0.Message}");
+
+// 读 M 区
+Console.WriteLine("\n--- 读 M 区 ---");
+var mw100 = plc.ReadUInt16("MW100");
+Console.WriteLine($"  MW100 = {mw100.IsSuccess ? mw100.Content.ToString() : mw100.Message}");
+
+// 写数据
+Console.WriteLine("\n--- 写数据 ---");
+var write = plc.Write("DB1.DBW0", (short)42);
+Console.WriteLine($"  写 DB1.DBW0 ← 42: {write.IsSuccess ? "成功" : write.Message}");
+
+plc.Disconnect();
+Console.WriteLine("\n示例完成!");
