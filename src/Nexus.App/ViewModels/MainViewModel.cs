@@ -221,6 +221,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         new NavGroup("🔵", "东芝 Toshiba", BrandLogos.TryLoad("toshiba.png")),
 
+        new NavGroup("🟢", "英威腾 INVT", BrandLogos.TryLoad("invt.png")),
+
+        new NavGroup("🟡", "麦格米特 Megmeet", BrandLogos.TryLoad("megmeet.png")),
+
+        new NavGroup("⚪", "丰炜 Vigor", BrandLogos.TryLoad("vigor.png")),
+
+        new NavGroup("🔵", "维控 WeCon", BrandLogos.TryLoad("wecon.png")),
+
+        new NavGroup("🏭", "山武 Yamatake", BrandLogos.TryLoad("yamatake.png")),
+
+        new NavGroup(" Toyota", "丰田工机 Toyota-Puc", BrandLogos.TryLoad("toyota.png")),
+
 
         // ═══════════════════════════════════════════
         //  新增协议页面
@@ -229,7 +241,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         new NavGroup("⚡", "施耐德 Schneider", BrandLogos.TryLoad("schneider_electric.png"))
             .Add("⚡", "Modicon", "schneider", typeof(Views.SchneiderPage)),
 
-        new NavGroup("⚡", "电力协议")
+        new NavGroup("⚡", "电力协议", BrandLogos.TryLoad("iec.png"))
             .Add("⚡", "DNP3", "dnp3", typeof(Views.Dnp3Page))
             .Add("⚡", "IEC 104", "iec104", typeof(Views.Iec104Page))
             .Add("⚡", "IEC 61850", "iec61850", typeof(Views.Iec61850Page)),
@@ -240,16 +252,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         new NavGroup("🔬", "半导体")
             .Add("🔬", "SECS HSMS", "secs", typeof(Views.SecsPage)),
 
-        new NavGroup("🌡", "仪表")
+        new NavGroup("🌡", "仪表", BrandLogos.TryLoad("rkc.png"))
             .Add("🌡", "RKC 温控", "rkc", typeof(Views.RkcPage))
             .Add("⚖", "Toledo 称重", "toledo", typeof(Views.ToledoPage)),
 
-        new NavGroup("📡", "RFID & 特殊设备", null)
+        new NavGroup("📡", "RFID & 特殊设备", BrandLogos.TryLoad("turck.png"))
             .Add("📡", "Turck RFID", "turck", typeof(Views.TurckReaderPage))
             .Add("🌐", "S7 Web API", "siemens-webapi", typeof(Views.SiemensWebApiPage)),
 
 
-        new NavGroup("🤖", "机器人")
+        new NavGroup("🤖", "机器人", BrandLogos.TryLoad("robot.png"))
             .Add("🤖", "埃夫特 Efort", "robot-efort", typeof(Views.RobotEfortPage))
             .Add("🤖", "FANUC", "robot-fanuc", typeof(Views.RobotFanucPage))
             .Add("🤖", "KUKA", "robot-kuka", typeof(Views.RobotKukaPage))
@@ -262,7 +274,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         //  新协议 — 待归类的最新协议
         // ═══════════════════════════════════════════
 
-        new NavGroup("💡", "新协议", null)
+        new NavGroup("💡", "新协议", BrandLogos.TryLoad("idcard.png"))
             .Add("💡", "ShineIn 光源", "shinein", typeof(Views.ShineInPage))
             .Add("🪪", "SAM 身份证", "sam", typeof(Views.SamPage)),
 
