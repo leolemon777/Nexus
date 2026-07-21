@@ -93,6 +93,14 @@ public sealed class NavItem
     public string Tag { get; init; }
     public Type PageType { get; init; }
 
+    // H-3: 图标网格导航用属性
+    public bool IsFavorite { get; set; }
+    public DateTime LastUsed { get; set; }
+    /// <summary>品牌 Logo 图片源（如果有）。</summary>
+    public ImageSource? IconSource { get; set; }
+    /// <summary>Logo 文件名（用于 TryLoad）。</summary>
+    public string? LogoFile { get; set; }
+
     public NavItem(string icon, string label, string tag, Type pageType)
     {
         Icon = icon; Label = label; Tag = tag; PageType = pageType;
@@ -102,6 +110,45 @@ public sealed class NavItem
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private NavItem? _selectedNav;
+    private string _searchText = string.Empty;
+    private ViewModels.ProtocolViewModelBase? _activeViewModel;
+    private string _statusBarProtocol = string.Empty;
+
+    /// <summary>H-5: 底部状态栏显示的当前协议名。</summary>
+    public string StatusBarProtocol
+    {
+        get => _statusBarProtocol;
+        set { if (_statusBarProtocol != value) { _statusBarProtocol = value; OnPropertyChanged(); } }
+    }
+
+    /// <summary>
+    /// H-2: 当前激活的协议 ViewModel（右侧实时报文面板绑定到此）。
+    /// 由导航流程在切换协议页时设置；为 null 时右侧面板使用 FallbackValue。
+    /// </summary>
+    public ViewModels.ProtocolViewModelBase? ActiveViewModel
+    {
+        get => _activeViewModel;
+        set
+        {
+            if (_activeViewModel == value) return;
+            _activeViewModel = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// H-3: 左侧搜索框文本（绑定用，过滤逻辑后续实现）。
+    /// </summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (_searchText == value) return;
+            _searchText = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// DI 构造：注入 <see cref="Services.ConnectionTemplateService"/> 作为模板存储的单一事实来源。

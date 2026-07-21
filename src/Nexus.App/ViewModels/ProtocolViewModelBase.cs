@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Nexus.App.Models;
 using Nexus.App.Services;
 using Nexus.Modbus;
 using Nexus;
@@ -26,6 +28,15 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     [ObservableProperty] private bool _isAddressValid = true;
     [ObservableProperty] private string _multiFormatResult = string.Empty;
 
+    // ── H-1: 实时报文监控属性 ──
+    [ObservableProperty] private double _lastLatencyMs;
+    [ObservableProperty] private int _totalSent;
+    [ObservableProperty] private int _totalReceived;
+    [ObservableProperty] private int _successCount;
+    [ObservableProperty] private int _totalOperations;
+    [ObservableProperty] private bool _isPacketMonitorPaused;
+    [ObservableProperty] private string _statusBarText = "未连接";
+
     public string[] DataTypes { get; } =
     {
         "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
@@ -40,6 +51,11 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
     public virtual string AddressHint => "e.g. D100, M200";
     public abstract string ProtocolName { get; }
     public ObservableCollection<string> LogLines { get; } = new();
+
+    /// <summary>H-1: 实时报文列表（右侧面板绑定）。</summary>
+    public ObservableCollection<Models.PacketEntry> Packets { get; } = new();
+    private const int PacketCap = 200;
+
     private readonly Dispatcher _dispatcher;
     private bool _disposed;
     private const int LogCap = 500;
@@ -471,6 +487,61 @@ public abstract partial class ProtocolViewModelBase : ObservableObject, IDisposa
             int remove = LogLines.Count - LogCap;
             for (int i = 0; i < remove; i++) LogLines.RemoveAt(0);
         }
+    }
+
+    // ── H-1: 报文记录（右侧面板）──────────────────
+
+    /// <summary>记录一条报文到右侧实时监控面板。</summary>
+    /// <param name="isTX">true=发送, false=接收。</param>
+    /// <param name="data">原始字节。</param>
+    /// <param name="latencyMs">延迟（仅 RX 行有效）。</param>
+    protected void RecordPacket(bool isTX, byte[] data, double latencyMs = 0)
+    {
+        if (data == null || data.Length == 0) return;
+        if (IsPacketMonitorPaused) return;
+
+        var entry = new Models.PacketEntry
+        {
+            IsTX = isTX,
+            HexData = DataConverter.ToHexString(data),
+            LatencyMs = latencyMs
+        };
+
+        if (isTX) TotalSent++;
+        else
+        {
+            TotalReceived++;
+            if (latencyMs > 0) LastLatencyMs = latencyMs;
+        }
+
+        if (_dispatcher.CheckAccess()) { DoRecordPacket(entry); }
+        else { _dispatcher.BeginInvoke(new Action(() => DoRecordPacket(entry))); }
+    }
+
+    private void DoRecordPacket(Models.PacketEntry entry)
+    {
+        Packets.Add(entry);
+        if (Packets.Count > PacketCap)
+            Packets.RemoveAt(0);
+    }
+
+    /// <summary>成功率百分比文本。</summary>
+    public string SuccessRateText =>
+        TotalOperations == 0 ? "--" : $"{(double)SuccessCount / TotalOperations * 100:F1}%";
+
+    /// <summary>切换报文监控暂停状态（右侧面板按钮绑定）。</summary>
+    [RelayCommand]
+    private void PausePacketMonitor()
+    {
+        IsPacketMonitorPaused = !IsPacketMonitorPaused;
+    }
+
+    /// <summary>记录一次操作结果（用于统计成功率）。</summary>
+    protected void RecordOperationResult(bool success)
+    {
+        TotalOperations++;
+        if (success) SuccessCount++;
+        OnPropertyChanged(nameof(SuccessRateText));
     }
 
     /// <summary>

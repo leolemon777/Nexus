@@ -23,7 +23,7 @@ public partial class MainWindow : Window
         DataContext = vm;
         vm.NavigationRequested += OnNavigate;
 
-        // 监听 TreeView 的鼠标点击
+        // 监听 TreeView 的鼠标点击（TreeView 当前 Visibility=Collapsed，不影响绑定注册）
         NavTree.AddHandler(MouseDownEvent, new MouseButtonEventHandler(OnNavTreeMouseDown), true);
     }
 
@@ -92,13 +92,12 @@ public partial class MainWindow : Window
         // 设置选中项
         vm.SelectedNav = item;
 
-        // 高亮新的
+        // 高亮新的（TreeView 不可见时为 no-op）
         _highlightedItem = item;
         ApplyHighlight(item, true);
 
-        // 更新顶栏
-        TopBarIcon.Text = item.Icon;
-        TopBarTitle.Text = item.Label;
+        // 更新底部状态栏的协议名
+        ProtocolNameText.Text = item.Label;
 
         // 导航页面
         OnNavigate(item);
@@ -176,5 +175,13 @@ public partial class MainWindow : Window
         if (page is INavigablePage navigable)
             navigable.OnNavigatedTo(item.Tag);
         ContentFrame.Navigate(page);
+
+        // H-2: 从 Page 的 DataContext 提取 ProtocolViewModelBase，设为 ActiveViewModel
+        // 这样右侧报文面板和底部状态栏才能绑定到当前协议的数据。
+        if (page is System.Windows.Controls.Page p && p.DataContext is ProtocolViewModelBase vm)
+        {
+            _vm.ActiveViewModel = vm;
+            _vm.StatusBarProtocol = item.Label;
+        }
     }
 }

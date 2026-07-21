@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Nexus.App"
+        xmlns:models="clr-namespace:Nexus.App.Models"
         Icon="pack://application:,,,/Assets/app.ico"
         Title="Nexus — 工控通讯调试工具"
         Width="1440" Height="920" MinWidth="1080" MinHeight="720"
@@ -13,266 +14,487 @@
         FontFamily="{DynamicResource Font.Family}"
         Background="{DynamicResource Brush.Bg}">
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         3-column "industrial IDE" layout
+           Row 0 (48px):  TopBar
+           Row 1 (*):     Left sidebar | Center Frame | Right packet monitor
+           Row 2 (32px):  Bottom status bar
+         ═══════════════════════════════════════════════════════════════ -->
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="32"/>
+        </Grid.RowDefinitions>
 
-        <!-- ═══ 左侧导航栏 ═══ -->
-        <Border Grid.Column="0" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0">
-            <DockPanel>
+        <!-- ═══════════════════════════════════════════════════════════════
+             Row 0 — Top Bar
+             ═══════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="{DynamicResource Brush.Surface}"
+                BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
+            <Grid Margin="14,0">
+                <!-- 左：Logo + 标题 -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="32" Height="32"
+                            Background="{DynamicResource Brush.Accent}" CornerRadius="{DynamicResource Radius.Md}"
+                            Margin="0,0,10,0" VerticalAlignment="Center">
+                        <TextBlock Text="N" FontWeight="Black" FontSize="16"
+                                   Foreground="{DynamicResource Brush.OnAccent}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="NEXUS" FontSize="14" FontWeight="Black"
+                                   Foreground="{DynamicResource Brush.Text}" LineHeight="16"/>
+                        <TextBlock Text="工控通讯库" FontSize="9.5"
+                                   Foreground="{DynamicResource Brush.Text3}" Margin="0,1,0,0"/>
+                    </StackPanel>
+                </StackPanel>
 
-                <!-- ── Logo 区域 ── -->
-                <Border DockPanel.Dock="Top" Padding="14,12,14,10" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
-                    <DockPanel>
-                        <Border DockPanel.Dock="Left" Width="32" Height="32"
-                                Background="{DynamicResource Brush.Accent}" CornerRadius="{DynamicResource Radius.Md}"
-                                Margin="0,0,10,0" VerticalAlignment="Center">
-                            <TextBlock Text="N" FontWeight="Black" FontSize="16"
-                                       Foreground="{DynamicResource Brush.OnAccent}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="NEXUS" FontSize="16" FontWeight="Black"
-                                       Foreground="{DynamicResource Brush.Text}" LineHeight="20"/>
-                            <TextBlock Text="工控通讯库" FontSize="9.5"
-                                       Foreground="{DynamicResource Brush.Text3}" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </DockPanel>
-                </Border>
-
-                <!-- ── 底部状态栏 ── -->
-                <Border DockPanel.Dock="Bottom" Padding="12,8" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
-                    <Grid>
-                        <TextBlock Text="v0.1.0 · MIT" FontSize="10"
-                                   Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center"/>
-                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10">
-                            <Run Text="🛡 " Foreground="{DynamicResource Brush.Ok}"/>
-                            <Run Text="开源免费" Foreground="{DynamicResource Brush.Text3}"/>
-                        </TextBlock>
-                    </Grid>
-                </Border>
-
-                <!-- ── TreeView 分组导航 ── -->
-                <TreeView x:Name="NavTree"
-                          ItemsSource="{Binding NavGroups}"
-                          Background="Transparent" BorderThickness="0"
-                          Padding="6,6,6,6"
-                          Foreground="{DynamicResource Brush.Text}"
-                          VirtualizingStackPanel.IsVirtualizing="False"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                          ScrollViewer.VerticalScrollBarVisibility="Auto">
-
-                    <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="IsExpanded" Value="False"/>
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="Margin" Value="0,0,0,2"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="TreeViewItem">
-                                        <StackPanel>
-                                            <!-- Group header -->
-                                            <Border x:Name="groupBg" Background="Transparent"
-                                                    CornerRadius="{DynamicResource Radius.Sm}" Padding="6,5"
-                                                    Cursor="Hand" Margin="0,0,0,1">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="28"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="16"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <!-- Logo / emoji 图标 -->
-                                                    <Grid Width="28" Height="20">
-                                                        <TextBlock Text="{Binding Icon}" FontSize="13"
-                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                   Visibility="{Binding EmojiVisible}"/>
-                                                        <Image Source="{Binding IconSource}" Stretch="Uniform"
-                                                               Width="22" Height="18"
-                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                               RenderOptions.BitmapScalingMode="HighQuality"
-                                                               Visibility="{Binding LogoVisible}"/>
-                                                    </Grid>
-                                                    <TextBlock Grid.Column="1" Text="{Binding Label}"
-                                                               FontSize="12" FontWeight="SemiBold"
-                                                               Foreground="{DynamicResource Brush.Text3}"
-                                                               VerticalAlignment="Center"/>
-                                                    <!-- Expand/collapse chevron -->
-                                                    <Path x:Name="expander" Grid.Column="2"
-                                                          Data="M 4,0 L 8,4 L 4,8" Stroke="{DynamicResource Brush.Text3}"
-                                                          StrokeThickness="1.5" Fill="Transparent"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                          RenderTransformOrigin="0.5,0.5">
-                                                        <Path.RenderTransform>
-                                                            <RotateTransform x:Name="expanderRotate" Angle="90"/>
-                                                        </Path.RenderTransform>
-                                                    </Path>
-                                                </Grid>
-                                            </Border>
-
-                                            <!-- Children: animated via LayoutTransform ScaleY -->
-                                            <Border x:Name="itemsHost" ClipToBounds="True" Margin="6,0,0,0">
-                                                <StackPanel x:Name="itemsPanel" Opacity="0">
-                                                    <StackPanel.LayoutTransform>
-                                                        <ScaleTransform x:Name="itemsScale" ScaleY="0"/>
-                                                    </StackPanel.LayoutTransform>
-                                                    <ItemsPresenter/>
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
-
-                                        <ControlTemplate.Triggers>
-                                            <!-- ── Collapse animation ── -->
-                                            <Trigger Property="IsExpanded" Value="False">
-                                                <Trigger.EnterActions>
-                                                    <BeginStoryboard>
-                                                        <Storyboard FillBehavior="HoldEnd">
-                                                            <DoubleAnimation Storyboard.TargetName="expanderRotate"
-                                                                             Storyboard.TargetProperty="Angle"
-                                                                             To="0" Duration="0:0:0.25">
-                                                                <DoubleAnimation.EasingFunction>
-                                                                    <CubicEase EasingMode="EaseOut"/>
-                                                                </DoubleAnimation.EasingFunction>
-                                                            </DoubleAnimation>
-                                                            <DoubleAnimation Storyboard.TargetName="itemsScale"
-                                                                             Storyboard.TargetProperty="ScaleY"
-                                                                             To="0" Duration="0:0:0.2">
-                                                                <DoubleAnimation.EasingFunction>
-                                                                    <CubicEase EasingMode="EaseIn"/>
-                                                                </DoubleAnimation.EasingFunction>
-                                                            </DoubleAnimation>
-                                                            <DoubleAnimation Storyboard.TargetName="itemsPanel"
-                                                                             Storyboard.TargetProperty="Opacity"
-                                                                             To="0" Duration="0:0:0.12"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </Trigger.EnterActions>
-                                                <Trigger.ExitActions>
-                                                    <BeginStoryboard>
-                                                        <Storyboard>
-                                                            <DoubleAnimation Storyboard.TargetName="expanderRotate"
-                                                                             Storyboard.TargetProperty="Angle"
-                                                                             To="90" Duration="0:0:0.25">
-                                                                <DoubleAnimation.EasingFunction>
-                                                                    <CubicEase EasingMode="EaseOut"/>
-                                                                </DoubleAnimation.EasingFunction>
-                                                            </DoubleAnimation>
-                                                            <DoubleAnimation Storyboard.TargetName="itemsScale"
-                                                                             Storyboard.TargetProperty="ScaleY"
-                                                                             To="1" Duration="0:0:0.3">
-                                                                <DoubleAnimation.EasingFunction>
-                                                                    <CubicEase EasingMode="EaseOut"/>
-                                                                </DoubleAnimation.EasingFunction>
-                                                            </DoubleAnimation>
-                                                            <DoubleAnimation Storyboard.TargetName="itemsPanel"
-                                                                             Storyboard.TargetProperty="Opacity"
-                                                                             From="0" To="1" Duration="0:0:0.15"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </Trigger.ExitActions>
-                                            </Trigger>
-
-                                            <!-- ── Group header hover ── -->
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="groupBg" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Resources>
-                                <!-- Override child TreeViewItem: flat, no chrome -->
-                                <Style TargetType="TreeViewItem">
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="TreeViewItem">
-                                                <ItemsPresenter/>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Style.Resources>
-                        </Style>
-                    </TreeView.ItemContainerStyle>
-
-                    <!-- Group Header Template (NavGroup) -->
-                    <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate DataType="{x:Type local:NavGroup}" ItemsSource="{Binding Items}">
-                            <ContentPresenter Content="{Binding}"/>
-
-                            <!-- Child item template (NavItem) -->
-                            <HierarchicalDataTemplate.ItemTemplate>
-                                <DataTemplate DataType="{x:Type local:NavItem}">
-                                    <Border x:Name="itemBg" Background="Transparent"
-                                            CornerRadius="{DynamicResource Radius.Sm}" Padding="8,6"
-                                            Margin="0,1" Cursor="Hand">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="24"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Icon}" FontSize="14"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="itemLabel" Grid.Column="1" Text="{Binding Label}" FontSize="13"
-                                                       Foreground="{DynamicResource Brush.Text2}"
-                                                       VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </Border>
-                                    <DataTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="itemBg" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
-                                        </Trigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </HierarchicalDataTemplate.ItemTemplate>
-                        </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-
-                </TreeView>
-
-            </DockPanel>
+                <!-- 右：主题切换 + 设置 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button x:Name="ThemeToggleBtn" Style="{DynamicResource Button.Ghost}"
+                            Padding="10,6" Margin="0,0,6,0" FontSize="14"
+                            ToolTip="切换主题（暂未启用）"
+                            Content="☀"/>
+                    <Button x:Name="SettingsBtn" Style="{DynamicResource Button.Ghost}"
+                            Padding="10,6" FontSize="14"
+                            ToolTip="设置"
+                            Content="⚙"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <!-- ═══ 右侧内容区 ═══ -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- ═══════════════════════════════════════════════════════════════
+             Row 1 — 3-column content area
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="320"/>
+            </Grid.ColumnDefinitions>
 
-            <!-- ── 顶栏 ── -->
-            <Border Grid.Row="0" Padding="16,10" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
-                <Grid>
-                    <!-- 左：当前页信息 -->
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="TopBarIcon" Text="" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TopBarTitle" Text="选择协议开始调试" FontSize="15" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text}" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TopBarSubtitle" Text="" FontSize="12"
-                                   Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center" Margin="12,1,0,0"/>
+            <!-- ── Col 0: 左侧导航栏 ── -->
+            <Border Grid.Column="0" Background="{DynamicResource Brush.Surface}"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0">
+                <DockPanel>
+
+                    <!-- ── 搜索框 ── -->
+                    <Border DockPanel.Dock="Top" Padding="10,10,10,8"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
+                        <TextBox x:Name="NavSearchBox"
+                                 Style="{DynamicResource Input}"
+                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 FontSize="12" MinHeight="32" Padding="8,6"
+                                 ToolTip="搜索协议 / 设备…"/>
+                    </Border>
+
+                    <!-- ── 底部版本信息 ── -->
+                    <Border DockPanel.Dock="Bottom" Padding="12,8"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <TextBlock Text="v0.1.0 · MIT" FontSize="10"
+                                       Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center"/>
+                            <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10">
+                                <Run Text="🛡 " Foreground="{DynamicResource Brush.Ok}"/>
+                                <Run Text="开源免费" Foreground="{DynamicResource Brush.Text3}"/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <!--
+                      ── 导航 TreeView（暂时保留为 fallback，未来替换为图标网格）
+                      隐藏：Visibility="Collapsed"，不影响 code-behind 的事件绑定。
+                    -->
+                    <TreeView x:Name="NavTree"
+                              Visibility="Collapsed"
+                              ItemsSource="{Binding NavGroups}"
+                              Background="Transparent" BorderThickness="0"
+                              Padding="6,6,6,6"
+                              Foreground="{DynamicResource Brush.Text}"
+                              VirtualizingStackPanel.IsVirtualizing="False"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="False"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,0,2"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TreeViewItem">
+                                            <StackPanel>
+                                                <!-- Group header -->
+                                                <Border x:Name="groupBg" Background="Transparent"
+                                                        CornerRadius="{DynamicResource Radius.Sm}" Padding="6,5"
+                                                        Cursor="Hand" Margin="0,0,0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="28"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="16"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Grid Width="28" Height="20">
+                                                            <TextBlock Text="{Binding Icon}" FontSize="13"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       Visibility="{Binding EmojiVisible}"/>
+                                                            <Image Source="{Binding IconSource}" Stretch="Uniform"
+                                                                   Width="22" Height="18"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Visibility="{Binding LogoVisible}"/>
+                                                        </Grid>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                                                   FontSize="12" FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource Brush.Text3}"
+                                                                   VerticalAlignment="Center"/>
+                                                        <Path x:Name="expander" Grid.Column="2"
+                                                              Data="M 4,0 L 8,4 L 4,8" Stroke="{DynamicResource Brush.Text3}"
+                                                              StrokeThickness="1.5" Fill="Transparent"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                              RenderTransformOrigin="0.5,0.5">
+                                                            <Path.RenderTransform>
+                                                                <RotateTransform x:Name="expanderRotate" Angle="90"/>
+                                                            </Path.RenderTransform>
+                                                        </Path>
+                                                    </Grid>
+                                                </Border>
+
+                                                <Border x:Name="itemsHost" ClipToBounds="True" Margin="6,0,0,0">
+                                                    <StackPanel x:Name="itemsPanel" Opacity="0">
+                                                        <StackPanel.LayoutTransform>
+                                                            <ScaleTransform x:Name="itemsScale" ScaleY="0"/>
+                                                        </StackPanel.LayoutTransform>
+                                                        <ItemsPresenter/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsExpanded" Value="False">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard FillBehavior="HoldEnd">
+                                                                <DoubleAnimation Storyboard.TargetName="expanderRotate"
+                                                                                 Storyboard.TargetProperty="Angle"
+                                                                                 To="0" Duration="0:0:0.25">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <CubicEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetName="itemsScale"
+                                                                                 Storyboard.TargetProperty="ScaleY"
+                                                                                 To="0" Duration="0:0:0.2">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <CubicEase EasingMode="EaseIn"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetName="itemsPanel"
+                                                                                 Storyboard.TargetProperty="Opacity"
+                                                                                 To="0" Duration="0:0:0.12"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="expanderRotate"
+                                                                                 Storyboard.TargetProperty="Angle"
+                                                                                 To="90" Duration="0:0:0.25">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <CubicEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetName="itemsScale"
+                                                                                 Storyboard.TargetProperty="ScaleY"
+                                                                                 To="1" Duration="0:0:0.3">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <CubicEase EasingMode="EaseOut"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetName="itemsPanel"
+                                                                                 Storyboard.TargetProperty="Opacity"
+                                                                                 From="0" To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="groupBg" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Resources>
+                                    <Style TargetType="TreeViewItem">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="TreeViewItem">
+                                                    <ItemsPresenter/>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Style.Resources>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate DataType="{x:Type local:NavGroup}" ItemsSource="{Binding Items}">
+                                <ContentPresenter Content="{Binding}"/>
+                                <HierarchicalDataTemplate.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:NavItem}">
+                                        <Border x:Name="itemBg" Background="Transparent"
+                                                CornerRadius="{DynamicResource Radius.Sm}" Padding="8,6"
+                                                Margin="0,1" Cursor="Hand">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="24"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Icon}" FontSize="14"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="itemLabel" Grid.Column="1" Text="{Binding Label}" FontSize="13"
+                                                           Foreground="{DynamicResource Brush.Text2}"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="itemBg" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </HierarchicalDataTemplate.ItemTemplate>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+
+                    <!--
+                      ── 占位提示：图标网格将在下一步实现 ──
+                      NavTree 处于 Collapsed 时给用户一个可见提示，避免空白。
+                    -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="10">
+                        <TextBlock Text="🔍" FontSize="22" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text3}" Opacity="0.5"/>
+                        <TextBlock Text="图标网格导航即将上线" FontSize="10"
+                                   Foreground="{DynamicResource Brush.Text3}" Opacity="0.6"
+                                   HorizontalAlignment="Center" TextAlignment="Center" Margin="0,6,0,0"
+                                   TextWrapping="Wrap"/>
                     </StackPanel>
-                    <!-- 右：状态 -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Source={x:Static local:ThemeManager.CurrentColor}, StringFormat='🎨 {}'}"
-                                   FontSize="11" Foreground="{DynamicResource Brush.Text3}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <TextBlock Text="{Binding Source={x:Static local:ThemeManager.CurrentColor}}"
-                                   FontSize="11" Foreground="{DynamicResource Brush.Text2}" VerticalAlignment="Center" Margin="0,0,20,0"/>
-                        <TextBlock Text="FREE" FontWeight="Black" FontSize="10"
-                                   Foreground="{DynamicResource Brush.OnAccent}" Background="{DynamicResource Brush.Ok}"
-                                   Padding="8,3" Margin="0,0,0,0">
-                            <TextBlock.Resources>
-                                <Style TargetType="TextBlock"/>
-                            </TextBlock.Resources>
-                        </TextBlock>
-                    </StackPanel>
-                </Grid>
+                </DockPanel>
             </Border>
 
-            <!-- ── 内容页容器 ── -->
-            <Frame Grid.Row="1" x:Name="ContentFrame" NavigationUIVisibility="Hidden"/>
+            <!-- ── Col 1: 中心内容 ── -->
+            <Grid Grid.Column="1">
+                <!-- Frame 直接填满；旧的内嵌顶栏已删除，全局顶栏替代它 -->
+                <Frame x:Name="ContentFrame" NavigationUIVisibility="Hidden"/>
+            </Grid>
+
+            <!-- ── Col 2: 右侧实时报文监控面板 ── -->
+            <Border Grid.Column="2" Background="{DynamicResource Brush.Surface}"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 头部：标题 + 暂停按钮 -->
+                    <Border Grid.Row="0" Padding="12,8"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
+                        <Grid>
+                            <TextBlock Text="实时报文" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text}" VerticalAlignment="Center"/>
+                            <Button HorizontalAlignment="Right"
+                                    Style="{DynamicResource Button.Text}"
+                                    FontSize="11" Padding="8,4"
+                                    Command="{Binding ActiveViewModel.PausePacketMonitorCommand, FallbackValue={x:Null}}"
+                                    Content="{Binding ActiveViewModel.IsPacketMonitorPaused, Converter={x:Static local:PauseLabelConverter.Instance}, FallbackValue=⏸}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- 报文列表 -->
+                    <ListBox Grid.Row="1" x:Name="PacketListBox"
+                             Background="Transparent" BorderThickness="0"
+                             Padding="0" Margin="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ItemsSource="{Binding ActiveViewModel.Packets, FallbackValue={x:Null}}">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="row" Background="Transparent"
+                                                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="row" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="row" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:PacketEntry}">
+                                <Grid Margin="8,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- 时间 -->
+                                    <TextBlock Grid.Column="0" Text="{Binding TimeText}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource Brush.Text3}"
+                                               VerticalAlignment="Top"
+                                               Margin="0,0,8,0"/>
+                                    <!-- 方向 -->
+                                    <TextBlock Grid.Column="1" Text="{Binding DirectionText}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               VerticalAlignment="Top"
+                                               Margin="0,0,8,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text2}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTX}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsTX}" Value="False">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Ok}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <!-- Hex 数据 -->
+                                    <TextBlock Grid.Column="2" Text="{Binding HexData}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontSize="10.5"
+                                               Foreground="{DynamicResource Brush.Text2}"
+                                               TextWrapping="NoWrap"
+                                               VerticalAlignment="Top"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- 底部统计面板 -->
+                    <Border Grid.Row="2" Padding="12,10"
+                            Background="{DynamicResource Brush.Surface3}"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 延迟 -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="延迟"
+                                       Style="{DynamicResource Label}" Margin="0,2,12,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right" Margin="0,2">
+                                <Run Text="{Binding ActiveViewModel.LastLatencyMs, FallbackValue=0, StringFormat=F1}"
+                                     FontFamily="Consolas, Cascadia Mono, Courier New"
+                                     Foreground="{DynamicResource Brush.Text}" FontWeight="SemiBold"/>
+                                <Run Text=" ms" Foreground="{DynamicResource Brush.Text3}"/>
+                            </TextBlock>
+
+                            <!-- 成功率 -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="成功率"
+                                       Style="{DynamicResource Label}" Margin="0,2,12,2"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right" Margin="0,2">
+                                <Run Text="{Binding ActiveViewModel.SuccessRateText, FallbackValue=--}"
+                                     FontFamily="Consolas, Cascadia Mono, Courier New"
+                                     Foreground="{DynamicResource Brush.Ok}" FontWeight="SemiBold"/>
+                            </TextBlock>
+
+                            <!-- 收发 -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="收发"
+                                       Style="{DynamicResource Label}" Margin="0,2,12,2"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" HorizontalAlignment="Right" Margin="0,2">
+                                <Run Text="{Binding ActiveViewModel.TotalSent, FallbackValue=0}"
+                                     FontFamily="Consolas, Cascadia Mono, Courier New"
+                                     Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold"/>
+                                <Run Text=" / " Foreground="{DynamicResource Brush.Text3}"/>
+                                <Run Text="{Binding ActiveViewModel.TotalReceived, FallbackValue=0}"
+                                     FontFamily="Consolas, Cascadia Mono, Courier New"
+                                     Foreground="{DynamicResource Brush.Ok}" FontWeight="SemiBold"/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
         </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             Row 2 — 底部状态栏
+             ═══════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" Background="{DynamicResource Brush.Surface3}"
+                BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+            <Grid Margin="12,0">
+                <!-- 左：连接状态 -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8"
+                             Fill="{DynamicResource Brush.Text3}" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="StatusText" Text="未连接"
+                               FontSize="11"
+                               Foreground="{DynamicResource Brush.Text2}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="EndpointText" Text=""
+                               FontSize="11" Margin="12,0,0,0"
+                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                               Foreground="{DynamicResource Brush.Text3}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LatencyText" Text=""
+                               FontSize="11" Margin="12,0,0,0"
+                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                               Foreground="{DynamicResource Brush.Text3}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountersText" Text=""
+                               FontSize="11" Margin="12,0,0,0"
+                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                               Foreground="{DynamicResource Brush.Text3}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- 右：协议 + 版本 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="ProtocolNameText" Text=""
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text2}"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Text="v0.1.0 · MIT"
+                               FontSize="10"
+                               Foreground="{DynamicResource Brush.Text3}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
