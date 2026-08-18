@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23111111'/%3E%3Cpath d='M18 46V18h7l14 18V18h7v28h-7L25 28v18z' fill='white'/%3E%3C/svg%3E" />
+    <title>Nexus — 工控通讯调试工具</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+
+      <!-- ═══ TopBar 48px ═══ -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="logo-badge">N</div>
+          <div class="logo-text"><strong>NEXUS</strong><span>工控通讯库</span></div>
+        </div>
+        <div class="topbar-right">
+        </div>
+      </header>
+
+      <!-- ═══ 3-column content ═══ -->
+      <div class="content-area">
+
+        <!-- ── Sidebar 200px ── -->
+        <aside class="sidebar">
+          <div class="sidebar-search">
+            <input type="text" placeholder="搜索协议 / 设备…" class="input nav-search" />
+          </div>
+          <nav class="sidebar-nav">
+            <div class="nav-group-title">通用工具</div>
+            <button class="nav-item" data-view="interfaces" title="本机网卡 / COM 口 / USB 设备一览,网卡 IP 在线修改">
+              <span class="nav-text"><span class="nav-label">本机接口</span><span class="nav-sub">Interfaces</span></span>
+            </button>
+            <button class="nav-item" data-view="debug" title="串口调试:RS-232 直连 / RS-485 总线 / USB 转换器">
+              <span class="nav-text"><span class="nav-label">串口调试</span><span class="nav-sub">Serial Debug</span></span>
+            </button>
+            <button class="nav-item" data-view="parser" title="离线解析 Modbus / 三菱 MC / 西门子 S7 报文">
+              <span class="nav-text"><span class="nav-label">报文解析</span><span class="nav-sub">Parser</span></span>
+            </button>
+            <div class="nav-group-title">Modbus</div>
+            <button class="nav-item is-active" data-view="master" title="Modbus 主站:网线(TCP/UDP)或 232/485 线(RTU/ASCII)。进入后在页内选择具体传输方式">
+              <span class="nav-text"><span class="nav-label">Modbus 主站</span><span class="nav-sub">Master</span></span>
+            </button>
+            <button class="nav-item" data-view="slave" title="Modbus 从站模拟:网线(TCP)或 232/485 线(RTU)">
+              <span class="nav-text"><span class="nav-label">Modbus 从站</span><span class="nav-sub">Slave</span></span>
+            </button>
+            <div class="nav-group-title">PLC 品牌协议</div>
+            <button class="nav-item" data-view="melsec" title="三菱全协议:MC Binary/ASCII/UDP/1E/C24/FX 串口等,进入后在页内选择具体协议">
+              <span class="nav-text"><span class="nav-label">三菱</span><span class="nav-sub">Mitsubishi</span></span>
+            </button>
+            <button class="nav-item" data-view="siemens" title="西门子全协议:S7comm(S7-200 SMART/300/400/1200/1500)等,进入后在页内选择具体协议">
+              <span class="nav-text"><span class="nav-label">西门子</span><span class="nav-sub">Siemens</span></span>
+            </button>
+            <button class="nav-item" data-view="omron" title="欧姆龙 FINS:CJ/CS/CP 系列以太网(TCP/UDP 9600)">
+              <span class="nav-text"><span class="nav-label">欧姆龙</span><span class="nav-sub">Omron</span></span>
+            </button>
+          </nav>
+          <div class="sidebar-footer">
+            <span>v0.1.0 · MIT</span>
+            <span>🛡 开源免费</span>
+          </div>
+        </aside>
+
+        <!-- ── Main Content ── -->
+        <main class="main-content">
+          <!-- ═══ 主站 ═══ -->
+          <section class="workspace master-workspace" id="workspace">
+            <div class="card transport-card">
+              <div class="card-body">
+                <div class="transport-selector" role="radiogroup">
+                  <label title="RS-232 直连或 RS-485 总线(USB 转 485 亦可)"><input type="radio" name="transport" value="rtu" checked> RTU 串口<span class="wire-hint">(232/485线)</span></label>
+                  <label title="同 RTU 的接线方式,帧格式为 ASCII 文本"><input type="radio" name="transport" value="ascii"> ASCII 串口<span class="wire-hint">(232/485线)</span></label>
+                  <label title="网线直连或经交换机"><input type="radio" name="transport" value="tcp"> TCP<span class="wire-hint">(网线)</span></label>
+                  <label title="网线;UDP 支持广播,可一发多收"><input type="radio" name="transport" value="udp"> UDP<span class="wire-hint">(网线)</span></label>
+                  <label title="网线;PLC 侧需为串口服务器/网关模式"><input type="radio" name="transport" value="rtu-over-tcp"> RTU/TCP<span class="wire-hint">(网线)</span></label>
+                  <label title="网线;PLC 侧需为串口服务器/网关模式"><input type="radio" name="transport" value="ascii-over-tcp"> ASCII/TCP<span class="wire-hint">(网线)</span></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="card connection-pane" data-transport="serial">
+              <div class="card-header"><strong id="connection-title">串口配置</strong></div>
+              <div class="card-body">
+                <form id="serial-form" class="connection-form">
+                  <div class="form-row">
+                    <label class="form-label" for="port-name">串口</label>
+                    <div class="input-with-button">
+                      <select id="port-name" name="portName" class="input" style="width:150px" required><option value="">正在读取串口…</option></select>
+                      <button id="refresh-ports" class="btn-ghost" type="button">刷新</button>
+                    </div>
+                    <span class="field-meta"><span id="port-hint">正在查询</span><span id="port-count">0 个</span></span>
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="baud-rate">波特率</label>
+                    <select id="baud-rate" name="baudRate" class="input" style="width:110px" required><option value="1200">1200</option><option value="2400">2400</option><option value="4800">4800</option><option value="9600" selected>9600</option><option value="19200">19200</option><option value="38400">38400</option><option value="57600">57600</option><option value="115200">115200</option><option value="230400">230400</option></select>
+                    <label class="form-label" for="parity">校验</label>
+                    <select id="parity" name="parity" class="input" style="width:90px"><option value="none" selected>无 (N)</option><option value="even">偶 (E)</option><option value="odd">奇 (O)</option><option value="mark" disabled>Mark</option><option value="space" disabled>Space</option></select>
+                    <label class="form-label" for="data-bits">数据位</label>
+                    <select id="data-bits" name="dataBits" class="input" style="width:65px"><option value="8" selected>8</option><option value="7">7</option><option value="6">6</option><option value="5">5</option></select>
+                    <label class="form-label" for="stop-bits">停止位</label>
+                    <select id="stop-bits" name="stopBits" class="input" style="width:65px"><option value="1" selected>1</option><option value="1.5" disabled>1.5</option><option value="2">2</option></select>
+                    <label class="form-label" for="interface-type">接口</label>
+                    <select id="interface-type" class="input" style="width:110px" title="RS-232 直连全双工;RS-485 半双工总线自动启用 RTS 收发切换">
+                      <option value="rs232" selected>RS-232 直连</option>
+                      <option value="rs485">RS-485 总线</option>
+                      <option value="rs422">RS-422/USB</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="read-timeout">超时(ms)</label>
+                    <input id="read-timeout" name="readTimeoutMs" class="input" style="width:85px" type="number" min="1" max="600000" value="1000" required />
+                    <input id="write-timeout" name="writeTimeoutMs" type="hidden" value="1000" />
+                  </div>
+                  <div class="form-row">
+                    <button class="btn-primary" id="open-port" type="submit">连接</button>
+                    <button class="btn-ghost" id="close-port" type="button" disabled>断开</button>
+                    <span class="status-indicator" id="connection-pill" data-state="closed"><span class="status-dot"></span><span id="connection-label">未连接</span></span>
+                    <span style="margin-left:auto"></span>
+                    <button class="btn-ghost" id="restore-defaults" type="button">恢复默认</button>
+                    <details class="serial-advanced">
+                      <summary class="btn-ghost">高级</summary>
+                      <div class="advanced-popover">
+                        <div class="popover-title">高级参数</div>
+                        <div class="advanced-grid">
+                          <div class="tool-field full"><label for="flow-control">流控</label><select id="flow-control" name="flowControl" class="input"><option value="none" selected>无</option><option value="rts-cts">RTS/CTS</option><option value="xon-xoff">XON/XOFF</option></select></div>
+                          <div class="tool-field"><label for="dtr-mode">DTR</label><select id="dtr-mode" name="dtrMode" class="input"><option value="preserve" selected>保持</option><option value="high">高</option><option value="low">低</option></select></div>
+                          <div class="tool-field"><label for="rts-mode">RTS</label><select id="rts-mode" name="rtsMode" class="input"><option value="preserve" selected>保持</option><option value="high">高</option><option value="low">低</option><option value="auto-toggle">RS-485</option></select></div>
+                        </div>
+                        <p>DTR/RTS 可能触发设备复位。</p>
+                      </div>
+                    </details>
+                  </div>
+                </form>
+                <div class="tcp-pane" id="tcp-pane">
+                  <div class="form-row">
+                    <label class="form-label" for="tcp-host">主机</label>
+                    <input id="tcp-host" class="input" style="width:170px" type="text" value="127.0.0.1" />
+                    <label class="form-label" for="tcp-port">端口</label>
+                    <input id="tcp-port" class="input" style="width:75px" type="number" min="1" max="65535" value="502" />
+                  </div>
+                  <div class="form-row">
+                    <button class="btn-primary" id="connect-tcp" type="button">连接</button>
+                    <button class="btn-ghost" id="disconnect-tcp" type="button" disabled>断开</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <strong>数据读写</strong>
+                <span class="command-state" id="command-state">请先连接</span>
+                <span style="margin-left:auto"></span>
+                <span class="field-meta"><span id="point-count">点位 0</span><span id="error-count">异常 0</span></span>
+              </div>
+              <div class="card-body">
+                <fieldset class="command-fields" id="command-fields" disabled>
+                  <div class="form-row">
+                    <label class="form-label" for="unit-id">站号</label>
+                    <input id="unit-id" class="input" style="width:60px" type="number" min="0" max="247" value="1" required />
+                    <label class="form-label" for="function-code">功能码</label>
+                    <select id="function-code" class="input" style="width:130px"><optgroup label="读"><option value="1">01 读线圈</option><option value="2">02 读离散</option><option value="3" selected>03 读保持</option><option value="4">04 读输入</option></optgroup><optgroup label="写"><option value="5">05 写单线圈</option><option value="6">06 写单寄存器</option><option value="15">15 写多线圈</option><option value="16">16 写多寄存器</option></optgroup></select>
+                    <label class="form-label" for="start-address">地址</label>
+                    <div class="addr-input-group">
+                      <input id="start-address" class="input" style="width:75px" value="0" />
+                      <select id="address-base" class="input" style="width:58px;flex:0 0 58px;padding:0 4px;font-size:12px"><option value="0" selected>0基</option><option value="1">1基</option></select>
+                    </div>
+                    <label class="form-label" for="quantity">数量</label>
+                    <input id="quantity" class="input" style="width:55px" type="number" min="1" max="125" value="1" required />
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="display-type">类型</label>
+                    <select id="display-type" class="input" style="width:120px"><optgroup label="16位"><option value="Unsigned16" selected>UInt16</option><option value="Signed16">Int16</option><option value="Hex16">Hex16</option><option value="Binary16">Binary16</option></optgroup><optgroup label="32位整数"><option value="Unsigned32Be">UInt32 BE</option><option value="Unsigned32Le">UInt32 LE</option><option value="Unsigned32BeSwap">UInt32 BE-Swap</option><option value="Unsigned32LeSwap">UInt32 LE-Swap</option><option value="Signed32Be">Int32 BE</option><option value="Signed32Le">Int32 LE</option><option value="Signed32BeSwap">Int32 BE-Swap</option><option value="Signed32LeSwap">Int32 LE-Swap</option></optgroup><optgroup label="32位浮点"><option value="FloatBe">Float BE</option><option value="FloatLe">Float LE</option><option value="FloatBeSwap">Float BE-Swap</option><option value="FloatLeSwap">Float LE-Swap</option></optgroup><optgroup label="64位"><option value="DoubleBe">Double BE</option><option value="DoubleLe">Double LE</option><option value="DoubleBeSwap">Double BE-Swap</option><option value="DoubleLeSwap">Double LE-Swap</option></optgroup><optgroup label="字符串"><option value="StringAscii">ASCII</option><option value="StringUtf8">UTF-8</option></optgroup><optgroup label="ENRON"><option value="EnronFloat">Enron Float</option><option value="EnronFloatLe">Enron Float LE</option></optgroup></select>
+                    <div class="command-field write-value hidden" id="write-value-field">
+                      <label class="form-label" for="write-value">写入值</label>
+                      <input id="write-value" class="input" style="width:130px" placeholder="如 1 或 1,2,3" />
+                    </div>
+                  </div>
+                  <div class="form-row secondary-params">
+                    <label class="form-label" for="scale-factor">倍率</label>
+                    <input id="scale-factor" class="input" style="width:55px" type="number" step="0.001" value="1" />
+                    <label class="form-label" for="unit-label">单位</label>
+                    <input id="unit-label" class="input" style="width:55px" placeholder="°C" />
+                    <label class="form-label" for="command-timeout">超时</label>
+                    <input id="command-timeout" class="input" style="width:65px" type="number" min="1" max="600000" value="1000" required />
+                    <label class="form-label" for="poll-interval">轮询</label>
+                    <input id="poll-interval" class="input" style="width:65px" type="number" value="1000" min="50" max="60000" />
+                  </div>
+                </fieldset>
+                <div class="form-row action-row">
+                  <button class="btn-primary" id="read-once" type="button" disabled>读取</button>
+                  <button class="btn-ghost" id="start-poll" type="button" disabled>连续轮询</button>
+                  <button class="btn-ghost" id="stop-poll" type="button" disabled>停止</button>
+                  <span style="margin:0 8px"></span>
+                  <button class="btn-danger" id="write-once" type="button" disabled>写入</button>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost scan-action" id="scan-stations" type="button" disabled title="扫描 1-247 站号">扫描站号</button>
+                  <button class="btn-ghost scan-action" id="scan-baud" type="button" disabled title="扫描波特率">扫描波特率</button>
+                </div>
+                <div class="data-grid">
+                  <table>
+                    <thead><tr><th>启用</th><th>名称</th><th>区域</th><th>协议地址</th><th>数据类型</th><th>字节/字序</th><th>倍率</th><th>单位</th><th>当前值</th><th>质量</th><th>更新时间</th></tr></thead>
+                    <tbody id="register-results"><tr class="empty-row"><td colspan="11"><div class="empty-guide">暂无监控点<br/><small>连接后点击"读取"开始监控</small></div></td></tr></tbody>
+                  </table>
+                </div>
+                <div class="form-row" style="margin-top:8px">
+                  <button class="btn-text" id="add-point" type="button">+ 添加点位</button>
+                  <button class="btn-text" id="import-points" type="button">批量导入</button>
+                  <button class="btn-text" id="save-points" type="button">保存点表</button>
+                  <button class="btn-text" id="export-data" type="button">导出数据</button>
+                  <button class="btn-text" id="add-session-tab" type="button">+ 新标签</button>
+                  <div class="session-tabs-bar" id="session-tabs-bar"><button class="session-tab-btn is-active" data-session="default">默认</button></div>
+                  <span style="margin-left:auto"></span>
+                  <span class="stat-mini"><span id="tx-count">TX 0</span><span id="rx-count">RX 0</span><span id="timeout-count">超时 0</span><span id="crc-count">CRC 0</span></span>
+                </div>
+                <details class="cmd-list-panel">
+                  <summary>指令列表 (<span id="cmd-count">0</span> 条)</summary>
+                  <div class="cmd-list-body">
+                    <div class="command-list-toolbar"><button type="button" id="add-cmd" class="btn-ghost" disabled>添加当前</button><button type="button" id="clear-cmd" class="btn-ghost" disabled>清空</button><button type="button" id="execute-cmds" class="btn-primary" disabled>执行全部</button></div>
+                    <table class="cmd-table"><thead><tr><th>#</th><th>FC</th><th>站号</th><th>地址</th><th>数量</th><th>值</th><th>操作</th></tr></thead><tbody id="cmd-rows"></tbody></table>
+                  </div>
+                </details>
+                <details class="cmd-list-panel">
+                  <summary>高级功能 (TCP 专属)</summary>
+                  <div class="cmd-list-body">
+                    <div class="adv-fc-row">
+                      <label class="form-label">功能</label>
+                      <select id="adv-fc-select" class="input" style="width:200px">
+                        <option value="07">07 读异常状态</option>
+                        <option value="08">08 诊断</option>
+                        <option value="11">11 通信事件计数</option>
+                        <option value="12">12 通信事件日志</option>
+                        <option value="17">17 报告从站标识</option>
+                        <option value="22">22 屏蔽写寄存器</option>
+                        <option value="23">23 读写多寄存器</option>
+                        <option value="43">43 读设备标识</option>
+                      </select>
+                      <button class="btn-primary" id="adv-fc-exec" type="button" disabled>执行</button>
+                    </div>
+                    <div class="adv-fc-params" id="adv-fc-params"></div>
+                    <div class="adv-fc-result" id="adv-fc-result"></div>
+                  </div>
+                </details>
+              </div>
+            </div>
+
+            <div class="card trend-card">
+              <div class="card-header">
+                <strong>实时趋势</strong>
+                <span style="margin-left:auto"></span>
+                <select id="trend-point-select" class="input" style="width:160px" aria-label="选择趋势点位"><option value="">选择点位…</option></select>
+                <button class="btn-ghost" id="trend-add" type="button">+ 添加曲线</button>
+                <button class="btn-text" id="trend-clear" type="button">清空</button>
+              </div>
+              <div class="card-body" style="padding:8px">
+                <canvas id="trend-canvas" role="img" aria-label="实时趋势图" style="width:100%;height:220px;display:block"></canvas>
+                <div class="trend-legend" id="trend-legend"></div>
+              </div>
+            </div>
+
+            <div class="card code-card">
+              <div class="card-header">
+                <strong>示例代码</strong>
+                <div class="code-tabs" role="tablist" aria-label="代码语言">
+                  <button class="code-tab is-active" type="button" role="tab" aria-selected="true" data-lang="rust">Rust</button>
+                  <button class="code-tab" type="button" role="tab" aria-selected="false" data-lang="csharp">C#</button>
+                  <button class="code-tab" type="button" role="tab" aria-selected="false" data-lang="python">Python</button>
+                </div>
+                <span style="margin-left:auto"></span>
+                <button class="btn-text" id="code-copy" type="button">复制代码</button>
+              </div>
+              <div class="card-body">
+                <pre class="code-block"><code id="code-sample"></code></pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ═══ 从站 ═══ -->
+          <section class="workspace slave-workspace hidden" id="slave-view">
+            <div class="card">
+              <div class="card-header"><strong>从站配置</strong><span class="section-state" id="slave-state">未启动</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">模式</label><select id="slave-mode" class="input" style="width:230px"><option value="tcp" selected>TCP 监听 (网线)</option><option value="serial">RTU 串口 (232/485线)</option></select>
+                  <div id="slave-tcp-config"><label class="form-label" for="slave-port">端口</label><input id="slave-port" class="input" style="width:85px" type="number" min="1" max="65535" value="5020" /></div>
+                  <label class="form-label" for="slave-stations">允许站号</label><input id="slave-stations" class="input" style="flex:1;min-width:160px" placeholder="如 1,2,3-10(空=全部)" />
+                  <button class="btn-primary" id="slave-start" type="button">启动从站</button>
+                  <button class="btn-ghost" id="slave-stop" type="button" disabled>停止</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>内存区</strong><span style="margin-left:auto"></span>
+                <select id="slave-area" class="input" style="width:120px"><option value="holding">保持寄存器</option><option value="input">输入寄存器</option><option value="coil">线圈</option><option value="discrete">离散输入</option></select>
+                <button class="btn-ghost" id="slave-read-mem" type="button">读取</button>
+                <button class="btn-ghost" id="slave-clear-mem" type="button">清零</button>
+                <button class="btn-ghost" id="slave-fill-random" type="button">随机填充</button>
+              </div>
+              <div class="card-body">
+                <div class="data-grid slave-memory-grid"><table><thead><tr><th>地址</th><th>十六进制</th><th>十进制</th></tr></thead><tbody id="slave-mem-rows"><tr class="empty-row"><td colspan="3">启动后点"读取"</td></tr></tbody></table></div>
+                <div class="form-row" style="margin-top:8px">
+                  <label class="form-label" for="slave-set-addr">地址</label><input id="slave-set-addr" class="input" style="width:85px" type="number" min="0" max="65535" value="0" />
+                  <label class="form-label" for="slave-set-vals">值</label><input id="slave-set-vals" class="input" style="flex:1" placeholder="如 100,200,300" />
+                  <button class="btn-primary" id="slave-set-btn" type="button">写入内存</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ═══ 串口调试 ═══ -->
+          <section class="workspace debug-workspace hidden" id="debug-view">
+            <div class="card">
+              <div class="card-header"><strong>串口调试</strong><span class="field-meta" style="font-size:11px">接线:RS-232 直连 / RS-485 总线 / USB 转 232·485</span><span class="section-state" id="debug-state">原始字节模式</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label><input type="checkbox" id="dbg-allow-rx" checked /> 接收</label>
+                  <label><input type="checkbox" id="dbg-allow-tx" checked /> 发送</label>
+                  <label><input type="checkbox" id="dbg-append-crc" /> 自动CRC</label>
+                  <label class="form-label">帧超时</label><input id="dbg-frame-timeout" class="input" style="width:55px" type="number" value="10" min="1" max="1000" />
+                  <button class="btn-ghost" id="dbg-attach" type="button">绑定串口</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label">模式</label><select id="dbg-send-mode" class="input" style="width:110px"><option value="hex" selected>HEX</option><option value="ascii">ASCII</option><option value="modbus-rtu">Modbus RTU</option></select>
+                  <input id="dbg-input" class="input" style="flex:1" placeholder="01 03 00 00 00 0A" />
+                  <button class="btn-primary" id="dbg-send" type="button">发送</button>
+                  <button class="btn-ghost" id="dbg-clear-input" type="button">清空</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>收发记录</strong><span style="margin-left:auto"></span><button class="btn-text" id="dbg-clear-log" type="button">清空</button></div>
+              <div class="card-body">
+                <div class="data-grid debug-log-grid"><table><thead><tr><th style="width:110px">时间</th><th style="width:35px">方向</th><th>HEX</th><th>解析</th></tr></thead><tbody id="dbg-log-rows"><tr class="empty-row"><td colspan="4">暂无记录</td></tr></tbody></table></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>校验工具</strong></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <input id="dbg-crc-input" class="input" style="flex:1;min-width:250px" placeholder="CRC/LRC 校验输入(HEX)" />
+                  <button class="btn-ghost" id="dbg-calc-crc" type="button">CRC-16</button>
+                  <button class="btn-ghost" id="dbg-calc-lrc" type="button">LRC</button>
+                  <span id="dbg-checksum-result" style="font-family:var(--mono);font-size:12px;color:var(--text-3)"></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ═══ 报文解析 ═══ -->
+          <section class="workspace parser-workspace hidden" id="parser-view">
+            <div class="card">
+              <div class="card-header"><strong>报文解析</strong><span class="section-state">离线工具</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">方式</label><select id="parser-transport" class="input" style="width:110px"><option value="auto" selected>自动</option><option value="rtu">RTU</option><option value="ascii">ASCII</option><option value="tcp">TCP</option></select>
+                  <input id="parser-input" class="input" style="flex:1" placeholder="01 03 00 00 00 0A C5 CD" />
+                  <button class="btn-primary" id="parser-parse" type="button">解析</button>
+                  <button class="btn-ghost" id="parser-clear" type="button">清空</button>
+                </div>
+                <div class="parser-result" id="parser-result"><div class="empty-guide">输入 HEX 后点"解析"</div></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ═══ 三菱 MC ═══ -->
+          <section class="workspace melsec-workspace hidden" id="melsec-view">
+            <div class="card">
+              <div class="card-header"><strong>MC 连接配置</strong><span class="section-state" id="mc-state">未连接</span></div>
+              <div class="card-body">
+                <div class="form-row" id="mc-net-row">
+                  <label class="form-label">主机</label>
+                  <input id="mc-host" class="input" style="width:150px" type="text" value="127.0.0.1" />
+                  <label class="form-label">端口</label>
+                  <input id="mc-port" class="input" style="width:70px" type="number" min="1" max="65535" value="5000" />
+                  <label class="form-label">网络号</label>
+                  <input id="mc-network-no" class="input" style="width:60px" type="number" min="0" max="255" value="0" />
+                  <label class="form-label">PC号</label>
+                  <input id="mc-pc-no" class="input" style="width:70px" value="255" />
+                  <label class="form-label">监视定时器</label>
+                  <input id="mc-watchdog" class="input" style="width:70px" type="number" min="1" value="16" title="单位 250ms" />
+                </div>
+                <div class="form-row hidden" id="mc-serial-row">
+                  <span class="field-meta" style="font-size:12px">串口参数沿用主站页的连接(9600 7E1 为 FX 默认);站号在下方</span>
+                  <label class="form-label">FX 站号</label>
+                  <input id="mc-fx-station" class="input" style="width:55px" type="number" min="0" max="31" value="0" title="FX Computer Link 站号 00-1F(0-31)" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label">协议变体</label>
+                  <select id="mc-frame-type" class="input" style="width:340px">
+                    <optgroup label="以太网(可用)">
+                      <option value="3e">MC Binary 3E (网线,Q/L/iQ-R·iQ-F/FX5U)</option>
+                      <option value="4e">MC Binary 4E (网线,带序列号配对)</option>
+                      <option value="ascii-3e">MC ASCII 3E (网线,文本帧)</option>
+                      <option value="ascii-4e">MC ASCII 4E (网线,文本帧+序列号)</option>
+                      <option value="mc-udp-3e">MC over UDP 3E (网线,无连接)</option>
+                      <option value="mc-udp-4e">MC over UDP 4E (网线,序列号配对)</option>
+                      <option value="mc-1e">A-1E / SLMP-1E (网线,FX3U-ENET/FX5U/A系)</option>
+                    </optgroup>
+                    <optgroup label="串口(可用)">
+                      <option value="mc-c24">MC-C24 串口 3C帧 (Q系列·232/485线)</option>
+                      <option value="fx-links">FX Computer Link (485/232线,FX系列)</option>
+                      <option value="fx-prog">FX 编程口 (USB-SC09/485,FX系列)</option>
+                    </optgroup>
+                    <optgroup label="其他(不支持)">
+                      <option disabled>MELSOFT 私有协议 (TCP 5560,封闭不开源)</option>
+                      <option disabled>CC-Link / CC-Link IE (硬件现场总线)</option>
+                    </optgroup>
+                  </select>
+                  <button class="btn-primary" id="mc-connect" type="button">连接</button>
+                  <button class="btn-ghost" id="mc-disconnect" type="button" disabled>断开</button>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="mc-start-slave" type="button" title="在本机启动 MC 虚拟从站(端口同上),用于无真机测试">启动虚拟从站</button>
+                  <button class="btn-ghost" id="mc-stop-slave" type="button" disabled>停止从站</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>软元件读写</strong><span style="margin-left:auto"></span><span class="field-meta"><span id="mc-hint">地址语法:D100 / M100 / X0 / TS100(位) TN100(字)</span></span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">软元件地址</label>
+                  <input id="mc-address" class="input" style="width:130px" value="D100" placeholder="D100 / M100 / X0" />
+                  <label class="form-label">点数</label>
+                  <input id="mc-points" class="input" style="width:60px" type="number" min="1" max="960" value="2" />
+                  <button class="btn-primary" id="mc-read" type="button" disabled>读取</button>
+                  <button class="btn-ghost" id="mc-write" type="button" disabled>写入</button>
+                  <input id="mc-write-values" class="input" style="flex:1;min-width:140px" placeholder="写入值,逗号分隔(如 100,200 或 1,0,1)" />
+                </div>
+                <div class="data-grid" style="max-height:240px">
+                  <table>
+                    <thead><tr><th style="width:60px">序号</th><th style="width:130px">软元件</th><th style="width:80px">类型</th><th>值(HEX)</th><th>值(DEC)</th></tr></thead>
+                    <tbody id="mc-results"><tr class="empty-row"><td colspan="5"><div class="empty-guide">连接后读取软元件<br/><small>虚拟从站预置: D100=0x1234, D101=0xABCD, M0~M11 交替</small></div></td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>CPU 诊断与控制</strong><span class="section-state" id="mc-diag-state">需要连接</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <button class="btn-ghost" id="mc-read-type" type="button" disabled>读型号</button>
+                  <button class="btn-ghost" id="mc-read-status" type="button" disabled>读状态</button>
+                  <button class="btn-ghost" id="mc-read-clock" type="button" disabled>读时钟</button>
+                  <button class="btn-ghost" id="mc-echo" type="button" disabled title="回送测试(0801):判断链路通断的最快手段">链路自检</button>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="mc-random-read" type="button" disabled title="0403:一次读多个不连续软元件(输入框用逗号分隔)">随机读</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label">随机读地址</label>
+                  <input id="mc-random-addrs" class="input" style="flex:1" placeholder="逗号分隔,如 D100,D200,M0(须同为字或位)" />
+                </div>
+                <div class="parser-result" id="mc-diag-result" style="max-height:140px"></div>
+                <div class="form-row" style="border-top:1px solid var(--line);padding-top:8px">
+                  <span style="color:var(--danger);font-weight:600;font-size:12px">⚠ 远程控制(高危)</span>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="mc-remote-run" type="button" disabled style="color:var(--ok)">RUN</button>
+                  <button class="btn-ghost" id="mc-remote-stop" type="button" disabled style="color:var(--danger)">STOP</button>
+                  <button class="btn-ghost" id="mc-remote-reset" type="button" disabled style="color:var(--danger)">RESET</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ 本机接口体检 ══ -->
+          <section class="workspace interfaces-workspace hidden" id="interfaces-view">
+            <div class="card">
+              <div class="card-header"><strong>网卡</strong><span class="section-state" id="if-net-state">—</span>
+                <span style="margin-left:auto"></span>
+                <button class="btn-ghost" id="if-refresh" type="button">一键刷新</button>
+              </div>
+              <div class="card-body">
+                <div class="data-grid" style="max-height:220px">
+                  <table>
+                    <thead><tr><th style="width:170px">网卡名称</th><th style="width:130px">IPv4 地址</th><th style="width:130px">子网掩码</th><th>IPv6 / MAC</th><th style="width:70px">类型</th></tr></thead>
+                    <tbody id="if-net-rows"><tr class="empty-row"><td colspan="5">刷新中…</td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>COM 口 / USB 转串口适配器</strong><span class="section-state" id="if-com-state">—</span></div>
+              <div class="card-body">
+                <div class="data-grid" style="max-height:260px">
+                  <table>
+                    <thead><tr><th style="width:70px">端口</th><th>设备 / 芯片</th><th style="width:90px">VID:PID</th><th style="width:90px">状态</th><th style="width:200px">典型用法</th></tr></thead>
+                    <tbody id="if-com-rows"><tr class="empty-row"><td colspan="5">刷新中…</td></tr></tbody>
+                  </table>
+                </div>
+                <div class="field-meta" style="margin-top:8px;line-height:1.8">
+                  · USB 转串口适配器常见芯片:CH340/CH341(国产最常见)、CP2102、FT232、PL2303<br/>
+                  · RS-485 适配器插上即出现一个 COM 口;若列表为空,检查驱动是否安装<br/>
+                  · 「已被本软件打开」= 当前正被 Modbus 主站/串口调试占用,需先关闭
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>USB 设备(全部)</strong><span class="section-state" id="if-usb-state">—</span></div>
+              <div class="card-body">
+                <div class="data-grid" style="max-height:260px">
+                  <table>
+                    <thead><tr><th>设备名称</th><th style="width:110px">类型</th><th style="width:90px">VID:PID</th><th style="width:80px">状态</th></tr></thead>
+                    <tbody id="if-usb-rows"><tr class="empty-row"><td colspan="4">刷新中…</td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>网卡 IP 在线修改</strong><span class="section-state" id="if-ip-state">需管理员权限</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">网卡</label>
+                  <select id="if-ip-adapter" class="input" style="width:220px"></select>
+                  <label class="form-label">新 IP</label>
+                  <input id="if-ip-address" class="input" style="width:130px" placeholder="192.168.1.100" />
+                  <label class="form-label">掩码</label>
+                  <input id="if-ip-mask" class="input" style="width:130px" value="255.255.255.0" />
+                  <label class="form-label">网关</label>
+                  <input id="if-ip-gateway" class="input" style="width:130px" placeholder="可空" />
+                  <label class="form-label">DNS</label>
+                  <input id="if-ip-dns" class="input" style="width:130px" placeholder="可空" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="if-ip-apply" type="button">设为静态 IP</button>
+                  <button class="btn-ghost" id="if-ip-dhcp" type="button" title="恢复该网卡的自动获取(DHCP)">恢复自动获取</button>
+                  <span class="field-meta" style="margin-left:auto;align-self:center">现场调试切网段用;改错可用「恢复自动获取」还原</span>
+                </div>
+                <div class="parser-result" id="if-ip-result" style="max-height:90px"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ 西门子 S7 ══ -->
+          <section class="workspace siemens-workspace hidden" id="siemens-view">
+            <div class="card">
+              <div class="card-header"><strong>S7 连接配置</strong><span class="section-state" id="s7-state">未连接</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">协议</label>
+                  <select id="s7-variant" class="input" style="width:360px">
+                    <optgroup label="以太网(可用)">
+                      <option value="s7comm">S7comm · S7-300/400/1200/1500 (网线直连/交换机)</option>
+                      <option value="smart">S7comm · S7-200 SMART (本体网口,V区自动映射DB1)</option>
+                    </optgroup>
+                    <optgroup label="串口/透传(可用)">
+                      <option value="ppi">PPI · S7-200/SMART 经 485 或串口服务器(TCP 透传)</option>
+                      <option disabled>MPI · S7-300/400 编程口(需专用电缆,引导用网关)</option>
+                    </optgroup>
+                    <optgroup label="经典兼容(可用)">
+                      <option value="fw">Fetch/Write · S5 兼容(CP 用户端口,常见 2000)</option>
+                    </optgroup>
+                    <optgroup label="现代通道(可用)">
+                      <option value="webapi">Web API · S7-1500 JSON-RPC over HTTPS(固件≥V2.8,符号寻址)</option>
+                    </optgroup>
+                    <optgroup label="其他">
+                      <option disabled>S7comm-Plus · 新固件 1200/1500(暂不支持,推荐用 S7comm)</option>
+                      <option disabled>PROFINET / PROFIBUS · 硬件实时总线(无法软件实现)</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label class="form-label">型号</label>
+                  <select id="s7-model" class="input" style="width:180px" title="选择型号自动填 rack/slot">
+                    <option value="1200">S7-1200 (rack 0/slot 1)</option>
+                    <option value="1500">S7-1500 (rack 0/slot 1)</option>
+                    <option value="300">S7-300 (rack 0/slot 2)</option>
+                    <option value="400">S7-400 (rack 0/slot 3)</option>
+                    <option value="smart">S7-200 SMART (rack 0/slot 0)</option>
+                    <option value="s7200">S7-200 经 CP243-1 (TSAP 1000/1001)</option>
+                  </select>
+                  <label class="form-label">IP</label>
+                  <input id="s7-host" class="input" style="width:140px" type="text" value="127.0.0.1" />
+                  <label class="form-label">端口</label>
+                  <input id="s7-port" class="input" style="width:64px" type="number" min="1" max="65535" value="102" />
+                  <label class="form-label">Rack</label>
+                  <input id="s7-rack" class="input" style="width:52px" type="number" min="0" max="7" value="0" />
+                  <label class="form-label">Slot</label>
+                  <input id="s7-slot" class="input" style="width:52px" type="number" min="0" max="31" value="1" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="s7-connect" type="button">连接</button>
+                  <button class="btn-ghost" id="s7-disconnect" type="button" disabled>断开</button>
+                  <button class="btn-text" id="s7-checklist" type="button" title="连接失败?按当前型号查看 PLC 侧检查清单">连接检查清单</button>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="s7-start-slave" type="button" title="在本机启动 S7 虚拟 CPU(端口同上),用于无真机测试">启动虚拟CPU</button>
+                  <button class="btn-ghost" id="s7-stop-slave" type="button" disabled>停止</button>
+                </div>
+                <div class="form-row hidden" id="s7-checklist-body" style="display:block;border-top:1px solid var(--line);padding-top:8px">
+                  <div id="s7-checklist-content" class="field-meta" style="line-height:1.9"></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>变量读写</strong><span style="margin-left:auto"></span><span class="field-meta"><span id="s7-hint">地址语法:DB1.DBW20 / M10.3 / IW0 / T5</span></span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">地址</label>
+                  <input id="s7-address" class="input" style="width:150px" value="DB1.DBB0" placeholder="DB1.DBW20 / M10.3 / VW100" />
+                  <label class="form-label">数量</label>
+                  <input id="s7-points" class="input" style="width:60px" type="number" min="1" max="2048" value="4" />
+                  <button class="btn-primary" id="s7-read" type="button" disabled>读取</button>
+                  <button class="btn-ghost" id="s7-write" type="button" disabled>写入</button>
+                  <input id="s7-write-values" class="input" style="flex:1;min-width:140px" placeholder="写入值,字节列表(如 1,2,3,4 或 hex: 12 34 56 78)" />
+                </div>
+                <div class="data-grid" style="max-height:240px">
+                  <table>
+                    <thead><tr><th style="width:60px">序号</th><th style="width:130px">地址</th><th style="width:80px">返回码</th><th>值(HEX)</th><th>值(DEC)</th></tr></thead>
+                    <tbody id="s7-results"><tr class="empty-row"><td colspan="5"><div class="empty-guide">连接后读取变量<br/><small>虚拟 CPU 预置: DB1.DBD0=0x12345678, MW0=0x1234, T0=0x2510</small></div></td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>CPU 诊断与控制</strong><span class="section-state" id="s7-diag-state">需要连接</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <button class="btn-ghost" id="s7-read-status" type="button" disabled>读状态</button>
+                  <button class="btn-ghost" id="s7-pwd-btn" type="button" disabled title="S7-300/400 会话密码(XOR 0x55 链式编码)">登录密码</button>
+                  <input id="s7-pwd-input" class="input" style="width:140px" type="password" placeholder="密码(300/400)" />
+                  <input id="s7-webapi-user" class="input hidden" style="width:110px" placeholder="Web用户名" />
+                  <input id="s7-webapi-pass" class="input hidden" style="width:110px" type="password" placeholder="Web密码" />
+                  <span style="margin-left:auto"></span>
+                </div>
+                <div class="form-row" style="border-top:1px solid var(--line);padding-top:8px">
+                  <span style="color:var(--danger);font-weight:600;font-size:12px">⚠ 远程控制(高危,二次确认)</span>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="s7-hot-start" type="button" disabled style="color:var(--ok)">暖启动</button>
+                  <button class="btn-ghost" id="s7-cold-start" type="button" disabled>冷启动</button>
+                  <button class="btn-ghost" id="s7-stop-cpu" type="button" disabled style="color:var(--danger)">停止CPU</button>
+                </div>
+                <div class="parser-result" id="s7-diag-result" style="max-height:100px"></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>说明</strong></div>
+              <div class="card-body field-meta" style="line-height:1.9">
+                <div>· S7 字节序为<strong>大端</strong>(与三菱 MC 相反),INT/REAL 按大端解码</div>
+                <div>· S7-1200/1500 的 DB 需为<strong>标准(非优化)块</strong>:TIA 中 DB 属性 → 取消勾选「优化的块访问」→ 重新编译下载</div>
+                <div>· S7-200 SMART 的 V 区自动映射 DB1:VB100 = DB1.DBB100、VW100 = DB1.DBW100、V100.3 = DB1.DBX100.3(支持 V 语法直接输入)</div>
+                <div>· 位写为读-改-写,不影响同字节其他位;STRING 类型前 2 字节为最大长度/实际长度头</div>
+                <div>· <strong>Web API</strong>(S7-1500 固件 ≥V2.8):连 HTTPS 443,用 JSON-RPC 符号寻址(可读优化块);选此变体后填 PLC 的 Web 用户名/密码(非 TIA 工程密码)</div>
+                <div>· <strong>Modbus TCP</strong>:S7-1200/1500 固件内置 Modbus server(默认 502),需 TIA 中启用 MB_SERVER 指令;直接切到 Modbus 主站页用网线连接即可</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ 欧姆龙 FINS ══ -->
+          <section class="workspace omron-workspace hidden" id="omron-view">
+            <div class="card">
+              <div class="card-header"><strong>FINS 连接配置</strong><span class="section-state" id="om-state">未连接</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">传输</label>
+                  <select id="om-transport" class="input" style="width:220px">
+                    <option value="tcp">FINS/TCP (网线,CJ/CS/CP 系列)</option>
+                    <option value="udp">FINS/UDP (网线,无连接)</option>
+                  </select>
+                  <label class="form-label">IP</label>
+                  <input id="om-host" class="input" style="width:140px" value="127.0.0.1" />
+                  <label class="form-label">端口</label>
+                  <input id="om-port" class="input" style="width:64px" type="number" value="9600" />
+                  <label class="form-label">目标节点</label>
+                  <input id="om-dest" class="input" style="width:60px" type="number" value="0" title="PLC FINS 节点号(通常=IP 末段)" />
+                  <label class="form-label">本机节点</label>
+                  <input id="om-src" class="input" style="width:60px" type="number" value="0" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="om-connect" type="button">连接</button>
+                  <button class="btn-ghost" id="om-disconnect" type="button" disabled>断开</button>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn-ghost" id="om-start-slave" type="button" title="本机启动虚拟 PLC(FINS TCP+UDP 同端口)">启动虚拟PLC</button>
+                  <button class="btn-ghost" id="om-stop-slave" type="button" disabled>停止</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>软元件读写</strong><span style="margin-left:auto"></span><span class="field-meta"><span id="om-hint">地址:D100 / CIO10.00 / W0 / H50 / T0(TS/CS 查手册)</span></span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label">地址</label>
+                  <input id="om-address" class="input" style="width:150px" value="D100" placeholder="D100 / CIO0.00 / W0" />
+                  <label class="form-label">数量</label>
+                  <input id="om-points" class="input" style="width:60px" type="number" min="1" max="1024" value="2" />
+                  <button class="btn-primary" id="om-read" type="button" disabled>读取</button>
+                  <button class="btn-ghost" id="om-write" type="button" disabled>写入</button>
+                  <input id="om-write-values" class="input" style="flex:1;min-width:140px" placeholder="写入值,逗号分隔(如 100,200 或 1,0,1)" />
+                </div>
+                <div class="data-grid" style="max-height:240px">
+                  <table>
+                    <thead><tr><th style="width:60px">序号</th><th style="width:120px">地址</th><th style="width:80px">类型</th><th>值(HEX)</th><th>值(DEC)</th></tr></thead>
+                    <tbody id="om-results"><tr class="empty-row"><td colspan="5"><div class="empty-guide">连接后读取软元件<br/><small>虚拟 PLC 预置: D100=0x1234, CIO0=0xBEEF, W10=0x55AA, T0=100</small></div></td></tr></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <!-- ── Packet Panel 280px ── -->
+        <aside class="packet-panel">
+          <div class="packet-header">
+            <button class="btn-text" id="toggle-console" title="折叠/展开">▶</button>
+            <strong>实时报文</strong>
+            <span style="margin-left:auto"></span>
+            <button class="btn-text" id="export-trace" type="button" title="导出报文记录">导出</button>
+            <button class="btn-text" id="toggle-sse" type="button" title="启动/停止 SSE 实时推送(供外部看板订阅)">推送</button>
+          </div>
+          <div class="packet-tabs">
+            <button class="console-tab is-active" data-panel="trace">报文 <span id="trace-count">0</span></button>
+            <button class="console-tab" data-panel="scan">扫描 <span id="scan-count">0</span></button>
+            <button class="console-tab" data-panel="alarm">异常 <span id="alarm-count">0</span></button>
+          </div>
+          <div class="packet-search">
+            <input type="text" id="packet-search" placeholder="搜索报文…" class="input" />
+          </div>
+          <div class="packet-list">
+            <div class="console-content is-active" data-console-panel="trace"><table><thead><tr><th>时间</th><th>方向</th><th>站号</th><th>FC</th><th>报文(HEX)</th><th>CRC</th><th>耗时</th><th>结果</th></tr></thead><tbody id="trace-rows"><tr class="empty-row"><td colspan="8">暂无通信记录</td></tr></tbody></table></div>
+            <div class="console-content" data-console-panel="scan" hidden><table><thead><tr><th>站号</th><th>波特率</th><th>格式</th><th>响应</th><th>FC</th><th>状态</th><th>操作</th></tr></thead><tbody id="scan-rows"><tr class="empty-row"><td colspan="7">暂无扫描结果</td></tr></tbody></table></div>
+            <div class="console-content" data-console-panel="alarm" hidden><table><thead><tr><th>时间</th><th>来源</th><th>级别</th><th>错误码</th><th>说明</th><th>建议</th></tr></thead><tbody id="alarm-rows"><tr class="empty-row"><td colspan="6">暂无异常</td></tr></tbody></table></div>
+          </div>
+          <div class="packet-stats">
+            <div class="stat-row"><span>延迟</span><strong id="latency-stat">— ms</strong></div>
+            <div class="stat-row"><span>成功率</span><strong id="success-rate">—</strong></div>
+            <div class="stat-row"><span>收发</span><strong><span id="tx-stat">0</span> / <span id="rx-stat">0</span></strong></div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- ═══ Statusbar 32px ═══ -->
+      <footer class="statusbar">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">未连接</span>
+        <span id="endpoint-text"></span>
+        <span style="margin-left:auto"></span>
+        <span><b>句柄</b><em id="detail-state">未打开</em></span>
+        <span><b>端口</b><em id="detail-port">—</em></span>
+        <span><b>格式</b><em id="detail-format">—</em></span>
+        <span><b>超时</b><em id="detail-timeout">—</em></span>
+        <div class="status-notice" id="notice" data-kind="info" role="status" aria-live="polite"><strong id="notice-title">准备就绪</strong><span id="notice-message">请选择协议并配置连接参数。</span></div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

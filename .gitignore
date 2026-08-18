@@ -1,0 +1,27 @@
+# Build artifacts
+node_modules/
+dist/
+rust-core/target/
+output/
+audit-ui/
+screenshots/
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Electron build
+release/
+.playwright-cli/
+screenshots/
+audit-ui/
+build-icon.png
+icon.ico

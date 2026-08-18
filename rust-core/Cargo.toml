@@ -1,0 +1,20 @@
+[package]
+name = "nexus-rust-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Versioned protocol core sidecar for Nexus 2.0"
+license = "MIT"
+
+[lib]
+name = "nexus_rust_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nexus-rust-core"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
