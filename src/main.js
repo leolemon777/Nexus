@@ -4030,6 +4030,41 @@ async function initialise() {
     });
   }
 
+  // ── 布局面板折叠/展开(侧栏 + 报文面板),localStorage 记忆(2026-08-17 UX 升级) ──
+  const sidebarEl = document.querySelector(".sidebar");
+  const sidebarToggleBtn = document.querySelector("#toggle-sidebar");
+  const packetToggleBtn = document.querySelector("#toggle-packet-panel");
+  const packetPanelEl = document.querySelector(".packet-panel");
+  const LAYOUT_KEY = "nexus-layout-v1";
+  try {
+    const savedLayout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}");
+    if (savedLayout.sidebar) sidebarEl?.classList.add("sidebar-collapsed");
+    if (savedLayout.packet) {
+      packetPanelEl?.classList.add("packet-panel-collapsed");
+      packetPanelEl?.classList.add("collapsed"); // 与 #toggle-console 旧钩子保持同步
+    }
+  } catch { /* localStorage 不可用时忽略,折叠态不记忆 */ }
+  const persistLayout = () => {
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({
+        sidebar: !!sidebarEl?.classList.contains("sidebar-collapsed"),
+        packet: !!packetPanelEl?.classList.contains("packet-panel-collapsed"),
+      }));
+    } catch { /* 忽略写入失败 */ }
+  };
+  sidebarToggleBtn?.addEventListener("click", () => {
+    sidebarEl?.classList.toggle("sidebar-collapsed");
+    persistLayout();
+  });
+  packetToggleBtn?.addEventListener("click", () => {
+    if (!packetPanelEl) return;
+    const willCollapse = !packetPanelEl.classList.contains("packet-panel-collapsed")
+      && !packetPanelEl.classList.contains("collapsed");
+    packetPanelEl.classList.toggle("packet-panel-collapsed", willCollapse);
+    packetPanelEl.classList.toggle("collapsed", willCollapse); // 与旧钩子同步,避免两种 class 状态漂移
+    persistLayout();
+  });
+
   try {
     renderStatus(await callBackend("get_serial_status"));
   } catch (error) {
