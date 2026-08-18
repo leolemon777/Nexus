@@ -672,6 +672,10 @@ fn dispatch(
         "ppi_write" => handle_ppi_write(session, request_id, payload),
         "start_ppi_slave" => handle_start_ppi_slave(session, request_id, payload),
         "stop_ppi_slave" => handle_stop_ppi_slave(session, request_id, payload),
+        "hostlink_build_fins" => handle_hostlink_build_fins(request_id, payload),
+        "hostlink_parse_fins" => handle_hostlink_parse_fins(request_id, payload),
+        "hostlink_build_cmode_read" => handle_hostlink_build_cmode_read(request_id, payload),
+        "hostlink_parse_cmode_read" => handle_hostlink_parse_cmode_read(request_id, payload),
         "uss_build_request" => handle_uss_build_request(request_id, payload),
         "uss_parse_response" => handle_uss_parse_response(request_id, payload),
         "rk512_build_read" => handle_rk512_build_read(request_id, payload),
@@ -857,6 +861,10 @@ fn all_capabilities() -> Vec<&'static str> {
         "ppi_write",
         "start_ppi_slave",
         "stop_ppi_slave",
+        "hostlink_build_fins",
+        "hostlink_parse_fins",
+        "hostlink_build_cmode_read",
+        "hostlink_parse_cmode_read",
         "uss_build_request",
         "uss_parse_response",
         "rk512_build_read",
@@ -3467,12 +3475,14 @@ fn handle_brand_parse_address(request_id: &str, payload: Value) -> CommandOutcom
     };
     let profile = match p.brand.as_str() {
         "delta-es" => crate::brand_profiles::BrandProfile::DeltaDvpEs,
+        "inovance-h3u" => crate::brand_profiles::BrandProfile::InovanceH3u,
+        "inovance-h5u" => crate::brand_profiles::BrandProfile::InovanceH5u,
         other => {
             return failure(
                 Some(request_id.to_string()),
                 CoreError::Modbus {
                     code: "BRAND_UNKNOWN",
-                    message: format!("未知品牌「{other}」(当前支持: delta-es 台达 DVP ES/EX/SS)·汇川/信捷映射待手册确认后加入"),
+                    message: format!("未知品牌「{other}」(当前支持: delta-es / inovance-h3u / inovance-h5u)·汇川/信捷映射待手册确认后加入"),
                     details: None,
                 },
             )
@@ -4307,6 +4317,77 @@ fn handle_stop_ppi_slave(session: &mut Session, request_id: &str, payload: Value
     };
     match session.stop_ppi_slave(&p.slave_id) {
         Ok(()) => success(request_id.to_string(), json!({ "stopped": p.slave_id }), false),
+        Err(e) => failure(Some(request_id.to_string()), e),
+    }
+}
+
+fn handle_hostlink_build_fins(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P { station: u8, #[serde(default)] area: String, #[serde(default)] byte: u32, count: Option<u16> }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    // 构建 FINS 读帧(默认 DM 区)
+    let area_code = if p.area.is_empty() { 0x82 } else {
+        match p.area.as_str() { "DM" | "" => 0x82, "CIO" | "WR" => 0xB0, "HR" => 0xB2, _ => 0x82 }
+    };
+    let count = p.count.unwrap_or(1);
+    let fins = crate::fins_frame::build_read_frame(
+        &crate::fins_frame::FinsNodes::default(), 1,
+        &crate::fins_address::FinsAddress { area_code, address: p.byte, kind: crate::fins_address::FinsKind::Word },
+        count,
+    );
+    let frame = crate::hostlink::build_hostlink_fins(p.station, &fins);
+    success(request_id.to_string(), json!({
+        "frame": frame,
+        "frameText": String::from_utf8_lossy(&frame),
+    }), false)
+}
+
+fn handle_hostlink_parse_fins(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P { frame: Vec<u8> }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::hostlink::parse_hostlink_fins(&p.frame) {
+        Ok(fins) => {
+            let ack = crate::fins_frame::parse_response_frame(&fins)
+                .map_err(|e| CoreError::Modbus { code: "HOSTLINK_FINS_INVALID", message: e.to_string(), details: None });
+            match ack {
+                Ok(resp) => success(request_id.to_string(), json!({ "endCode": resp.end_code, "data": resp.data }), false),
+                Err(e) => failure(Some(request_id.to_string()), e),
+            }
+        }
+        Err(e) => failure(Some(request_id.to_string()), e),
+    }
+}
+
+fn handle_hostlink_build_cmode_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P { station: u8, dmStart: u16, wordCount: u16 }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let frame = crate::hostlink::build_cmode_read_dm(p.station, p.dmStart, p.wordCount);
+    success(request_id.to_string(), json!({
+        "frame": frame,
+        "frameText": String::from_utf8_lossy(&frame),
+    }), false)
+}
+
+fn handle_hostlink_parse_cmode_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P { frame: Vec<u8> }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::hostlink::parse_cmode_read_dm(&p.frame) {
+        Ok(words) => success(request_id.to_string(), json!({ "words": words }), false),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }

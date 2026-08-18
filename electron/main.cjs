@@ -554,6 +554,27 @@ function registerDesktopCommands() {
   // s7-webapi-service.cjs 的 fetch 自带 per-request 超时/AbortSignal,自签证书由 PLC 侧引导用户信任
   const { createS7WebApiService } = require("./s7-webapi-service.cjs");
   const s7WebApi = createS7WebApiService();
+  ipcMain.handle("nexus:export_diagnostics", async () => {
+    const os = require("node:os"); const fs = require("node:fs"); const path = require("node:path");
+    const { app } = require("electron");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const lines = [
+      "Nexus 2.0 诊断报告", "时间: " + new Date().toLocaleString(), "版本: " + app.getVersion(),
+      "系统: " + os.type() + " " + os.arch() + " " + os.release(), "主机: " + os.hostname(),
+      "内存: " + Math.round(os.freemem()/1048576) + "MB 可用 / " + Math.round(os.totalmem()/1048576) + "MB 总计",
+      "运行: " + Math.round(process.uptime()) + "秒", "",
+      "=== Rust Core ===", rustCore ? "运行中" : "未启动",
+      rustCoreLastError ? "错误: " + JSON.stringify(rustCoreLastError) : "无错误", "",
+      "=== 串口 ===", JSON.stringify(serialService.getStatus(), null, 2),
+    ];
+    const desktop = path.join(os.homedir(), "Desktop");
+    const fname = "Nexus诊断_" + ts + ".txt";
+    try {
+      fs.writeFileSync(path.join(desktop, fname), lines.join("\n"), "utf-8");
+      return { ok: true, path: path.join(desktop, fname) };
+    } catch (e) { return { ok: false, message: e.message }; }
+  });
+
   ipcMain.handle("nexus:s7web_connect", (_e, args) => s7WebApi.connect(args || {}));
   ipcMain.handle("nexus:s7web_disconnect", () => s7WebApi.disconnect());
   ipcMain.handle("nexus:s7web_is_connected", () => s7WebApi.isConnected());

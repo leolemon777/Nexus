@@ -1748,13 +1748,18 @@ impl Session {
         let mem_tcp = Arc::clone(&memory);
         let rf_tcp = Arc::clone(&running);
         std::thread::spawn(move || crate::fins_slave::fins_tcp_accept_loop(listener, mem_tcp, rf_tcp));
-        let sock = std::net::UdpSocket::bind(format!("127.0.0.1:{port}")).map_err(|e| {
-            CoreError::Modbus {
-                code: "FINS_SLAVE_BIND_FAILED",
-                message: format!("FINS UDP 绑定端口 {port} 失败:{e}"),
-                details: None,
+        let sock = match std::net::UdpSocket::bind(format!("127.0.0.1:{port}")) {
+            Ok(s) => s,
+            Err(e) => {
+                // #13: UDP 绑定失败时停掉已启动的 TCP 监听线程(防泄漏)
+                *running.lock().unwrap_or_else(|er| er.into_inner()) = false;
+                return Err(CoreError::Modbus {
+                    code: "FINS_SLAVE_BIND_FAILED",
+                    message: format!("FINS UDP 绑定端口 {port} 失败:{e}"),
+                    details: None,
+                });
             }
-        })?;
+        };
         let mem_u = Arc::clone(&memory);
         let rf_u = Arc::clone(&running);
         std::thread::spawn(move || crate::fins_slave::fins_udp_loop(sock, mem_u, rf_u));

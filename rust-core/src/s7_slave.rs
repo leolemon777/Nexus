@@ -295,6 +295,21 @@ fn handle_read(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> V
     if item_count == 0 || item_count > MAX_ITEMS {
         return ack_header(req.pdu_ref, 2, 0, &0x8700u16.to_be_bytes(), &[FUN_READ, item_count as u8]);
     }
+    // #12: 超过协商 PDU 上限 → 0x8500(与真机一致,而非静默返回)
+    let total_data: usize = (2..item_count * 12 + 2).step_by(12)
+        .map(|off| {
+            let ts = req.param.get(off + 3).copied().unwrap_or(0x02);
+            let cnt = u16::from_be_bytes([
+                req.param.get(off + 4).copied().unwrap_or(0),
+                req.param.get(off + 5).copied().unwrap_or(0),
+            ]);
+            match ts { 0x01 => ((cnt as usize) + 7) / 8, _ => cnt as usize * 2 }
+        })
+        .sum();
+    let est_response = 12 + 2 + item_count * (4 + 1) + total_data;
+    if est_response > SLAVE_PDU_LIMIT as usize {
+        return ack_header(req.pdu_ref, 2, 0, &0x8500u16.to_be_bytes(), &[FUN_READ, item_count as u8]);
+    }
     let mut data_sec: Vec<u8> = Vec::new();
     let mut memory = mem.lock().unwrap_or_else(|e| e.into_inner());
     for i in 0..item_count {

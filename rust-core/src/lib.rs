@@ -2,6 +2,7 @@ pub mod brand_profiles;
 pub mod fins_address;
 pub mod fins_frame;
 pub mod fins_slave;
+pub mod hostlink;
 pub mod error;
 pub mod frame_parser;
 pub mod fx_links;

@@ -416,7 +416,11 @@ async function stopPoll() {
 }
 
 /** 点表轮询:把点表合并为批量读取计划,每批发一次事务并更新表格 */
+let pointPollInFlight = false;
 async function pollPointTableTick() {
+  if (pointPollInFlight) return; // #14: 重入保护(上一轮未完成时跳过)
+  pointPollInFlight = true;
+  try {
   if (!isConnected() || pointTable.length === 0) return;
   const updatedAt = clockTime();
   // 1. 合并同站号/同FC/地址连续(或间隙≤0)的点位为批量读取批次
@@ -495,6 +499,9 @@ async function pollPointTableTick() {
         }
       }
     }
+  }
+  } finally {
+    pointPollInFlight = false;
   }
 }
 
@@ -2674,8 +2681,10 @@ async function s7Connect() {
   try {
     const def = S7_MODEL_DEFAULTS[model] || {};
     const r = await callBackend("open_s7_connection", {
-      connectionId: S7_CONN_ID, host, port, rack, slot, connType: 1,
-      localTsap: def.localTsap || null, remoteTsap: def.remoteTsap || null,
+      connectionId: S7_CONN_ID, host, port, rack, slot,
+      connType: Number(document.querySelector("#s7-conn-type")?.value) || 1,
+      localTsap: document.querySelector("#s7-custom-localtsap")?.value?.trim() || def.localTsap || null,
+      remoteTsap: document.querySelector("#s7-custom-remotetsap")?.value?.trim() || def.remoteTsap || null,
     });
     s7Connected = true;
     s7SetState(`已连接 · PDU ${r.pduSize}B`, true);
@@ -2888,6 +2897,10 @@ function initSiemensUi() {
   q("#s7-hot-start", () => s7Control("hot", "暖启动"));
   q("#s7-cold-start", () => s7Control("cold", "冷启动"));
   q("#s7-stop-cpu", () => s7Control("stop", "停止 CPU"));
+  const advBtn = document.querySelector("#s7-advanced-toggle");
+  if (advBtn) advBtn.addEventListener("click", () => {
+    document.querySelector("#s7-advanced-row")?.classList.toggle("hidden");
+  });
   s7ApplyModel();
 }
 
@@ -4031,6 +4044,14 @@ async function initialise() {
   initSiemensUi();
   initOmronUi();
   initInterfacesUi();
+  const diagBtn = document.querySelector("#export-diagnostics");
+  if (diagBtn) diagBtn.addEventListener("click", async () => {
+    try {
+      const r = await callBackend("export_diagnostics");
+      if (r.ok) setNotice("success", "诊断报告已导出", "桌面:" + r.path);
+      else setNotice("error", "导出失败", r.message || "");
+    } catch (e) { setNotice("error", "导出失败", e.message || String(e)); }
+  });
 
   // 示例代码生成:监听传输/串口/TCP/命令字段,变化即重新生成当前页签代码
   const codeWatchSelectors = [

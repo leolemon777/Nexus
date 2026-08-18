@@ -120,6 +120,7 @@ const allowedCommands = new Set([
   "rk512_build_read",
   "rk512_build_write",
   "rk512_parse_response",
+  "export_diagnostics",
   "s7web_connect",
   "s7web_disconnect",
   "s7web_is_connected",

@@ -52,9 +52,14 @@ pub fn parse_sd2(frame: &[u8]) -> Result<(u8, u8, u8, Vec<u8>), CoreError> {
     if frame.len() < 7 || frame[0] != 0x68 {
         return Err(ppi_err("不是 PPI SD2 长帧(起始 0x68 不符)"));
     }
-    // 防御:LE=DA..PDU 字节数,最少需 3(DA+SA+FC);LE<3 → body 不足 3 字节,body[1] 越界
+    // 防御:LE=DA..PDU 字节数,最少需 3(DA+SA+FC);LE<3 → body 不足 3 字节
     if frame[1] < 3 {
         return Err(ppi_err(format!("LE={} 不合法(需 ≥3:DA+SA+FC)", frame[1])));
+    }
+    // #15: PPI 单帧数据量上限 234 字节(u8 LGE 回绕防护);超限需上层分片
+    let total_data = frame[1] as usize - 3;
+    if total_data > 234 + 26 {
+        return Err(ppi_err(format!("PPI 帧数据量 {total_data}B 超上限(单帧 ≤260B;超过请分片)")));
     }
     let le = frame[1] as usize;
     if frame.len() < 4 + le + 2 {
