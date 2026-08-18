@@ -392,14 +392,14 @@
                     <optgroup label="以太网(可用)">
                       <option value="3e">MC Binary 3E (网线,Q/L/iQ-R·iQ-F/FX5U)</option>
                       <option value="4e">MC Binary 4E (网线,带序列号配对)</option>
-                      <option value="ascii-3e">MC ASCII 3E (网线,文本帧)</option>
-                      <option value="ascii-4e">MC ASCII 4E (网线,文本帧+序列号)</option>
+                      <option value="ascii-3e">MC ASCII 3E (网线,端口看 PLC 打开设置·常见 5001)</option>
+                      <option value="ascii-4e">MC ASCII 4E (网线,端口看 PLC 打开设置·常见 5001)</option>
                       <option value="mc-udp-3e">MC over UDP 3E (网线,无连接)</option>
                       <option value="mc-udp-4e">MC over UDP 4E (网线,序列号配对)</option>
-                      <option value="mc-1e">A-1E / SLMP-1E (网线,FX3U-ENET/FX5U/A系)</option>
+                      <option value="mc-1e">A-1E / SLMP-1E (网线,FX5U内置口/A系E71模块/FX3U-ENET模块)</option>
                     </optgroup>
                     <optgroup label="串口(可用)">
-                      <option value="mc-c24">MC-C24 串口 3C帧 (Q系列·232/485线)</option>
+                      <option value="mc-c24">MC-C24 串口 3C帧 (Q系列·RS-232/RS-422/485,看模块型号)</option>
                       <option value="fx-links">FX Computer Link (485/232线,FX系列)</option>
                       <option value="fx-prog">FX 编程口 (USB-SC09/485,FX系列)</option>
                     </optgroup>
@@ -541,14 +541,18 @@
                   <select id="s7-variant" class="input" style="width:360px">
                     <optgroup label="以太网(可用)">
                       <option value="s7comm">S7comm · S7-300/400/1200/1500 (网线直连/交换机)</option>
-                      <option value="smart">S7comm · S7-200 SMART (本体网口,V区自动映射DB1)</option>
+                      <option value="smart">S7comm · S7-200 SMART SR/ST (本体RJ45,CR*s无网口需走PPI)</option>
                     </optgroup>
                     <optgroup label="串口/透传(可用)">
-                      <option value="ppi">PPI · S7-200/SMART 经 485 或串口服务器(TCP 透传)</option>
+                      <option value="ppi">PPI · S7-200/SMART Port0 DB9 (485·9.6k默认;Freeport/Modbus/USS 同口)</option>
                       <option disabled>MPI · S7-300/400 编程口(需专用电缆,引导用网关)</option>
                     </optgroup>
                     <optgroup label="经典兼容(可用)">
-                      <option value="fw">Fetch/Write · S5 兼容(CP 用户端口,常见 2000)</option>
+                      <option value="fw">Fetch/Write · S5 兼容(CP343/443,NetPro 自配端口·勿用102)</option>
+                    </optgroup>
+                    <optgroup label="串口扩展(可用)">
+                      <option value="uss">USS · 变频器 (SINAMICS/MM4/G120,RS-485)</option>
+                      <option value="rk512">3964R/RK512 · S5/CP341-441 (RS-232/485,点对点)</option>
                     </optgroup>
                     <optgroup label="现代通道(可用)">
                       <option value="webapi">Web API · S7-1500 JSON-RPC over HTTPS(固件≥V2.8,符号寻址)</option>
@@ -641,6 +645,10 @@
                 <div>· 位写为读-改-写,不影响同字节其他位;STRING 类型前 2 字节为最大长度/实际长度头</div>
                 <div>· <strong>Web API</strong>(S7-1500 固件 ≥V2.8):连 HTTPS 443,用 JSON-RPC 符号寻址(可读优化块);选此变体后填 PLC 的 Web 用户名/密码(非 TIA 工程密码)</div>
                 <div>· <strong>Modbus TCP</strong>:S7-1200/1500 固件内置 Modbus server(默认 502),需 TIA 中启用 MB_SERVER 指令;直接切到 Modbus 主站页用网线连接即可</div>
+                <div>· <strong>欧姆龙 FINS</strong>:TCP/UDP 端口 9600(不是串口波特率);接本体网口或 CJ1W-ETN21/CS1W-ETN21 模块</div>
+                <div>· <strong>台达 DVP</strong>:老 ES/EX 编程口是 RS-232(Mini-DIN);ES2/EX2 才自带 COM2 RS-485;可扩 DVP-F485</div>
+                <div>· <strong>汇川</strong>:H3U 编程口是 RS-422(Mini-DIN);H5U/AM 本体多为 RS-485;可扩 232/485 BD 模块</div>
+                <div>· <strong>S7-200 SMART</strong>:Port0 只有 RS-485,协议可选 PPI/Freeport/Modbus RTU/USS;CR20s-60s 无网口只能走 PPI</div>
               </div>
             </div>
           </section>
