@@ -3668,10 +3668,33 @@ async function readRegistersOnce() {
   elements.commandState.textContent = `正在执行 ${functionLabel}`;
   setNotice("info", "正在读取", `站号 ${command.unitId}，地址 ${command.startAddress}，数量 ${command.quantity}。`);
   try {
-    const backendCommand = command.functionCode === 4
-      ? "read_input_registers_once"
-      : "read_holding_registers_once";
-    const response = await callBackend(backendCommand, command);
+    const isTcpMode = ["tcp", "rtu-over-tcp", "ascii-over-tcp", "udp"].includes(command.transport);
+    let response;
+    if (isTcpMode) {
+      // TCP/UDP 连接走 tcp_* 命令(Rust 持 socket,不经串口)
+      const tcpCmdMap = { 1: "tcp_read_coils", 2: "tcp_read_discrete_inputs", 3: "tcp_read_holding_registers", 4: "tcp_read_input_registers" };
+      const r = await callBackend(tcpCmdMap[command.functionCode] || "tcp_read_holding_registers", {
+        connectionId: "default",
+        startAddress: command.startAddress,
+        quantity: command.quantity,
+      });
+      // 归一化响应格式(与 *_once 对齐)
+      response = {
+        ok: !r.exceptionCode,
+        registers: r.registers || [],
+        coils: r.coils || [],
+        tx: null, rx: null,
+        elapsedMs: null,
+        crcValid: null,
+        error: r.exceptionCode ? { message: `异常码 ${r.exceptionCode}` } : null,
+      };
+    } else {
+      // 串口走 *_once(Electron 持 COM 口)
+      const backendCommand = command.functionCode === 4
+        ? "read_input_registers_once"
+        : "read_holding_registers_once";
+      response = await callBackend(backendCommand, command);
+    }
     appendTrace({
       direction: "TX",
       unitId: command.unitId,
@@ -3740,14 +3763,34 @@ async function writeRegistersOnce() {
   elements.commandState.textContent = `正在执行 ${functionLabel} 写入`;
   setNotice("info", "正在写入", `站号 ${unitId}，地址 ${address}。`);
   try {
-    const fcMap = {
-      5: "write_single_coil_once",
-      6: "write_single_register_once",
-      15: "write_multiple_coils_once",
-      16: "write_multiple_registers_once",
-    };
-    const backendCommand = fcMap[functionCode];
-    const response = await callBackend(backendCommand, { unitId, address, timeoutMs, transport, ...writePayload });
+    const isTcpMode = ["tcp", "rtu-over-tcp", "ascii-over-tcp", "udp"].includes(transport);
+    let response;
+    if (isTcpMode) {
+      // TCP/UDP 走 tcp_write_*(Rust 持 socket)
+      const tcpWMap = { 5: "tcp_write_single_coil", 6: "tcp_write_single_register", 15: "tcp_write_multiple_coils", 16: "tcp_write_multiple_registers" };
+      const r = await callBackend(tcpWMap[functionCode] || "tcp_write_multiple_registers", {
+        connectionId: "default",
+        address: address,
+        value: writePayload.value,
+        values: writePayload.values,
+      });
+      response = {
+        ok: !r.exceptionCode,
+        tx: null, rx: null,
+        elapsedMs: null,
+        crcValid: null,
+        error: r.exceptionCode ? { message: `异常码 ${r.exceptionCode}` } : null,
+      };
+    } else {
+      // 串口走 *_once
+      const fcMap = {
+        5: "write_single_coil_once",
+        6: "write_single_register_once",
+        15: "write_multiple_coils_once",
+        16: "write_multiple_registers_once",
+      };
+      response = await callBackend(fcMap[functionCode], { unitId, address, timeoutMs, transport, ...writePayload });
+    }
 
     appendTrace({
       direction: "TX",
