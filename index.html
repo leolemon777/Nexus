@@ -300,9 +300,9 @@
               <div class="card-body">
                 <div class="form-row">
                   <label class="form-label">模式</label><select id="slave-mode" class="input" style="width:230px"><option value="tcp" selected>TCP 监听 (网线)</option><option value="serial">RTU 串口 (232/485线)</option></select>
-                  <div id="slave-tcp-config"><label class="form-label" for="slave-port">端口</label><input id="slave-port" class="input" style="width:85px" type="number" min="1" max="65535" value="5020" /></div>
+                  <div id="slave-tcp-config"><label class="form-label" for="slave-port">端口</label><input id="slave-port" class="input" style="width:85px" type="number" min="1" max="65535" value="502" /></div>
                   <label class="form-label" for="slave-stations">允许站号</label><input id="slave-stations" class="input" style="flex:1;min-width:160px" placeholder="如 1,2,3-10(空=全部)" />
-                  <button class="btn-primary" id="slave-start" type="button">启动从站</button>
+                  <button class="btn-primary" id="slave-start" title="启动后本机监听指定端口,Modbus Poll 可连 127.0.0.1:端口" type="button">启动从站</button>
                   <button class="btn-ghost" id="slave-stop" type="button" disabled>停止</button>
                 </div>
               </div>

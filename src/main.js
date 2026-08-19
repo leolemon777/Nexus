@@ -1478,7 +1478,13 @@ async function setSlaveValue() {
       setNotice("error", "参数无效", "请输入至少一个值");
       return;
     }
-    await callBackend("slave_set_value", { slaveId: SLAVE_ID, area, address, values });
+    if (area === "coil" || area === "discrete") {
+      // 线圈/离散输入走 slave_set_coil(布尔值)
+      const bools = values.map((v) => v !== 0);
+      await callBackend("slave_set_coil", { slaveId: SLAVE_ID, area, address, values: bools });
+    } else {
+      await callBackend("slave_set_value", { slaveId: SLAVE_ID, area, address, values });
+    }
     setNotice("success", "已写入", `${area} 地址 ${address} 写入 ${values.length} 个值`);
     await readSlaveMemory();
   } catch (error) {
