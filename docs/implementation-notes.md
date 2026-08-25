@@ -944,3 +944,25 @@
 
 - 串口服务测试 9/9;`npm run test:electron` **309/309 全绿**。
 - Rust 全量 `cargo test` **612/612** 通过(25 个测试目标,含 24 个协议 JSONL e2e:MC 全变体/S7/FINS/FW/PPI/Modbus TCP 均含虚拟从站真实 socket 闭环)。
+
+---
+
+## UX 反馈批次：表单自解释备注（2026-08-25，用户反馈）
+
+> 用户看界面时把「单位」框的占位提示 `°C` 误认为配置值、把「0基」念成"J"——反馈"人家软件就不会这个样子"。定性:占位提示长得像真实值 = 产品缺陷级别的歧义。
+
+### 交付(index.html Modbus 主站页「数据读写」区,纯 title/placeholder,零布局改动)
+
+- `#unit-label` placeholder `°C` → `如℃`(明确是示例),加 title「仅显示标注,如 ℃/kPa;留空则不标注」。
+- `#scale-factor`(倍率)加 title「显示值 = 原始值 × 倍率;仅影响显示,不参与通讯」。
+- `#address-base`(0基/1基)加 title:0基=协议地址从0起 / 1基=手册习惯从1起(40001 风格,发送时自动-1),区域前缀 4xxxx 不要填进地址框;`#start-address` 同步加提示。
+- 超时/轮询加简短 title。
+
+### 验证
+
+- `npm run build` 重建 dist;`npm run test:electron` 309/309;`smoke:electron` UI+ELECTRON 双 OK。
+
+### 后续原则(记入长期记忆)
+
+- 占位提示必须自解释(加「如」前缀或写成完整说明),不得与真实值形态相同。
+- 易混字段(地址基/倍率/单位)一律带 title tooltip;新增表单字段时同批补齐。

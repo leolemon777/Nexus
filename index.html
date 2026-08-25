@@ -267,10 +267,10 @@
                     <input id="unit-id" class="input" style="width:60px" type="number" min="0" max="247" value="1" required />
                     <label class="form-label" for="function-code">功能码</label>
                     <select id="function-code" class="input" style="width:130px"><optgroup label="读"><option value="1">01 读线圈</option><option value="2">02 读离散</option><option value="3" selected>03 读保持</option><option value="4">04 读输入</option></optgroup><optgroup label="写"><option value="5">05 写单线圈</option><option value="6">06 写单寄存器</option><option value="15">15 写多线圈</option><option value="16">16 写多寄存器</option></optgroup></select>
-                    <label class="form-label" for="start-address">地址</label>
+                    <label class="form-label" for="start-address" title="按所选地址基填写的寄存器起始编号">地址</label>
                     <div class="addr-input-group">
-                      <input id="start-address" class="input" style="width:75px" value="0" />
-                      <select id="address-base" class="input" style="width:58px;flex:0 0 58px;padding:0 4px;font-size:12px"><option value="0" selected>0基</option><option value="1">1基</option></select>
+                      <input id="start-address" class="input" style="width:75px" value="0" title="手册给 40001 风格地址时选「1基」填 40001;给纯协议地址(从0起)时选「0基」" />
+                      <select id="address-base" class="input" style="width:58px;flex:0 0 58px;padding:0 4px;font-size:12px" title="0基=协议地址,从0起(第1个保持寄存器填0);1基=手册习惯编号,从1起(40001风格,发送时自动-1)。区域前缀 4xxxx 不要填进地址框"><option value="0" selected>0基</option><option value="1">1基</option></select>
                     </div>
                     <label class="form-label" for="quantity">数量</label>
                     <input id="quantity" class="input" style="width:55px" type="number" min="1" max="125" value="1" required />
@@ -284,13 +284,13 @@
                     </div>
                   </div>
                   <div class="form-row secondary-params">
-                    <label class="form-label" for="scale-factor">倍率</label>
-                    <input id="scale-factor" class="input" style="width:55px" type="number" step="0.001" value="1" />
-                    <label class="form-label" for="unit-label">单位</label>
-                    <input id="unit-label" class="input" style="width:55px" placeholder="°C" />
-                    <label class="form-label" for="command-timeout">超时</label>
+                    <label class="form-label" for="scale-factor" title="显示值 = 原始值 × 倍率;仅影响显示,不参与通讯">倍率</label>
+                    <input id="scale-factor" class="input" style="width:55px" type="number" step="0.001" value="1" title="显示值 = 原始值 × 倍率;仅影响显示,不参与通讯" />
+                    <label class="form-label" for="unit-label" title="仅显示标注(如温度读值标 ℃),不参与通讯">单位</label>
+                    <input id="unit-label" class="input" style="width:55px" placeholder="如℃" title="仅显示标注,如 ℃/kPa;留空则不标注" />
+                    <label class="form-label" for="command-timeout" title="单次请求等待从站响应的最长时间(毫秒)">超时</label>
                     <input id="command-timeout" class="input" style="width:65px" type="number" min="1" max="600000" value="1000" required />
-                    <label class="form-label" for="poll-interval">轮询</label>
+                    <label class="form-label" for="poll-interval" title="连续轮询的间隔(毫秒)">轮询</label>
                     <input id="poll-interval" class="input" style="width:65px" type="number" value="1000" min="50" max="60000" />
                   </div>
                 </fieldset>
