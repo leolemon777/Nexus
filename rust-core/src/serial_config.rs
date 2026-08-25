@@ -64,7 +64,10 @@ impl SerialConfig {
         if !matches!(self.dtr_mode.as_str(), "preserve" | "high" | "low") {
             return Err(invalid("dtrMode", "DTR 控制模式无效"));
         }
-        if !matches!(self.rts_mode.as_str(), "preserve" | "high" | "low" | "auto-toggle") {
+        if !matches!(
+            self.rts_mode.as_str(),
+            "preserve" | "high" | "low" | "auto-toggle"
+        ) {
             return Err(invalid("rtsMode", "RTS 控制模式无效"));
         }
         if self.flow_control == "rts-cts" && self.rts_mode != "preserve" {

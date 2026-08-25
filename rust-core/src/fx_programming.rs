@@ -78,16 +78,16 @@ pub fn fx_prog_checksum(bytes: &[u8]) -> u8 {
 /// 读/写命令(CMD 0/1)组基地址表(§3.3.4 表一)。
 fn rw_base(device: &str) -> Option<u16> {
     match device {
-        "X" => Some(0x0080),  // X → 80H(X17(=15dec) → 9EH)
-        "Y" => Some(0x00A0),  // Y → A0H
-        "M" => Some(0x0100),  // M → 100H(M100 → 1C8H)
-        "S" => Some(0x0000),  // S → 0H
-        "T" => Some(0x00C0),  // T 触点 → C0H
-        "C" => Some(0x01C0),  // C 触点 → 1C0H
-        "TN" => Some(0x0800), // T 当前值 → 800H
-        "CN" => Some(0x0A00), // C 当前值(16 位) → A00H
+        "X" => Some(0x0080),    // X → 80H(X17(=15dec) → 9EH)
+        "Y" => Some(0x00A0),    // Y → A0H
+        "M" => Some(0x0100),    // M → 100H(M100 → 1C8H)
+        "S" => Some(0x0000),    // S → 0H
+        "T" => Some(0x00C0),    // T 触点 → C0H
+        "C" => Some(0x01C0),    // C 触点 → 1C0H
+        "TN" => Some(0x0800),   // T 当前值 → 800H
+        "CN" => Some(0x0A00),   // C 当前值(16 位) → A00H
         "CN32" => Some(0x0C00), // C 当前值(32 位,C200 起) → C00H
-        "D" => Some(0x1000),  // D → 1000H(D123 → 10F6H)
+        "D" => Some(0x1000),    // D → 1000H(D123 → 10F6H)
         _ => None,
     }
 }
@@ -117,7 +117,7 @@ pub fn fx_prog_rw_address(device: &str, number: u32) -> Result<u16, CoreError> {
             return Err(err(
                 "FX_PROG_NUMBER_INVALID",
                 "CN32 的编号从 C200 起(0~199 请用 CN)".into(),
-            ))
+            ));
         }
         "CN32" => 0x0C00 + (number - 200) * 4,
         other => {
@@ -159,11 +159,18 @@ pub fn fx_prog_force_address(device: &str, number: u32) -> Result<u16, CoreError
 /// 解析用户输入的软元件编号:X/Y 按八进制(§3.3.4「X/Y 为八进制→按十进制值计算」),其余十进制。
 pub fn fx_prog_parse_number(device: &str, number: &str) -> Result<u32, CoreError> {
     let device = device.to_ascii_uppercase();
-    let radix = if device == "X" || device == "Y" { 8 } else { 10 };
+    let radix = if device == "X" || device == "Y" {
+        8
+    } else {
+        10
+    };
     u32::from_str_radix(number.trim(), radix).map_err(|_| {
         err(
             "FX_PROG_NUMBER_INVALID",
-            format!("「{number}」不是合法的软元件编号({device} 为 {} 进制)", if radix == 8 { "八" } else { "十" }),
+            format!(
+                "「{number}」不是合法的软元件编号({device} 为 {} 进制)",
+                if radix == 8 { "八" } else { "十" }
+            ),
         )
     })
 }
@@ -171,13 +178,23 @@ pub fn fx_prog_parse_number(device: &str, number: &str) -> Result<u32, CoreError
 /// 地址 4 字符,高位字符在前(§3.3.4:读/写命令,如 10F6H → "10F6")
 fn addr_chars_high_first(address: u16) -> [u8; 4] {
     let chars = format!("{address:04X}");
-    [chars.as_bytes()[0], chars.as_bytes()[1], chars.as_bytes()[2], chars.as_bytes()[3]]
+    [
+        chars.as_bytes()[0],
+        chars.as_bytes()[1],
+        chars.as_bytes()[2],
+        chars.as_bytes()[3],
+    ]
 }
 
 /// 地址 4 字符,低位字符在前(§3.3.4:强制命令,如 80CH → "C008")
 fn addr_chars_low_first(address: u16) -> [u8; 4] {
     let chars = format!("{address:04X}");
-    [chars.as_bytes()[3], chars.as_bytes()[2], chars.as_bytes()[1], chars.as_bytes()[0]]
+    [
+        chars.as_bytes()[3],
+        chars.as_bytes()[2],
+        chars.as_bytes()[1],
+        chars.as_bytes()[0],
+    ]
 }
 
 /// 追加 ETX + 和校验(CMD ~ ETX 累加)收尾。
@@ -224,11 +241,7 @@ pub fn build_fx_prog_read_bytes(
 ///
 /// 文档 §3.3.5(1) 示例:读 D123 起 4 字节 →
 /// `build_fx_prog_read("D", 123, 2)` == `02 30 31 30 46 36 30 34 03 37 34`。
-pub fn build_fx_prog_read(
-    device: &str,
-    number: u32,
-    words: u16,
-) -> Result<Vec<u8>, CoreError> {
+pub fn build_fx_prog_read(device: &str, number: u32, words: u16) -> Result<Vec<u8>, CoreError> {
     if words == 0 || words > 0x7F {
         return Err(err(
             "FX_PROG_WORDS_INVALID",
@@ -270,10 +283,7 @@ pub fn build_fx_prog_write(
     values: &[u16],
 ) -> Result<Vec<u8>, CoreError> {
     if values.is_empty() || values.len() > 0x7F {
-        return Err(err(
-            "FX_PROG_WORDS_INVALID",
-            "写入字数须在 1~127".into(),
-        ));
+        return Err(err("FX_PROG_WORDS_INVALID", "写入字数须在 1~127".into()));
     }
     let mut raw = Vec::with_capacity(values.len() * 2);
     for value in values {
@@ -314,7 +324,10 @@ pub enum FxProgResponse {
 /// 解析 PLC 响应:STX 数据(含和校验验证)/ ACK / NAK 错误码。
 pub fn parse_fx_prog_response(bytes: &[u8]) -> Result<FxProgResponse, CoreError> {
     let Some(&first) = bytes.first() else {
-        return Err(err("FX_PROG_RESPONSE_EMPTY", "响应帧为空(PLC 无应答?)".into()));
+        return Err(err(
+            "FX_PROG_RESPONSE_EMPTY",
+            "响应帧为空(PLC 无应答?)".into(),
+        ));
     };
     match first {
         ACK => Ok(FxProgResponse::Ack),
@@ -342,7 +355,7 @@ fn parse_stx_data(bytes: &[u8]) -> Result<FxProgResponse, CoreError> {
             return Err(err(
                 "FX_PROG_ETX_MISSING",
                 "STX 响应缺少 ETX(03H) 终止符".into(),
-            ))
+            ));
         }
     };
     if etx < 2 {
@@ -351,9 +364,8 @@ fn parse_stx_data(bytes: &[u8]) -> Result<FxProgResponse, CoreError> {
     if bytes.len() < etx + 3 {
         return Err(err("FX_PROG_SUM_MISSING", "ETX 后缺少 2 字符和校验".into()));
     }
-    let received = parse_two_hex(bytes[etx + 1], bytes[etx + 2]).ok_or_else(|| {
-        err("FX_PROG_SUM_MALFORMED", "和校验字符不是 ASCII hex".into())
-    })?;
+    let received = parse_two_hex(bytes[etx + 1], bytes[etx + 2])
+        .ok_or_else(|| err("FX_PROG_SUM_MALFORMED", "和校验字符不是 ASCII hex".into()))?;
     let expected = fx_prog_checksum(&bytes[1..=etx]);
     if received != expected {
         return Err(err(
@@ -374,12 +386,10 @@ pub fn decode_fx_prog_word_data(chars: &[u8]) -> Result<Vec<u16>, CoreError> {
     }
     let mut words = Vec::with_capacity(chars.len() / 4);
     for chunk in chars.chunks_exact(4) {
-        let low = parse_two_hex(chunk[0], chunk[1]).ok_or_else(|| {
-            err("FX_PROG_DATA_MALFORMED", "数据字符不是 ASCII hex".into())
-        })?;
-        let high = parse_two_hex(chunk[2], chunk[3]).ok_or_else(|| {
-            err("FX_PROG_DATA_MALFORMED", "数据字符不是 ASCII hex".into())
-        })?;
+        let low = parse_two_hex(chunk[0], chunk[1])
+            .ok_or_else(|| err("FX_PROG_DATA_MALFORMED", "数据字符不是 ASCII hex".into()))?;
+        let high = parse_two_hex(chunk[2], chunk[3])
+            .ok_or_else(|| err("FX_PROG_DATA_MALFORMED", "数据字符不是 ASCII hex".into()))?;
         words.push(u16::from(high) << 8 | u16::from(low));
     }
     Ok(words)
@@ -420,7 +430,9 @@ mod tests {
         let frame = build_fx_prog_read_by_address(MODEL_TYPE_ADDRESS, 2).unwrap();
         assert_eq!(
             frame,
-            vec![0x02, 0x30, 0x30, 0x45, 0x30, 0x32, 0x30, 0x32, 0x03, 0x36, 0x43]
+            vec![
+                0x02, 0x30, 0x30, 0x45, 0x30, 0x32, 0x30, 0x32, 0x03, 0x36, 0x43
+            ]
         );
     }
 
@@ -484,7 +496,10 @@ mod tests {
         // 完整帧(手算 SUM = 0x221 → "21")
         assert_eq!(
             frame,
-            vec![0x02, 0x31, 0x31, 0x30, 0x30, 0x30, 0x30, 0x32, 0x33, 0x34, 0x31, 0x32, 0x03, 0x32, 0x31]
+            vec![
+                0x02, 0x31, 0x31, 0x30, 0x30, 0x30, 0x30, 0x32, 0x33, 0x34, 0x31, 0x32, 0x03, 0x32,
+                0x31
+            ]
         );
     }
 
@@ -559,7 +574,10 @@ mod tests {
     /// ACK(写成功)与 NAK(失败,错误码 1 字节 / 裸 NAK)
     #[test]
     fn parse_ack_and_nak() {
-        assert_eq!(parse_fx_prog_response(&[0x06]).unwrap(), FxProgResponse::Ack);
+        assert_eq!(
+            parse_fx_prog_response(&[0x06]).unwrap(),
+            FxProgResponse::Ack
+        );
         assert_eq!(
             parse_fx_prog_response(&[0x15, 0x06]).unwrap(),
             FxProgResponse::Nak {

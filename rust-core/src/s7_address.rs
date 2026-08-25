@@ -143,7 +143,12 @@ impl S7Address {
             _ if self.area == area::DB => {
                 format!("DB{}.DB{}{}", self.db, width_letter(self.kind), self.byte)
             }
-            _ => format!("{}{}{}", area_letter(self.area), width_letter(self.kind), self.byte),
+            _ => format!(
+                "{}{}{}",
+                area_letter(self.area),
+                width_letter(self.kind),
+                self.byte
+            ),
         }
     }
 }
@@ -241,7 +246,11 @@ pub fn parse_s7_address(input: &str) -> Result<S7Address, CoreError> {
     }
 
     // --- M/I/Q 区:[M|I|Q]m.b / [M|I|Q][B|W|D]m ---
-    for (prefix, code) in [("M", area::MARKERS), ("I", area::INPUTS), ("Q", area::OUTPUTS)] {
+    for (prefix, code) in [
+        ("M", area::MARKERS),
+        ("I", area::INPUTS),
+        ("Q", area::OUTPUTS),
+    ] {
         if let Some(rest) = upper.strip_prefix(prefix) {
             if rest.starts_with(|c: char| c.is_ascii_digit() || c == 'B' || c == 'W' || c == 'D') {
                 return parse_member(rest, code, 0, s);
@@ -255,13 +264,23 @@ pub fn parse_s7_address(input: &str) -> Result<S7Address, CoreError> {
             return parse_member(rest, area::SYS_FLAGS_SM, 0, s);
         }
     }
-    for (prefix, code) in [("AIW", area::ANALOG_INPUT_AI), ("AI", area::ANALOG_INPUT_AI),
-                           ("AQW", area::ANALOG_OUTPUT_AQ), ("AQ", area::ANALOG_OUTPUT_AQ)] {
+    for (prefix, code) in [
+        ("AIW", area::ANALOG_INPUT_AI),
+        ("AI", area::ANALOG_INPUT_AI),
+        ("AQW", area::ANALOG_OUTPUT_AQ),
+        ("AQ", area::ANALOG_OUTPUT_AQ),
+    ] {
         if let Some(rest) = upper.strip_prefix(prefix) {
             if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
                 // 模拟量仅支持字访问(AIW0/AQW4;带宽度字母的 AIW 是语法噪声,直接按字)
                 let n = parse_u32(rest, 0xFFFFF, s)?;
-                return Ok(S7Address { area: code, db: 0, byte: n, bit: 0, kind: S7Kind::Word });
+                return Ok(S7Address {
+                    area: code,
+                    db: 0,
+                    byte: n,
+                    bit: 0,
+                    kind: S7Kind::Word,
+                });
             }
         }
     }
@@ -274,7 +293,13 @@ pub fn parse_s7_address(input: &str) -> Result<S7Address, CoreError> {
         if let Some(rest) = upper.strip_prefix(prefix) {
             if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
                 let num = parse_u32(rest, 65535, s)?;
-                return Ok(S7Address { area: code, db: 0, byte: num, bit: 0, kind });
+                return Ok(S7Address {
+                    area: code,
+                    db: 0,
+                    byte: num,
+                    bit: 0,
+                    kind,
+                });
             }
         }
     }
@@ -285,7 +310,12 @@ pub fn parse_s7_address(input: &str) -> Result<S7Address, CoreError> {
 }
 
 /// 解析区前缀之后的成员部分:`[B|W|D]数字[.位]` 或 `数字[.位]`。
-fn parse_member(tail: &str, area_code: u8, db: u16, original: &str) -> Result<S7Address, CoreError> {
+fn parse_member(
+    tail: &str,
+    area_code: u8,
+    db: u16,
+    original: &str,
+) -> Result<S7Address, CoreError> {
     // 宽度字母(可缺省 → 位访问)
     let (kind, num_part) = if let Some(rest) = tail.strip_prefix('B') {
         (S7Kind::Byte, rest)
@@ -302,32 +332,49 @@ fn parse_member(tail: &str, area_code: u8, db: u16, original: &str) -> Result<S7
         None => (num_part, None),
     };
     if num_str.is_empty() || !num_str.chars().all(|c| c.is_ascii_digit()) {
-        return Err(invalid(&format!("「{original}」地址编号「{num_str}」不合法(应为十进制数字)")));
+        return Err(invalid(&format!(
+            "「{original}」地址编号「{num_str}」不合法(应为十进制数字)"
+        )));
     }
     let byte = parse_u32(num_str, 0xFFFFF, original)?;
 
     // 位后缀:仅位访问合法(字/双字带位后缀是语法错误)
     let bit = match bit_str {
         Some(b) if kind == S7Kind::Bit => {
-            if b.len() != 1 || !b.chars().all(|c| c.is_ascii_digit()) || b.parse::<u8>().unwrap() > 7 {
-                return Err(invalid(&format!("「{original}」位偏移「{b}」不合法(应为 0-7)")));
+            if b.len() != 1
+                || !b.chars().all(|c| c.is_ascii_digit())
+                || b.parse::<u8>().unwrap() > 7
+            {
+                return Err(invalid(&format!(
+                    "「{original}」位偏移「{b}」不合法(应为 0-7)"
+                )));
             }
             b.parse::<u8>().unwrap()
         }
-        Some(_) => return Err(invalid(&format!("「{original}」字节/字/双字访问不能带位后缀"))),
+        Some(_) => {
+            return Err(invalid(&format!(
+                "「{original}」字节/字/双字访问不能带位后缀"
+            )));
+        }
         None => 0,
     };
 
-    Ok(S7Address { area: area_code, db, byte, bit, kind })
+    Ok(S7Address {
+        area: area_code,
+        db,
+        byte,
+        bit,
+        kind,
+    })
 }
 
 fn parse_u32(s: &str, max: u32, original: &str) -> Result<u32, CoreError> {
     match s.parse::<u32>() {
         Ok(v) if v <= max => Ok(v),
-        Ok(v) => Err(invalid(&format!(
-            "「{original}」编号 {v} 超出上限 {max}"
+        Ok(v) => Err(invalid(&format!("「{original}」编号 {v} 超出上限 {max}"))),
+        Err(_) => Err(invalid(&format!(
+            "「{original}」编号「{s}」不是合法十进制数"
         ))),
-        Err(_) => Err(invalid(&format!("「{original}」编号「{s}」不是合法十进制数"))),
     }
 }
 
@@ -351,9 +398,15 @@ mod tests {
         assert_eq!(d.kind, S7Kind::Dword);
 
         // 文档 §3.4b:M10.0 → Address = 0x000050(10×8=80)
-        assert_eq!(parse_s7_address("M10.0").unwrap().encode_any_address(), [0x00, 0x00, 0x50]);
+        assert_eq!(
+            parse_s7_address("M10.0").unwrap().encode_any_address(),
+            [0x00, 0x00, 0x50]
+        );
         // M10.3 → 0x000053
-        assert_eq!(parse_s7_address("M10.3").unwrap().encode_any_address(), [0x00, 0x00, 0x53]);
+        assert_eq!(
+            parse_s7_address("M10.3").unwrap().encode_any_address(),
+            [0x00, 0x00, 0x53]
+        );
     }
 
     #[test]
@@ -396,13 +449,19 @@ mod tests {
     #[test]
     fn smart_v_area_maps_to_db1() {
         let b = parse_s7_address("VB100").unwrap();
-        assert_eq!((b.area, b.db, b.kind, b.byte), (area::DB, 1, S7Kind::Byte, 100));
+        assert_eq!(
+            (b.area, b.db, b.kind, b.byte),
+            (area::DB, 1, S7Kind::Byte, 100)
+        );
         let w = parse_s7_address("VW100").unwrap();
         assert_eq!((w.area, w.db, w.kind), (area::DB, 1, S7Kind::Word));
         let d = parse_s7_address("VD100").unwrap();
         assert_eq!(d.kind, S7Kind::Dword);
         let x = parse_s7_address("V100.3").unwrap();
-        assert_eq!((x.area, x.db, x.kind, x.byte, x.bit), (area::DB, 1, S7Kind::Bit, 100, 3));
+        assert_eq!(
+            (x.area, x.db, x.kind, x.byte, x.bit),
+            (area::DB, 1, S7Kind::Bit, 100, 3)
+        );
         let bare = parse_s7_address("V100").unwrap();
         assert_eq!(bare.kind, S7Kind::Bit);
     }
@@ -422,7 +481,10 @@ mod tests {
     #[test]
     fn parses_peripheral_area() {
         let w = parse_s7_address("PIW256").unwrap();
-        assert_eq!((w.area, w.kind, w.byte), (area::PERIPHERAL, S7Kind::Word, 256));
+        assert_eq!(
+            (w.area, w.kind, w.byte),
+            (area::PERIPHERAL, S7Kind::Word, 256)
+        );
         let d = parse_s7_address("PQD256").unwrap();
         assert_eq!((d.area, d.kind), (area::PERIPHERAL, S7Kind::Dword));
         // PI/PQ 无宽度字母 → 位访问(P10.0)也允许(宽容)
@@ -472,7 +534,9 @@ mod tests {
 
     #[test]
     fn rejects_bad_input() {
-        for bad in ["", "X10", "M", "DB1", "DB1.ZZ", "M1.9", "MW10.3", "D", "V", "T", "PIW", "DBX0.0"] {
+        for bad in [
+            "", "X10", "M", "DB1", "DB1.ZZ", "M1.9", "MW10.3", "D", "V", "T", "PIW", "DBX0.0",
+        ] {
             assert!(parse_s7_address(bad).is_err(), "应拒绝「{bad}」");
         }
     }
@@ -493,9 +557,23 @@ mod tests {
 
     #[test]
     fn display_roundtrip() {
-        for input in ["M10.3", "MB0", "MW10", "MD10", "DB1.DBX0.0", "DB5.DBD30", "T5", "C12", "IB0"] {
+        for input in [
+            "M10.3",
+            "MB0",
+            "MW10",
+            "MD10",
+            "DB1.DBX0.0",
+            "DB5.DBD30",
+            "T5",
+            "C12",
+            "IB0",
+        ] {
             let a = parse_s7_address(input).unwrap();
-            assert_eq!(a.display(), input.to_ascii_uppercase(), "display 应与输入一致");
+            assert_eq!(
+                a.display(),
+                input.to_ascii_uppercase(),
+                "display 应与输入一致"
+            );
         }
         // SMART V 地址显示为 DB 形式
         assert_eq!(parse_s7_address("VW100").unwrap().display(), "DB1.DBW100");

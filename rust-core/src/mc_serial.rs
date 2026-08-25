@@ -81,7 +81,9 @@ pub fn mc_serial_checksum_ascii(bytes: &[u8]) -> u8 {
 
 /// 和校验(格式3):16 位累加和(小端 2 字节附加在帧尾)。
 fn checksum_u16(bytes: &[u8]) -> u16 {
-    bytes.iter().fold(0u16, |acc, byte| acc.wrapping_add(u16::from(*byte)))
+    bytes
+        .iter()
+        .fold(0u16, |acc, byte| acc.wrapping_add(u16::from(*byte)))
 }
 
 /// 构建 3C/4C 串口请求帧。
@@ -164,7 +166,10 @@ pub fn parse_mc_serial_3c_response(
             if frame.len() < 5 {
                 return Err(err(
                     "MC_SERIAL_FRAME_TOO_SHORT",
-                    format!("格式1 响应 {} 字节,短于最小 5(站号2+ETX1+和校验2)", frame.len()),
+                    format!(
+                        "格式1 响应 {} 字节,短于最小 5(站号2+ETX1+和校验2)",
+                        frame.len()
+                    ),
                 ));
             }
             let etx_idx = frame.len() - 3;
@@ -177,7 +182,10 @@ pub fn parse_mc_serial_3c_response(
             let station = parse_two_hex(frame[0], frame[1]).ok_or_else(|| {
                 err(
                     "MC_SERIAL_BAD_HEX",
-                    format!("站号「{}」不是合法 ASCII hex", String::from_utf8_lossy(&frame[0..2])),
+                    format!(
+                        "站号「{}」不是合法 ASCII hex",
+                        String::from_utf8_lossy(&frame[0..2])
+                    ),
                 )
             })?;
             let ascii = &frame[2..etx_idx];
@@ -192,19 +200,23 @@ pub fn parse_mc_serial_3c_response(
                 app.push(parse_two_hex(pair[0], pair[1]).ok_or_else(|| {
                     err(
                         "MC_SERIAL_BAD_HEX",
-                        format!("报文体含非 ASCII hex 字符「{}」", String::from_utf8_lossy(pair)),
+                        format!(
+                            "报文体含非 ASCII hex 字符「{}」",
+                            String::from_utf8_lossy(pair)
+                        ),
                     )
                 })?);
             }
-            let expect = parse_two_hex(frame[etx_idx + 1], frame[etx_idx + 2]).ok_or_else(|| {
-                err(
-                    "MC_SERIAL_BAD_HEX",
-                    format!(
-                        "和校验「{}」不是合法 ASCII hex",
-                        String::from_utf8_lossy(&frame[etx_idx + 1..etx_idx + 3])
-                    ),
-                )
-            })?;
+            let expect =
+                parse_two_hex(frame[etx_idx + 1], frame[etx_idx + 2]).ok_or_else(|| {
+                    err(
+                        "MC_SERIAL_BAD_HEX",
+                        format!(
+                            "和校验「{}」不是合法 ASCII hex",
+                            String::from_utf8_lossy(&frame[etx_idx + 1..etx_idx + 3])
+                        ),
+                    )
+                })?;
             let actual = mc_serial_checksum_ascii(&frame[..=etx_idx]);
             if expect != actual {
                 return Err(err(
@@ -219,7 +231,10 @@ pub fn parse_mc_serial_3c_response(
             if bytes.len() < 4 {
                 return Err(err(
                     "MC_SERIAL_FRAME_TOO_SHORT",
-                    format!("格式3 响应 {} 字节,短于最小 4(站号1+ETX1+和校验2)", bytes.len()),
+                    format!(
+                        "格式3 响应 {} 字节,短于最小 4(站号1+ETX1+和校验2)",
+                        bytes.len()
+                    ),
                 ));
             }
             let etx_idx = bytes.len() - 3;
@@ -234,7 +249,9 @@ pub fn parse_mc_serial_3c_response(
             if expect != actual {
                 return Err(err(
                     "MC_SERIAL_CHECKSUM_MISMATCH",
-                    format!("和校验不符:收到 {expect:04X},计算 {actual:04X}(范围=站号~ETX 16位累加)"),
+                    format!(
+                        "和校验不符:收到 {expect:04X},计算 {actual:04X}(范围=站号~ETX 16位累加)"
+                    ),
                 ));
             }
             Ok((bytes[0], bytes[1..etx_idx].to_vec()))
@@ -282,24 +299,32 @@ mod tests {
         expected.push(LF);
         assert_eq!(frame, expected);
         // 独立复核校验范围(站号首字符~ETX 含)
-        assert_eq!(mc_serial_checksum_ascii(b"0001040100640000A80100\x03"), 0x4D);
+        assert_eq!(
+            mc_serial_checksum_ascii(b"0001040100640000A80100\x03"),
+            0x4D
+        );
     }
 
     /// 格式3 二进制构造向量(手算 16 位累加和):
     /// 0x00(站号)+ 0x113(报文体 10 字节)+ 0x03(ETX) = 0x116 → LE `16 01`
     #[test]
     fn format3_build_matches_hand_computed_checksum() {
-        let frame = build_mc_serial_3c(0x00, McSerialFormat::Format3Binary, &APP_READ_D100).unwrap();
+        let frame =
+            build_mc_serial_3c(0x00, McSerialFormat::Format3Binary, &APP_READ_D100).unwrap();
         assert_eq!(
             frame,
-            [0x00, 0x01, 0x04, 0x01, 0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00, 0x03, 0x16, 0x01]
+            [
+                0x00, 0x01, 0x04, 0x01, 0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00, 0x03, 0x16, 0x01
+            ]
         );
     }
 
     /// 格式4:站号 + 报文体二进制 + CR LF,无 ETX 无校验
     #[test]
     fn format4_build_layout() {
-        let frame = build_mc_serial_3c(0x05, McSerialFormat::Format4BinaryNoChecksum, &[0xAA, 0x55]).unwrap();
+        let frame =
+            build_mc_serial_3c(0x05, McSerialFormat::Format4BinaryNoChecksum, &[0xAA, 0x55])
+                .unwrap();
         assert_eq!(frame, [0x05, 0xAA, 0x55, CR, LF]);
     }
 
@@ -330,7 +355,8 @@ mod tests {
 
         let resp_app: Vec<u8> = vec![0x00, 0x00, 0x34, 0x12]; // 结束代码 + 数据
         let resp_frame = build_mc_serial_3c(0x00, McSerialFormat::Format1Ascii, &resp_app).unwrap();
-        let (_station, app_out) = parse_mc_serial_3c_response(&resp_frame, McSerialFormat::Format1Ascii).unwrap();
+        let (_station, app_out) =
+            parse_mc_serial_3c_response(&resp_frame, McSerialFormat::Format1Ascii).unwrap();
         let words = crate::mc_pdu::parse_read_batch_response(&app_out[2..], 1, false).unwrap();
         assert_eq!(words, vec![0x1234]);
     }
@@ -338,7 +364,8 @@ mod tests {
     /// 格式1 校验错误检出:篡改报文体一个字符
     #[test]
     fn format1_detects_checksum_mismatch() {
-        let mut frame = build_mc_serial_3c(0x00, McSerialFormat::Format1Ascii, &APP_READ_D100).unwrap();
+        let mut frame =
+            build_mc_serial_3c(0x00, McSerialFormat::Format1Ascii, &APP_READ_D100).unwrap();
         frame[3] ^= 0x01; // 篡改报文体首字节的一个半字符
         let e = parse_mc_serial_3c_response(&frame, McSerialFormat::Format1Ascii).unwrap_err();
         assert_eq!(e.body().code, "MC_SERIAL_CHECKSUM_MISMATCH");
@@ -347,7 +374,8 @@ mod tests {
     /// 格式3 校验错误检出:篡改校验字节
     #[test]
     fn format3_detects_checksum_mismatch() {
-        let mut frame = build_mc_serial_3c(0x00, McSerialFormat::Format3Binary, &APP_READ_D100).unwrap();
+        let mut frame =
+            build_mc_serial_3c(0x00, McSerialFormat::Format3Binary, &APP_READ_D100).unwrap();
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         let e = parse_mc_serial_3c_response(&frame, McSerialFormat::Format3Binary).unwrap_err();
@@ -372,17 +400,28 @@ mod tests {
     fn parse_rejects_too_short_and_missing_etx() {
         let e = parse_mc_serial_3c_response(b"00", McSerialFormat::Format1Ascii).unwrap_err();
         assert_eq!(e.body().code, "MC_SERIAL_FRAME_TOO_SHORT");
-        let e = parse_mc_serial_3c_response(&[0x00, 0x01, 0x02, 0x03], McSerialFormat::Format3Binary).unwrap_err();
+        let e =
+            parse_mc_serial_3c_response(&[0x00, 0x01, 0x02, 0x03], McSerialFormat::Format3Binary)
+                .unwrap_err();
         assert_eq!(e.body().code, "MC_SERIAL_ETX_MISSING");
     }
 
     /// 格式1 宽容:尾部 CR/LF 可缺省(抓包工具剥离场景)
     #[test]
     fn format1_tolerates_missing_crlf() {
-        let mut frame = build_mc_serial_3c(0x00, McSerialFormat::Format1Ascii, &[0x00, 0x00, 0x34, 0x12]).unwrap();
+        let mut frame = build_mc_serial_3c(
+            0x00,
+            McSerialFormat::Format1Ascii,
+            &[0x00, 0x00, 0x34, 0x12],
+        )
+        .unwrap();
         frame.truncate(frame.len() - 2); // 去掉 CR LF
-        let (station, app) = parse_mc_serial_3c_response(&frame, McSerialFormat::Format1Ascii).unwrap();
-        assert_eq!((station, app.as_slice()), (0x00, &[0x00, 0x00, 0x34, 0x12][..]));
+        let (station, app) =
+            parse_mc_serial_3c_response(&frame, McSerialFormat::Format1Ascii).unwrap();
+        assert_eq!(
+            (station, app.as_slice()),
+            (0x00, &[0x00, 0x00, 0x34, 0x12][..])
+        );
     }
 
     /// 格式1 站号用 ASCII hex 表示:站号 0x0A → "0A"

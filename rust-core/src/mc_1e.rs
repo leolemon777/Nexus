@@ -90,7 +90,7 @@ fn validate_cmd_device(cmd: u8, device: &str) -> Result<([u8; 2], bool), CoreErr
             return Err(err(
                 "MC_1E_CMD_UNKNOWN",
                 format!("命令字节 {other:#04X} 不是 1E 命令(仅 00 位读/01 字读/02 位写/03 字写)"),
-            ))
+            ));
         }
     };
     if cmd_is_bit != is_bit {
@@ -100,7 +100,11 @@ fn validate_cmd_device(cmd: u8, device: &str) -> Result<([u8; 2], bool), CoreErr
                 "命令 {cmd:#04X} 是{}命令,但软元件 {device} 是{}元件{}",
                 if cmd_is_bit { "位" } else { "字" },
                 if is_bit { "位" } else { "字" },
-                if is_bit { "(触点用 TS/CS、当前值用 TN/CN)" } else { "" },
+                if is_bit {
+                    "(触点用 TS/CS、当前值用 TN/CN)"
+                } else {
+                    ""
+                },
             ),
         ));
     }
@@ -153,7 +157,11 @@ pub fn build_1e_write(
     watchdog: u16,
 ) -> Result<Vec<u8>, CoreError> {
     let (code, is_bit) = validate_cmd_device(cmd, device)?;
-    let count: usize = if is_bit { values_bits.len() } else { values_words.len() };
+    let count: usize = if is_bit {
+        values_bits.len()
+    } else {
+        values_words.len()
+    };
     if count == 0 {
         return Err(err("MC_1E_EMPTY_VALUES", "写入数据不能为空".into()));
     }
@@ -234,7 +242,10 @@ pub fn parse_1e_response(bytes: &[u8], cmd: u8, points: u16) -> Result<OneERespo
         } else {
             None
         };
-        return Ok(OneEResponse::Error { code: end_code, detail });
+        return Ok(OneEResponse::Error {
+            code: end_code,
+            detail,
+        });
     }
     match cmd {
         CMD1E_BIT_READ => {
@@ -242,7 +253,12 @@ pub fn parse_1e_response(bytes: &[u8], cmd: u8, points: u16) -> Result<OneERespo
             if bytes.len() < 2 + nbytes {
                 return Err(err(
                     "MC_1E_RESPONSE_TOO_SHORT",
-                    format!("位读响应 {} 字节,{} 点需 {} 字节", bytes.len(), points, 2 + nbytes),
+                    format!(
+                        "位读响应 {} 字节,{} 点需 {} 字节",
+                        bytes.len(),
+                        points,
+                        2 + nbytes
+                    ),
                 ));
             }
             // bit i → 第 i/8 字节的第 i%8 位(等价于第 i/16 组 LE u16 的第 i%16 位)
@@ -256,7 +272,12 @@ pub fn parse_1e_response(bytes: &[u8], cmd: u8, points: u16) -> Result<OneERespo
             if bytes.len() < 2 + need {
                 return Err(err(
                     "MC_1E_RESPONSE_TOO_SHORT",
-                    format!("字读响应 {} 字节,{} 字需 {} 字节", bytes.len(), points, 2 + need),
+                    format!(
+                        "字读响应 {} 字节,{} 字需 {} 字节",
+                        bytes.len(),
+                        points,
+                        2 + need
+                    ),
                 ));
             }
             let words = (0..points as usize)
@@ -293,24 +314,36 @@ mod tests {
     #[test]
     fn word_read_matches_doc_vector() {
         let frame = build_1e_read(CMD1E_WORD_READ, "D", 100, 12, 10).unwrap();
-        assert_eq!(frame, [0x01, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x0C, 0x00]);
+        assert_eq!(
+            frame,
+            [
+                0x01, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x0C, 0x00
+            ]
+        );
     }
 
     /// 位读布局:命令 00 + M(4D 2A)+ 点数 2B LE
     #[test]
     fn bit_read_layout() {
         let frame = build_1e_read(CMD1E_BIT_READ, "M", 100, 8, 10).unwrap();
-        assert_eq!(frame, [0x00, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x4D, 0x2A, 0x08, 0x00]);
+        assert_eq!(
+            frame,
+            [
+                0x00, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x4D, 0x2A, 0x08, 0x00
+            ]
+        );
     }
 
     /// 字写:数据每字 2 字节小端
     #[test]
     fn word_write_little_endian_data() {
-        let frame =
-            build_1e_write(CMD1E_WORD_WRITE, "D", 100, &[0x1234, 0xABCD], &[], 10).unwrap();
+        let frame = build_1e_write(CMD1E_WORD_WRITE, "D", 100, &[0x1234, 0xABCD], &[], 10).unwrap();
         assert_eq!(
             frame,
-            [0x03, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x02, 0x00, 0x34, 0x12, 0xCD, 0xAB]
+            [
+                0x03, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x02, 0x00, 0x34, 0x12,
+                0xCD, 0xAB
+            ]
         );
     }
 
@@ -318,8 +351,17 @@ mod tests {
     #[test]
     fn bit_write_packs_16_points_per_2_bytes() {
         let frame = build_1e_write(CMD1E_BIT_WRITE, "M", 0, &[], &[true, false, true], 10).unwrap();
-        assert_eq!(&frame[..12], &[0x02, 0xFF, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0x2A, 0x03, 0x00]);
-        assert_eq!(&frame[12..], &[0x05, 0x00], "3 点占用 1 组 2 字节,bit0+bit2 → 05 00");
+        assert_eq!(
+            &frame[..12],
+            &[
+                0x02, 0xFF, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0x2A, 0x03, 0x00
+            ]
+        );
+        assert_eq!(
+            &frame[12..],
+            &[0x05, 0x00],
+            "3 点占用 1 组 2 字节,bit0+bit2 → 05 00"
+        );
     }
 
     /// 位写打包:16 点 → 2 字节(bit0/bit8/bit15)
@@ -330,7 +372,11 @@ mod tests {
         bits[8] = true;
         bits[15] = true;
         let frame = build_1e_write(CMD1E_BIT_WRITE, "Y", 0, &[], &bits, 10).unwrap();
-        assert_eq!(&frame[12..], &[0x01, 0x81], "bit0→低字节01,bit8+bit15→高字节81");
+        assert_eq!(
+            &frame[12..],
+            &[0x01, 0x81],
+            "bit0→低字节01,bit8+bit15→高字节81"
+        );
     }
 
     /// 软元件代号 ASCII 映射("D"→D*、"TN"→TN、大小写不敏感、未知拒绝)
@@ -378,7 +424,8 @@ mod tests {
     /// 字读响应:81 00 + 每字小端
     #[test]
     fn parse_word_response() {
-        let resp = parse_1e_response(&[0x81, 0x00, 0x34, 0x12, 0xCD, 0xAB], CMD1E_WORD_READ, 2).unwrap();
+        let resp =
+            parse_1e_response(&[0x81, 0x00, 0x34, 0x12, 0xCD, 0xAB], CMD1E_WORD_READ, 2).unwrap();
         assert_eq!(resp, OneEResponse::Words(vec![0x1234, 0xABCD]));
     }
 
@@ -414,7 +461,13 @@ mod tests {
     #[test]
     fn parse_error_5b_with_detail() {
         let resp = parse_1e_response(&[0x81, 0x5B, 0x11, 0x00], CMD1E_WORD_READ, 1).unwrap();
-        assert_eq!(resp, OneEResponse::Error { code: 0x5B, detail: Some(0x11) });
+        assert_eq!(
+            resp,
+            OneEResponse::Error {
+                code: 0x5B,
+                detail: Some(0x11)
+            }
+        );
         assert!(onee_error_message(0x5B, Some(0x11)).contains("软元件代码"));
         assert!(onee_error_message(0x5B, Some(0x10)).contains("软元件编号"));
         assert!(onee_error_message(0x5B, Some(0x12)).contains("点数"));
@@ -424,7 +477,13 @@ mod tests {
     #[test]
     fn parse_error_without_detail() {
         let resp = parse_1e_response(&[0x81, 0x50], CMD1E_WORD_READ, 1).unwrap();
-        assert_eq!(resp, OneEResponse::Error { code: 0x50, detail: None });
+        assert_eq!(
+            resp,
+            OneEResponse::Error {
+                code: 0x50,
+                detail: None
+            }
+        );
         assert!(onee_error_message(0x50, None).contains("50H~60H"));
     }
 

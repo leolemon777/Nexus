@@ -18,9 +18,14 @@ use crate::error::CoreError;
 
 pub const STX: u8 = 0x02;
 pub const MIN_FRAME_LEN: usize = 4 + 4 + 2; // STX + LGE + ADR + PKE(2) + IND(2) + PZD(0) + BCC
+pub const USS_MAX_PZD_BYTES: usize = 8;
 
 fn uss_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "USS_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "USS_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// BCC:从 STX 到最后一个 PZD 字节的 XOR。
@@ -56,17 +61,34 @@ pub fn parse_uss_response(frame: &[u8]) -> Result<(u8, [u8; 2], [u8; 2], Vec<u8>
         return Err(uss_err(format!("帧过短({}B,需 ≥8)", frame.len())));
     }
     if frame[0] != STX && frame[0] != 0x03 {
-        return Err(uss_err(format!("起始字节 0x{:02X}(期望 0x02/0x03)", frame[0])));
+        return Err(uss_err(format!(
+            "起始字节 0x{:02X}(期望 0x02/0x03)",
+            frame[0]
+        )));
+    }
+    if frame[2] & 0x80 == 0 {
+        return Err(uss_err("USS 响应 ADR 未置应答位"));
+    }
+    if frame[2] & 0x7F > 30 {
+        return Err(uss_err(format!(
+            "USS 响应站号 {} 超出 0..30",
+            frame[2] & 0x7F
+        )));
     }
     let lge = frame[1] as usize;
     let expected = 2 + lge + 1; // STX + LGE + (ADR..PZD=lge 字节) + BCC
     if frame.len() != expected {
-        return Err(uss_err(format!("帧长不匹配:LGE={lge} 声明总长 {expected},实际 {}", frame.len())));
+        return Err(uss_err(format!(
+            "帧长不匹配:LGE={lge} 声明总长 {expected},实际 {}",
+            frame.len()
+        )));
     }
     let checksum = frame[frame.len() - 1];
     let calc = bcc(&frame[..frame.len() - 1]);
     if checksum != calc {
-        return Err(uss_err(format!("BCC 校验失败:帧内 0x{checksum:02X},计算 0x{calc:02X}")));
+        return Err(uss_err(format!(
+            "BCC 校验失败:帧内 0x{checksum:02X},计算 0x{calc:02X}"
+        )));
     }
     let station = frame[2] & 0x7F;
     let pke = [frame[3], frame[4]];
@@ -79,12 +101,18 @@ pub fn parse_uss_response(frame: &[u8]) -> Result<(u8, [u8; 2], [u8; 2], Vec<u8>
 
 /// 读参数 Pxxxx 的 PKE( AK=1 Read Request )。
 pub fn pke_read(param: u16) -> [u8; 2] {
-    [(0x01 << 4) | ((param >> 8) as u8 & 0x0F), (param & 0xFF) as u8]
+    [
+        (0x01 << 4) | ((param >> 8) as u8 & 0x0F),
+        (param & 0xFF) as u8,
+    ]
 }
 
 /// 写参数 Pxxxx = value 的 PKE( AK=2 Write Request,16 位值放 IND )。
 pub fn pke_write_16(param: u16, value: u16) -> ([u8; 2], [u8; 2]) {
-    let pke = [(0x02 << 4) | ((param >> 8) as u8 & 0x0F), (param & 0xFF) as u8];
+    let pke = [
+        (0x02 << 4) | ((param >> 8) as u8 & 0x0F),
+        (param & 0xFF) as u8,
+    ];
     let ind = value.to_be_bytes();
     (pke, ind)
 }
@@ -128,9 +156,13 @@ mod tests {
         assert_eq!(req[0], STX);
         assert_eq!(req[1], 1 + 2 + 2 + 4); // LGE=9
         assert_eq!(req[2], 1); // 站 1
-        // 解析应答:站 1,PKE=0x1B_BC(AK=1 应答=0x10? 用 0x10 表示 16 位参数值)
-        let resp = build_uss_request(1, [0x1B, 0xBC], [0, 0], &[0x00, 0x06, 0x00, 0x00]);
-        let (st, pke, ind, pzd) = parse_uss_response(&resp).unwrap();
+        // 构造变频器应答:主机请求构建器保留 ADR bit7=0,响应必须置
+        // ADR=0x81 并按 STX..PZD 重算 BCC 后才能进入响应解析器。
+        let mut resp = build_uss_request(1, [0x1B, 0xBC], [0, 0], &[0x00, 0x06, 0x00, 0x00]);
+        resp[2] |= 0x80;
+        let last = resp.len() - 1;
+        resp[last] = bcc(&resp[..last]);
+        let (st, pke, _ind, pzd) = parse_uss_response(&resp).unwrap();
         assert_eq!(st, 1);
         assert_eq!(pke[1], 0xBC); // PNU=700 低字节
         assert_eq!(pzd, vec![0x00, 0x06, 0x00, 0x00]);
@@ -167,5 +199,29 @@ mod tests {
         let mut bad = req.clone();
         bad[1] = 0xFF;
         assert!(parse_uss_response(&bad).is_err());
+    }
+
+    #[test]
+    fn response_golden_vector_for_p700() {
+        // 站 1、P700 应答(16 位值 0x0006 + 0x0000)，BCC 为 STX..PZD 的 XOR=0x2B。
+        let response = [
+            0x02, 0x09, 0x81, 0x1B, 0xBC, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x2B,
+        ];
+        let (station, pke, ind, pzd) = parse_uss_response(&response).unwrap();
+        assert_eq!(station, 1);
+        assert_eq!(pke, [0x1B, 0xBC]);
+        assert_eq!(ind, [0, 0]);
+        assert_eq!(pzd, vec![0x00, 0x06, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn response_requires_station_range_and_ack_bit() {
+        let mut no_ack = [
+            0x02, 0x09, 0x01, 0x1B, 0xBC, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x2B,
+        ];
+        assert!(parse_uss_response(&no_ack).is_err());
+        no_ack[2] = 0x9F;
+        no_ack[11] = bcc(&no_ack[..11]);
+        assert!(parse_uss_response(&no_ack).is_err());
     }
 }

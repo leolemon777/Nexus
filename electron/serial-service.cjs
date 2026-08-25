@@ -81,12 +81,14 @@ function withTimeout(promise, timeoutMs, createError) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-function createResponseCollector(port, { expectedResponseLength, exceptionResponseLength, timeoutMs, framing = "rtu" }) {
+function createResponseCollector(port, { expectedResponseLength, exceptionResponseLength, timeoutMs, framing = "rtu", echoBytes = null }) {
   let cancel;
   const promise = new Promise((resolve, reject) => {
     const chunks = [];
     let receivedLength = 0;
     let settled = false;
+    let echoPending = Buffer.alloc(0);
+    let echoActive = ["ppi", "mewtocol", "dlt645"].includes(framing) && Buffer.isBuffer(echoBytes) && echoBytes.length > 0;
 
     const received = () => Buffer.concat(chunks, receivedLength);
     const finish = (action) => {
@@ -108,11 +110,114 @@ function createResponseCollector(port, { expectedResponseLength, exceptionRespon
       );
     };
     const onData = (chunk) => {
-      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      let bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       if (!bytes.length) return;
+      // USB-RS485 转换器常见本地回显。PPI 事务只在帧起始处剥离
+      // 与本次 TX 完全一致的回显，避免把自己的 SD2 当成 PLC 响应。
+      if (echoActive) {
+        const pending = Buffer.concat([echoPending, bytes]);
+        const comparable = pending.subarray(0, Math.min(pending.length, echoBytes.length));
+        let matches = true;
+        for (let i = 0; i < comparable.length; i++) {
+          if (comparable[i] !== echoBytes[i]) { matches = false; break; }
+        }
+        if (matches && pending.length < echoBytes.length) {
+          echoPending = pending;
+          return;
+        }
+        if (matches && pending.length >= echoBytes.length) {
+          bytes = pending.subarray(echoBytes.length);
+          echoPending = Buffer.alloc(0);
+          echoActive = false;
+          if (!bytes.length) return;
+        } else {
+          bytes = pending;
+          echoPending = Buffer.alloc(0);
+          echoActive = false;
+        }
+      }
       chunks.push(bytes);
       receivedLength += bytes.length;
       const frame = received();
+      // HostLink C-mode:以 '@' 起始,以 CR LF 结尾。与 Modbus ASCII 分开，
+      // 因为 HostLink 的校验和和响应字段不是 Modbus ASCII 语义。
+      if (framing === "hostlink") {
+        if (frame.length >= 1 && frame[0] === 0x40) {
+          const crlf = frame.findIndex((byte, index) => byte === 0x0D && frame[index + 1] === 0x0A);
+          if (crlf >= 0) finish(() => resolve(frame.subarray(0, crlf + 2)));
+        }
+        return;
+      }
+      // Panasonic MEWTOCOL-COM: ASCII '%'/'<' 起始, 以 CR 终止。
+      // 不按 Modbus ASCII 的 ':'/LF 规则收集，避免把 BCC 或响应内容截断。
+      if (framing === "mewtocol") {
+        if (frame.length > 0 && frame[0] !== 0x25 && frame[0] !== 0x3c) {
+          fail(new SerialServiceError("MEWTOCOL 响应不是以 % 或 < 开头的 ASCII 帧。", {
+            code: "MEWTOCOL_RESPONSE_INVALID",
+            details: { rx: [...frame] },
+          }));
+          return;
+        }
+        if (frame.length > 2048) {
+          fail(new SerialServiceError("MEWTOCOL 响应超过 2048 字节上限。", {
+            code: "MEWTOCOL_FRAME_TOO_LONG",
+            details: { maximum: 2048, rx: [...frame] },
+          }));
+          return;
+        }
+        const cr = frame.indexOf(0x0D);
+        if (cr >= 0) finish(() => resolve(frame.subarray(0, cr + 1)));
+        return;
+      }
+      // DL/T 645:允许 0..4 个 FE 唤醒字节，随后为
+      // 68 + A0..A5 + 68 + C + L + DATA + CS + 16。
+      // DATA 中可以出现 16H，必须按 L 定长收集，不能搜索结束字节。
+      if (framing === "dlt645") {
+        let frameStart = 0;
+        while (frameStart < frame.length && frame[frameStart] === 0xFE) frameStart += 1;
+        if (frameStart > 4) {
+          fail(new SerialServiceError("DL/T 645 响应前导 FE 超过 4 字节。", {
+            code: "DLT645_RESPONSE_INVALID",
+            details: { preambleCount: frameStart, rx: [...frame] },
+          }));
+          return;
+        }
+        if (frameStart === frame.length) return;
+        if (frame[frameStart] !== 0x68) {
+          fail(new SerialServiceError("DL/T 645 响应在可选 FE 前导后不是 68H。", {
+            code: "DLT645_RESPONSE_INVALID",
+            details: { rx: [...frame] },
+          }));
+          return;
+        }
+        if (frame.length < frameStart + 10) return;
+        if (frame[frameStart + 7] !== 0x68) {
+          fail(new SerialServiceError("DL/T 645 响应缺少地址后的第二个 68H。", {
+            code: "DLT645_RESPONSE_INVALID",
+            details: { rx: [...frame] },
+          }));
+          return;
+        }
+        const dataLength = frame[frameStart + 9];
+        if (dataLength > 200) {
+          fail(new SerialServiceError("DL/T 645 只读响应数据域超过 200 字节。", {
+            code: "DLT645_FRAME_TOO_LONG",
+            details: { dataLength, maximum: 200, rx: [...frame] },
+          }));
+          return;
+        }
+        const total = frameStart + 12 + dataLength;
+        if (frame.length < total) return;
+        if (frame.length > total || frame[total - 1] !== 0x16) {
+          fail(new SerialServiceError("DL/T 645 响应长度或结束字节无效。", {
+            code: "DLT645_RESPONSE_INVALID",
+            details: { expectedLength: total, rx: [...frame] },
+          }));
+          return;
+        }
+        finish(() => resolve(frame));
+        return;
+      }
       // ASCII 帧:以 ':'(0x3A) 起始,以 LF(0x0A) 结尾即视为完整帧
       if (framing === "ascii") {
         if (frame.length >= 1 && frame[0] === 0x3a && frame[frame.length - 1] === 0x0a) {
@@ -143,11 +248,16 @@ function createResponseCollector(port, { expectedResponseLength, exceptionRespon
       }
       // PPI 帧三种结束:E5 单字节确认 / 10 .. 16 短帧 / 68 .. 16 SD2 长帧
       if (framing === "ppi") {
-        if (frame.length === 1 && frame[0] === 0xE5) {
-          finish(() => resolve(frame)); // SC 确认(调用方继续双拍)
+        if (frame.length === 1 && (frame[0] === 0xE5 || frame[0] === 0x15)) {
+          finish(() => resolve(frame)); // SC 确认 / NAK(调用方决定是否重试)
         } else if (frame[0] === 0x68) {
-          const etx = frame.indexOf(0x16, 5);
-          if (etx >= 0) finish(() => resolve(frame.subarray(0, etx + 1)));
+          // SD2 以 LE/LEr 定长。数据区或 FCS 都可能合法出现 0x16，不能搜索首个 ETX。
+          if (frame.length >= 4 && frame[1] === frame[2] && frame[3] === 0x68) {
+            const total = frame[1] + 6;
+            if (frame.length >= total && frame[total - 1] === 0x16) {
+              finish(() => resolve(frame.subarray(0, total)));
+            }
+          }
         } else if (frame[0] === 0x10 && frame.length >= 6) {
           finish(() => resolve(frame.subarray(0, 6))); // SA 短帧
         }
@@ -207,8 +317,8 @@ function createResponseCollector(port, { expectedResponseLength, exceptionRespon
       fail(
         new SerialServiceError(
           frame.length
-            ? `等待 Modbus 响应超时，已收到 ${frame.length} 字节。`
-            : "等待 Modbus 响应超时，设备没有返回数据。",
+            ? `等待${framing === "dlt645" ? " DL/T 645" : " Modbus"}响应超时，已收到 ${frame.length} 字节。`
+            : `等待${framing === "dlt645" ? " DL/T 645" : " Modbus"}响应超时，设备没有返回数据。`,
           {
             code: "SERIAL_RESPONSE_TIMEOUT",
             details: { timeoutMs, rx: [...frame] },
@@ -350,13 +460,55 @@ class SerialService {
           details: { field: "request", length: tx.length },
         });
       }
+    } else if (framing === "hostlink") {
+      if (tx.length < 8 || tx.length > 1024 || tx[0] !== 0x40) {
+        throw new SerialServiceError("HostLink 请求必须是 8 到 1024 字节的 @... ASCII 帧。", {
+          code: "INVALID_TRANSACTION",
+          details: { field: "request", length: tx.length },
+        });
+      }
+    } else if (framing === "rk512") {
+      // 3964R/RK512 的链路控制拍只有 STX/DLE 一个字节，数据拍才是完整帧。
+      if (tx.length < 1 || tx.length > 512) {
+        throw new SerialServiceError("RK512 请求长度必须在 1 到 512 字节之间。", {
+          code: "INVALID_TRANSACTION",
+          details: { field: "request", length: tx.length },
+        });
+      }
+    } else if (framing === "mewtocol") {
+      if (tx.length < 9 || tx.length > 2048 || ![0x25, 0x3c].includes(tx[0]) || tx[tx.length - 1] !== 0x0D) {
+        throw new SerialServiceError("MEWTOCOL 请求必须是 9 到 2048 字节的 %/< ASCII CR 帧。", {
+          code: "INVALID_TRANSACTION",
+          details: { field: "request", length: tx.length },
+        });
+      }
+    } else if (framing === "dlt645") {
+      let coreStart = 0;
+      while (coreStart < tx.length && tx[coreStart] === 0xFE) coreStart += 1;
+      const dataLength = tx[coreStart + 9];
+      const valid = coreStart <= 4
+        && tx.length >= coreStart + 12
+        && tx[coreStart] === 0x68
+        && tx[coreStart + 7] === 0x68
+        && Number.isInteger(dataLength)
+        && dataLength <= 200
+        && tx.length === coreStart + 12 + dataLength
+        && tx[tx.length - 1] === 0x16;
+      if (!valid) {
+        throw new SerialServiceError("DL/T 645 请求必须是带 0..4 个 FE 前导的完整 68H 帧。", {
+          code: "INVALID_TRANSACTION",
+          details: { field: "request", length: tx.length },
+        });
+      }
     } else if (tx.length < 4 || tx.length > 256) {
       throw new SerialServiceError("Modbus RTU 请求长度必须在 4 到 256 字节之间。", {
         code: "INVALID_TRANSACTION",
         details: { field: "request", length: tx.length },
       });
     }
-    if (awaitResponse && framing !== "ascii" && framing !== "fx" && framing !== "mc-c24") {
+    // PPI、USS 和 RK512 的响应长度由各自控制字符/长度字段决定，不能套用
+    // Modbus 的“至少 5 字节”断言；专用服务仍会在协议层校验完整帧。
+    if (awaitResponse && !["ascii", "hostlink", "fx", "mc-c24", "ppi", "uss", "rk512", "mewtocol", "dlt645"].includes(framing)) {
       assertIntegerInRange(expectedResponseLength, 5, 256, "正常响应长度");
       assertIntegerInRange(exceptionResponseLength, 5, 5, "异常响应长度");
     }
@@ -386,6 +538,7 @@ class SerialService {
           exceptionResponseLength,
           timeoutMs,
           framing,
+          echoBytes: ["ppi", "mewtocol", "dlt645"].includes(framing) ? tx : null,
         });
         collector.promise.catch(() => {});
       }

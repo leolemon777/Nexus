@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    {
+      "id": "toolchain-preflight",
+      "kind": "npm",
+      "script": "preflight:toolchain",
+      "title": "Locked Node, npm, Electron, and Rust toolchain",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "rust-jsonl-and-interop",
+      "kind": "powershell",
+      "script": "scripts/test-rust-jsonl.ps1",
+      "title": "Rust JSONL, protocol interop, and R0 soak harness",
+      "timeoutMs": 1800000
+    },
+    {
+      "id": "electron-and-release-regression",
+      "kind": "npm",
+      "script": "test:electron",
+      "title": "Electron and release tooling regression",
+      "timeoutMs": 1200000
+    },
+    {
+      "id": "web-build",
+      "kind": "npm",
+      "script": "build",
+      "title": "Vite production build",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "electron-smoke",
+      "kind": "npm",
+      "script": "smoke:electron",
+      "title": "Electron desktop smoke",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "npm-audit",
+      "kind": "npm",
+      "script": "audit",
+      "title": "npm security audit",
+      "timeoutMs": 300000
+    }
+  ]
+}

@@ -4,7 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const packageRoot = path.join(root, "output", "portable", "Nexus 2.0");
+const folderFlag = process.argv.indexOf("--folder");
+const packageFolder = folderFlag >= 0 ? process.argv[folderFlag + 1] : "Nexus 2.0";
+if (!packageFolder || /[\\/]/.test(packageFolder) || packageFolder === "." || packageFolder === "..") {
+  throw new Error(`便携版目录名无效：${packageFolder || "(空)"}`);
+}
+const packageRoot = path.join(root, "output", "portable", packageFolder);
 const executable = path.join(packageRoot, "Nexus 2.0.exe");
 
 if (!fs.existsSync(executable)) {

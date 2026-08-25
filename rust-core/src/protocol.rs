@@ -4,14 +4,12 @@ use serde_json::{Value, json};
 use crate::{
     PROTOCOL_VERSION,
     error::CoreError,
-    modbus_ascii,
-    modbus_pdu as pdu,
+    modbus_ascii, modbus_pdu as pdu,
     modbus_rtu::{
         self, RtuError, build_read_holding_registers_request, build_read_input_registers_request,
         crc16_modbus, modbus_exception_name, parse_read_holding_registers_response,
         parse_read_input_registers_response,
     },
-    modbus_tcp,
     serial_config::SerialConfig,
     session::Session,
 };
@@ -135,6 +133,770 @@ struct OpenConnectionPayload {
     unit_id: u8,
     #[serde(default = "default_framing")]
     framing: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenGeSrtpConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_ge_srtp_port")]
+    port: u16,
+}
+
+fn default_ge_srtp_port() -> u16 {
+    crate::ge_srtp::DEFAULT_PORT
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GeSrtpReadPayload {
+    connection_id: String,
+    address: String,
+    element_count: u16,
+    #[serde(default)]
+    bit_access: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenFujiSphConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_fuji_sph_port")]
+    port: u16,
+    #[serde(default = "default_fuji_sph_connection_id")]
+    connection_id_byte: u8,
+}
+
+fn default_fuji_sph_port() -> u16 {
+    crate::fuji_sph::DEFAULT_PORT
+}
+
+fn default_fuji_sph_connection_id() -> u8 {
+    0xFE
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FujiSphReadPayload {
+    connection_id: String,
+    address: String,
+    words: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenFatekConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_fatek_port")]
+    port: u16,
+    #[serde(default = "default_fatek_station")]
+    station: u8,
+}
+
+fn default_fatek_port() -> u16 {
+    5000
+}
+
+fn default_fatek_station() -> u8 {
+    1
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FatekReadPayload {
+    connection_id: String,
+    address: String,
+    count: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenKeyenceConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_keyence_port")]
+    port: u16,
+    #[serde(default)]
+    use_station: bool,
+    #[serde(default)]
+    station: u8,
+}
+
+fn default_keyence_port() -> u16 {
+    crate::keyence::DEFAULT_PORT
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KeyenceReadPayload {
+    connection_id: String,
+    address: String,
+    count: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenLsXgtConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_ls_xgt_port")]
+    port: u16,
+    #[serde(default = "default_ls_xgt_cpu")]
+    cpu: u8,
+    #[serde(default)]
+    base_no: u8,
+    #[serde(default = "default_ls_xgt_slot_no")]
+    slot_no: u8,
+    #[serde(default = "default_ls_xgt_company_id")]
+    company_id: String,
+}
+
+fn default_ls_xgt_port() -> u16 {
+    crate::ls_xgt::DEFAULT_PORT
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LsXgtReadPayload {
+    connection_id: String,
+    variable_name: String,
+    #[serde(default = "default_ls_xgt_data_type")]
+    data_type: u8,
+}
+
+fn default_ls_xgt_data_type() -> u8 {
+    crate::ls_xgt::INDIVIDUAL_WORD
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LsXgtContinuousReadPayload {
+    connection_id: String,
+    variable_name: String,
+    byte_count: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenAdsConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_ads_port")]
+    port: u16,
+    #[serde(default = "default_ads_target_net_id")]
+    target_net_id: String,
+    #[serde(default = "default_ads_target_port")]
+    target_port: u16,
+    #[serde(default = "default_ads_source_net_id")]
+    source_net_id: String,
+    #[serde(default = "default_ads_source_port")]
+    source_port: u16,
+}
+
+fn default_ads_port() -> u16 {
+    crate::ads::ADS_TCP_PORT
+}
+
+fn default_ads_target_net_id() -> String {
+    "5.72.144.1.1.1".to_string()
+}
+
+fn default_ads_target_port() -> u16 {
+    851
+}
+
+fn default_ads_source_net_id() -> String {
+    "5.72.144.2.1.1".to_string()
+}
+
+fn default_ads_source_port() -> u16 {
+    32905
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AdsReadPayload {
+    connection_id: String,
+    index_group: u32,
+    index_offset: u32,
+    read_length: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenEnipConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_enip_port")]
+    port: u16,
+}
+
+fn default_enip_port() -> u16 {
+    44818
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnipReadTagPayload {
+    connection_id: String,
+    tag: String,
+    #[serde(default = "default_enip_elements")]
+    elements: u16,
+}
+
+fn default_enip_elements() -> u16 {
+    1
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenMqttConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_mqtt_port")]
+    port: u16,
+    #[serde(default = "default_mqtt_client_id")]
+    client_id: String,
+    #[serde(default = "default_mqtt_keep_alive")]
+    keep_alive: u16,
+    #[serde(default = "default_mqtt_clean_session")]
+    clean_session: bool,
+}
+
+fn default_mqtt_port() -> u16 {
+    crate::mqtt::DEFAULT_PORT
+}
+
+fn default_mqtt_client_id() -> String {
+    "nexus-readonly".to_string()
+}
+
+fn default_mqtt_keep_alive() -> u16 {
+    30
+}
+
+fn default_mqtt_clean_session() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MqttSubscribePayload {
+    connection_id: String,
+    topic_filter: String,
+    #[serde(default)]
+    qos: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MqttConnectionIdPayload {
+    connection_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MqttBuildConnectPayload {
+    #[serde(default = "default_mqtt_client_id")]
+    client_id: String,
+    #[serde(default = "default_mqtt_keep_alive")]
+    keep_alive: u16,
+    #[serde(default = "default_mqtt_clean_session")]
+    clean_session: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MqttBuildSubscribePayload {
+    packet_id: u16,
+    topic_filter: String,
+    #[serde(default)]
+    qos: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MqttFramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenIec104ConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_iec104_port")]
+    port: u16,
+    #[serde(default = "default_iec104_common_address")]
+    common_address: u16,
+    #[serde(default)]
+    originator_address: u8,
+}
+
+fn default_iec104_port() -> u16 {
+    crate::iec104::DEFAULT_PORT
+}
+
+fn default_iec104_common_address() -> u16 {
+    1
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104ConnectionIdPayload {
+    connection_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104InterrogationPayload {
+    connection_id: String,
+    #[serde(default)]
+    group: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104BuildIFramePayload {
+    send_sequence: u16,
+    receive_sequence: u16,
+    asdu: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104BuildSFramePayload {
+    receive_sequence: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104BuildUFramePayload {
+    function: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104FramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104AsduPayload {
+    asdu: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Iec104BuildInterrogationPayload {
+    #[serde(default = "default_iec104_common_address")]
+    common_address: u16,
+    #[serde(default)]
+    group: u8,
+    #[serde(default)]
+    originator_address: u8,
+    #[serde(default)]
+    send_sequence: u16,
+    #[serde(default)]
+    receive_sequence: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenDnp3ConnectionPayload {
+    connection_id: String,
+    host: String,
+    #[serde(default = "default_dnp3_port")]
+    port: u16,
+    #[serde(default = "default_dnp3_master_address")]
+    master_address: u16,
+    #[serde(default = "default_dnp3_outstation_address")]
+    outstation_address: u16,
+}
+
+fn default_dnp3_port() -> u16 {
+    crate::dnp3::DEFAULT_PORT
+}
+
+fn default_dnp3_master_address() -> u16 {
+    crate::dnp3::DEFAULT_MASTER_ADDRESS
+}
+
+fn default_dnp3_outstation_address() -> u16 {
+    crate::dnp3::DEFAULT_OUTSTATION_ADDRESS
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3ConnectionIdPayload {
+    connection_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3ClassScanPayload {
+    connection_id: String,
+    #[serde(default)]
+    class0: bool,
+    #[serde(default)]
+    class1: bool,
+    #[serde(default)]
+    class2: bool,
+    #[serde(default)]
+    class3: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3ReadPayload {
+    connection_id: String,
+    group: u8,
+    variation: u8,
+    #[serde(default)]
+    start: Option<u16>,
+    #[serde(default)]
+    stop: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3BuildLinkPayload {
+    control: u8,
+    destination: u16,
+    source: u16,
+    #[serde(default)]
+    user_data: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3FramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3BuildClassScanPayload {
+    #[serde(default)]
+    sequence: u8,
+    #[serde(default)]
+    class0: bool,
+    #[serde(default)]
+    class1: bool,
+    #[serde(default)]
+    class2: bool,
+    #[serde(default)]
+    class3: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3BuildReadPayload {
+    #[serde(default)]
+    sequence: u8,
+    group: u8,
+    variation: u8,
+    #[serde(default)]
+    start: Option<u16>,
+    #[serde(default)]
+    stop: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3ApplicationPayload {
+    pdu: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dnp3ConfirmPayload {
+    sequence: u8,
+    #[serde(default)]
+    unsolicited: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dlt645AddressPayload {
+    address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dlt645DataIdPayload {
+    version: String,
+    data_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dlt645BuildReadPayload {
+    version: String,
+    address: String,
+    data_id: String,
+    #[serde(default = "default_dlt645_preamble_count")]
+    preamble_count: u8,
+}
+
+fn default_dlt645_preamble_count() -> u8 {
+    crate::dlt645::MAX_PREAMBLE_COUNT
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dlt645FramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Dlt645ParseReadPayload {
+    version: String,
+    address: String,
+    data_id: String,
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188MeterTypePayload {
+    meter_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188AddressPayload {
+    address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188DataIdPayload {
+    data_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188BuildReadPayload {
+    meter_type: String,
+    address: String,
+    data_id: String,
+    #[serde(default = "default_cjt188_sequence")]
+    sequence: u8,
+    #[serde(default)]
+    preamble_count: u8,
+}
+
+fn default_cjt188_sequence() -> u8 {
+    0x01
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188FramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Cjt188ParseReadPayload {
+    meter_type: String,
+    address: String,
+    data_id: String,
+    #[serde(default = "default_cjt188_sequence")]
+    sequence: u8,
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpWhoIsPayload {
+    #[serde(default)]
+    low_limit: Option<u32>,
+    #[serde(default)]
+    high_limit: Option<u32>,
+    #[serde(default = "default_bacnet_broadcast")]
+    broadcast: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpIamPayload {
+    device_instance: u32,
+    max_apdu: u32,
+    segmentation: String,
+    vendor_id: u16,
+    #[serde(default = "default_bacnet_broadcast")]
+    broadcast: bool,
+}
+
+fn default_bacnet_broadcast() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpFramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpReadPropertyRequestPayload {
+    object_type: u16,
+    object_instance: u32,
+    property_identifier: u32,
+    #[serde(default)]
+    property_array_index: Option<u32>,
+    invoke_id: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpReadPropertyFramePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpReadPropertyAckPayload {
+    frame: Vec<u8>,
+    #[serde(default)]
+    expected_request: Option<BacnetIpReadPropertyRequestPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxGroupAddressPayload {
+    address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxConnectRequestPayload {
+    local_ip: String,
+    local_port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxConnectResponsePayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxGroupReadPayload {
+    channel_id: u8,
+    sequence: u8,
+    address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxTunnelingAckPayload {
+    channel_id: u8,
+    sequence: u8,
+    status: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxTunnelingRequestPayload {
+    frame: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxOpenLivePayload {
+    connection_id: String,
+    host: String,
+    port: u16,
+    #[serde(default = "default_knx_live_timeout")]
+    timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxGroupReadLivePayload {
+    connection_id: String,
+    address: String,
+    #[serde(default = "default_knx_live_timeout")]
+    timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxDisconnectLivePayload {
+    connection_id: String,
+    #[serde(default = "default_knx_live_timeout")]
+    timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxConnectionStatePayload {
+    connection_id: String,
+    #[serde(default = "default_knx_live_timeout")]
+    timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KnxKeepalivePayload {
+    connection_id: String,
+    #[serde(default = "default_knx_keepalive_interval")]
+    interval_ms: u32,
+}
+
+fn default_knx_keepalive_interval() -> u32 {
+    60_000
+}
+
+fn default_knx_live_timeout() -> u64 {
+    1500
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpOpenPayload {
+    connection_id: String,
+    host: String,
+    port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpWhoisLivePayload {
+    connection_id: String,
+    #[serde(default)]
+    low_limit: Option<u32>,
+    #[serde(default)]
+    high_limit: Option<u32>,
+    #[serde(default = "default_bacnet_live_timeout")]
+    timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BacnetIpReadPropertyLivePayload {
+    connection_id: String,
+    object_type: u16,
+    object_instance: u32,
+    property_identifier: u32,
+    #[serde(default)]
+    property_array_index: Option<u32>,
+    #[serde(default = "default_bacnet_live_timeout")]
+    timeout_ms: u64,
+}
+
+fn default_bacnet_live_timeout() -> u64 {
+    1500
 }
 
 fn default_framing() -> String {
@@ -415,7 +1177,12 @@ pub fn handle_line(session: &mut Session, line: &str) -> CommandOutcome {
         );
     }
 
-    dispatch(session, &request.request_id, &request.command, request.payload)
+    dispatch(
+        session,
+        &request.request_id,
+        &request.command,
+        request.payload,
+    )
 }
 
 fn dispatch(
@@ -427,7 +1194,10 @@ fn dispatch(
     match command {
         "hello" => {
             // 版本协商:v1 客户端发 protocolVersion=1;v2 客户端可发 clientVersion
-            let client_version = payload.get("clientVersion").and_then(Value::as_u64).map(|v| v as u16);
+            let client_version = payload
+                .get("clientVersion")
+                .and_then(Value::as_u64)
+                .map(|v| v as u16);
             success(
                 request_id.to_string(),
                 json!({
@@ -447,15 +1217,11 @@ fn dispatch(
         "build_read_holding_registers" => {
             handle_build_read_registers_rtu(request_id, payload, 0x03)
         }
-        "build_read_input_registers" => {
-            handle_build_read_registers_rtu(request_id, payload, 0x04)
-        }
+        "build_read_input_registers" => handle_build_read_registers_rtu(request_id, payload, 0x04),
         "parse_read_holding_registers" => {
             handle_parse_read_registers_rtu(request_id, payload, 0x03)
         }
-        "parse_read_input_registers" => {
-            handle_parse_read_registers_rtu(request_id, payload, 0x04)
-        }
+        "parse_read_input_registers" => handle_parse_read_registers_rtu(request_id, payload, 0x04),
         // === 串口路径:RTU build/parse — 新增读位(FC01/FC02) ===
         "build_read_coils" => handle_build_read_bits_rtu(request_id, payload, 0x01),
         "build_read_discrete_inputs" => handle_build_read_bits_rtu(request_id, payload, 0x02),
@@ -466,9 +1232,7 @@ fn dispatch(
         "build_write_single_register" => {
             handle_build_write_single_register_rtu(request_id, payload)
         }
-        "build_write_multiple_coils" => {
-            handle_build_write_multiple_coils_rtu(request_id, payload)
-        }
+        "build_write_multiple_coils" => handle_build_write_multiple_coils_rtu(request_id, payload),
         "build_write_multiple_registers" => {
             handle_build_write_multiple_registers_rtu(request_id, payload)
         }
@@ -535,61 +1299,37 @@ fn dispatch(
         "tcp_read_holding_registers" => {
             handle_tcp_read_registers(session, request_id, payload, 0x03)
         }
-        "tcp_read_input_registers" => {
-            handle_tcp_read_registers(session, request_id, payload, 0x04)
-        }
-        "tcp_write_single_coil" => {
-            handle_tcp_write_single_coil(session, request_id, payload)
-        }
+        "tcp_read_input_registers" => handle_tcp_read_registers(session, request_id, payload, 0x04),
+        "tcp_write_single_coil" => handle_tcp_write_single_coil(session, request_id, payload),
         "tcp_write_single_register" => {
             handle_tcp_write_single_register(session, request_id, payload)
         }
-        "tcp_write_multiple_coils" => {
-            handle_tcp_write_multiple_coils(session, request_id, payload)
-        }
+        "tcp_write_multiple_coils" => handle_tcp_write_multiple_coils(session, request_id, payload),
         "tcp_write_multiple_registers" => {
             handle_tcp_write_multiple_registers(session, request_id, payload)
         }
         // === 高级 FC 端到端(FC22/23/43/08)===
-        "tcp_mask_write_register" => {
-            handle_tcp_mask_write_register(session, request_id, payload)
-        }
-        "tcp_read_write_multiple" => {
-            handle_tcp_read_write_multiple(session, request_id, payload)
-        }
+        "tcp_mask_write_register" => handle_tcp_mask_write_register(session, request_id, payload),
+        "tcp_read_write_multiple" => handle_tcp_read_write_multiple(session, request_id, payload),
         "tcp_read_device_id" => handle_tcp_read_device_id(session, request_id, payload),
         "tcp_diagnostics" => handle_tcp_diagnostics(session, request_id, payload),
         // === 诊断类 FC(FC07/11/12/17)— 仅串行线,但通过 TCP 也能发 ===
-        "tcp_read_exception_status" => {
-            handle_tcp_simple_fc(session, request_id, payload, 0x07)
-        }
-        "tcp_get_comm_event_counter" => {
-            handle_tcp_simple_fc(session, request_id, payload, 0x0B)
-        }
-        "tcp_get_comm_event_log" => {
-            handle_tcp_simple_fc(session, request_id, payload, 0x0C)
-        }
-        "tcp_report_slave_id" => {
-            handle_tcp_simple_fc(session, request_id, payload, 0x11)
-        }
+        "tcp_read_exception_status" => handle_tcp_simple_fc(session, request_id, payload, 0x07),
+        "tcp_get_comm_event_counter" => handle_tcp_simple_fc(session, request_id, payload, 0x0B),
+        "tcp_get_comm_event_log" => handle_tcp_simple_fc(session, request_id, payload, 0x0C),
+        "tcp_report_slave_id" => handle_tcp_simple_fc(session, request_id, payload, 0x11),
         // === UDP 端到端读写(framing 由 open_udp_connection 决定)===
         "udp_read_coils" => handle_udp_read_bits(session, request_id, payload, 0x01),
         "udp_read_discrete_inputs" => handle_udp_read_bits(session, request_id, payload, 0x02),
         "udp_read_holding_registers" => {
             handle_udp_read_registers(session, request_id, payload, 0x03)
         }
-        "udp_read_input_registers" => {
-            handle_udp_read_registers(session, request_id, payload, 0x04)
-        }
-        "udp_write_single_coil" => {
-            handle_udp_write_single_coil(session, request_id, payload)
-        }
+        "udp_read_input_registers" => handle_udp_read_registers(session, request_id, payload, 0x04),
+        "udp_write_single_coil" => handle_udp_write_single_coil(session, request_id, payload),
         "udp_write_single_register" => {
             handle_udp_write_single_register(session, request_id, payload)
         }
-        "udp_write_multiple_coils" => {
-            handle_udp_write_multiple_coils(session, request_id, payload)
-        }
+        "udp_write_multiple_coils" => handle_udp_write_multiple_coils(session, request_id, payload),
         "udp_write_multiple_registers" => {
             handle_udp_write_multiple_registers(session, request_id, payload)
         }
@@ -641,6 +1381,40 @@ fn dispatch(
         "mc_1e_write" => handle_mc_1e_write(session, request_id, payload),
         // === 三菱 FX 串口协议(Computer Link / 编程口)===
         "brand_parse_address" => handle_brand_parse_address(request_id, payload),
+        "delta_parse_address" => handle_delta_parse_address(request_id, payload),
+        "inovance_parse_address" => handle_inovance_parse_address(request_id, payload),
+        "xinjie_parse_address" => handle_xinjie_parse_address(request_id, payload),
+        // === FATEK FBs 原生 ASCII（TCP 只读会话 + 编解码）===
+        "open_fatek_connection" => handle_open_fatek_connection(session, request_id, payload),
+        "fatek_read_words" => handle_fatek_read_words(session, request_id, payload),
+        "fatek_read_discrete" => handle_fatek_read_discrete(session, request_id, payload),
+        "fatek_parse_address" => handle_fatek_parse_address(request_id, payload),
+        "fatek_pack_command" => handle_fatek_pack_command(request_id, payload),
+        "fatek_build_read_discrete" => handle_fatek_build_read_discrete(request_id, payload),
+        "fatek_build_write_discrete" => handle_fatek_build_write_discrete(request_id, payload),
+        "fatek_build_read_words" => handle_fatek_build_read_words(request_id, payload),
+        "fatek_build_write_words" => handle_fatek_build_write_words(request_id, payload),
+        "fatek_parse_response" => handle_fatek_parse_response(request_id, payload),
+        // === Keyence KV Host Link ASCII（TCP 只读会话 + 编解码）===
+        "open_keyence_connection" => handle_open_keyence_connection(session, request_id, payload),
+        "keyence_read_words" => handle_keyence_read_words(session, request_id, payload),
+        "keyence_read_bits" => handle_keyence_read_bits(session, request_id, payload),
+        // === Fuji MICREX-SX SPH Loader Command（TCP 只读会话 + 编解码）===
+        "open_fuji_sph_connection" => handle_open_fuji_sph_connection(session, request_id, payload),
+        "fuji_sph_read" => handle_fuji_sph_read(session, request_id, payload),
+        "fuji_sph_parse_address" => handle_fuji_sph_parse_address(request_id, payload),
+        "fuji_sph_build_read" => handle_fuji_sph_build_read(request_id, payload),
+        "fuji_sph_build_write" => handle_fuji_sph_build_write(request_id, payload),
+        "fuji_sph_parse_response" => handle_fuji_sph_parse_response(request_id, payload),
+        // === GE SRTP（TCP 只读会话 + 编解码）===
+        "open_ge_srtp_connection" => handle_open_ge_srtp_connection(session, request_id, payload),
+        "ge_srtp_read" => handle_ge_srtp_read(session, request_id, payload),
+        "ge_srtp_parse_address" => handle_ge_srtp_parse_address(request_id, payload),
+        "ge_srtp_build_handshake" => handle_ge_srtp_build_handshake(request_id, payload),
+        "ge_srtp_parse_handshake" => handle_ge_srtp_parse_handshake(request_id, payload),
+        "ge_srtp_build_read" => handle_ge_srtp_build_read(request_id, payload),
+        "ge_srtp_build_write" => handle_ge_srtp_build_write(request_id, payload),
+        "ge_srtp_parse_response" => handle_ge_srtp_parse_response(request_id, payload),
         "fins_parse_address" => handle_fins_parse_address(request_id, payload),
         "open_fins_tcp" => handle_open_fins_tcp(session, request_id, payload),
         "open_fins_udp" => handle_open_fins_udp(session, request_id, payload),
@@ -670,6 +1444,9 @@ fn dispatch(
         "open_ppi_tcp" => handle_open_ppi_tcp(session, request_id, payload),
         "ppi_read" => handle_ppi_read(session, request_id, payload),
         "ppi_write" => handle_ppi_write(session, request_id, payload),
+        "ppi_build_read" => handle_ppi_build_read(request_id, payload),
+        "ppi_build_sa_confirm" => handle_ppi_build_sa_confirm(request_id, payload),
+        "ppi_parse_read_response" => handle_ppi_parse_read_response(request_id, payload),
         "start_ppi_slave" => handle_start_ppi_slave(session, request_id, payload),
         "stop_ppi_slave" => handle_stop_ppi_slave(session, request_id, payload),
         "hostlink_build_fins" => handle_hostlink_build_fins(request_id, payload),
@@ -681,6 +1458,151 @@ fn dispatch(
         "rk512_build_read" => handle_rk512_build_read(request_id, payload),
         "rk512_build_write" => handle_rk512_build_write(request_id, payload),
         "rk512_parse_response" => handle_rk512_parse_response(request_id, payload),
+        // === Allen-Bradley EtherNet/IP + CIP（TCP 只读会话 + explicit codec）===
+        "open_enip_connection" => handle_open_enip_connection(session, request_id, payload),
+        "enip_read_tag" => handle_enip_read_tag(session, request_id, payload),
+        "enip_build_register_session" => handle_enip_build_register_session(request_id, payload),
+        "enip_build_unregister_session" => {
+            handle_enip_build_unregister_session(request_id, payload)
+        }
+        "enip_build_read_tag" => handle_enip_build_read_tag(request_id, payload),
+        "enip_parse_frame" => handle_enip_parse_frame(request_id, payload),
+        "enip_parse_cip_response" => handle_enip_parse_cip_response(request_id, payload),
+        // === Beckhoff ADS/AMS over TCP（TCP 只读会话 + 编解码）===
+        "open_ads_connection" => handle_open_ads_connection(session, request_id, payload),
+        "ads_read" => handle_ads_read(session, request_id, payload),
+        "ads_read_device_info" => handle_ads_read_device_info(session, request_id, payload),
+        "ads_read_state" => handle_ads_read_state(session, request_id, payload),
+        "ads_build_read" => handle_ads_build_read(request_id, payload),
+        "ads_build_write" => handle_ads_build_write(request_id, payload),
+        "ads_build_readwrite" => handle_ads_build_readwrite(request_id, payload),
+        "ads_build_read_device_info" => handle_ads_build_read_device_info(request_id, payload),
+        "ads_build_read_state" => handle_ads_build_read_state(request_id, payload),
+        "ads_parse_frame" => handle_ads_parse_frame(request_id, payload),
+        "ads_parse_response" => handle_ads_parse_response(request_id, payload),
+        // === MQTT 3.1.1（TCP 只读订阅 + 编解码）===
+        "open_mqtt_connection" => handle_open_mqtt_connection(session, request_id, payload),
+        "mqtt_subscribe" => handle_mqtt_subscribe(session, request_id, payload),
+        "mqtt_read_publish" => handle_mqtt_read_publish(session, request_id, payload),
+        "mqtt_ping" => handle_mqtt_ping(session, request_id, payload),
+        "mqtt_build_connect" => handle_mqtt_build_connect(request_id, payload),
+        "mqtt_parse_connack" => handle_mqtt_parse_connack(request_id, payload),
+        "mqtt_build_subscribe" => handle_mqtt_build_subscribe(request_id, payload),
+        "mqtt_parse_suback" => handle_mqtt_parse_suback(request_id, payload),
+        "mqtt_parse_publish" => handle_mqtt_parse_publish(request_id, payload),
+        "mqtt_build_pingreq" => handle_mqtt_build_pingreq(request_id),
+        "mqtt_parse_pingresp" => handle_mqtt_parse_pingresp(request_id, payload),
+        "mqtt_build_disconnect" => handle_mqtt_build_disconnect(request_id),
+        // === IEC 60870-5-104（TCP 只读 Client/Master + 总召）===
+        "open_iec104_connection" => handle_open_iec104_connection(session, request_id, payload),
+        "iec104_general_interrogation" => {
+            handle_iec104_general_interrogation(session, request_id, payload)
+        }
+        "iec104_test_frame" => handle_iec104_test_frame(session, request_id, payload),
+        "iec104_build_i_frame" => handle_iec104_build_i_frame(request_id, payload),
+        "iec104_build_s_frame" => handle_iec104_build_s_frame(request_id, payload),
+        "iec104_build_u_frame" => handle_iec104_build_u_frame(request_id, payload),
+        "iec104_parse_apdu" => handle_iec104_parse_apdu(request_id, payload),
+        "iec104_build_general_interrogation" => {
+            handle_iec104_build_general_interrogation(request_id, payload)
+        }
+        "iec104_parse_asdu" => handle_iec104_parse_asdu(request_id, payload),
+        // === DNP3（TCP 只读 Master + Class 0/1/2/3）===
+        "open_dnp3_connection" => handle_open_dnp3_connection(session, request_id, payload),
+        "dnp3_integrity_poll" => handle_dnp3_integrity_poll(session, request_id, payload),
+        "dnp3_class_scan" => handle_dnp3_class_scan(session, request_id, payload),
+        "dnp3_read" => handle_dnp3_read(session, request_id, payload),
+        "dnp3_build_link_frame" => handle_dnp3_build_link_frame(request_id, payload),
+        "dnp3_parse_link_frame" => handle_dnp3_parse_link_frame(request_id, payload),
+        "dnp3_build_class_scan" => handle_dnp3_build_class_scan(request_id, payload),
+        "dnp3_build_read_request" => handle_dnp3_build_read_request(request_id, payload),
+        "dnp3_parse_application_response" => {
+            handle_dnp3_parse_application_response(request_id, payload)
+        }
+        "dnp3_build_confirm" => handle_dnp3_build_confirm(request_id, payload),
+        // === DL/T 645-1997/2007（RS-485 只读电表编解码）===
+        "dlt645_parse_address" => handle_dlt645_parse_address(request_id, payload),
+        "dlt645_parse_data_id" => handle_dlt645_parse_data_id(request_id, payload),
+        "dlt645_build_read_request" => handle_dlt645_build_read_request(request_id, payload),
+        "dlt645_parse_frame" => handle_dlt645_parse_frame(request_id, payload),
+        "dlt645_parse_read_response" => handle_dlt645_parse_read_response(request_id, payload),
+        "cjt188_parse_meter_type" => handle_cjt188_parse_meter_type(request_id, payload),
+        "cjt188_parse_address" => handle_cjt188_parse_address(request_id, payload),
+        "cjt188_parse_data_id" => handle_cjt188_parse_data_id(request_id, payload),
+        "cjt188_build_read_request" => handle_cjt188_build_read_request(request_id, payload),
+        "cjt188_parse_frame" => handle_cjt188_parse_frame(request_id, payload),
+        "cjt188_parse_read_response" => handle_cjt188_parse_read_response(request_id, payload),
+        "bacnet_ip_build_whois" => handle_bacnet_ip_build_whois(request_id, payload),
+        "bacnet_ip_build_iam" => handle_bacnet_ip_build_iam(request_id, payload),
+        "bacnet_ip_parse_frame" => handle_bacnet_ip_parse_frame(request_id, payload),
+        "bacnet_ip_build_read_property_request" => {
+            handle_bacnet_ip_build_read_property_request(request_id, payload)
+        }
+        "bacnet_ip_parse_read_property_request" => {
+            handle_bacnet_ip_parse_read_property_request(request_id, payload)
+        }
+        "bacnet_ip_parse_read_property_ack" => {
+            handle_bacnet_ip_parse_read_property_ack(request_id, payload)
+        }
+        "open_bacnet_ip_connection" => {
+            handle_open_bacnet_ip_connection(session, request_id, payload)
+        }
+        "bacnet_ip_whois" => handle_bacnet_ip_whois(session, request_id, payload),
+        "bacnet_ip_read_property_live" => {
+            handle_bacnet_ip_read_property_live(session, request_id, payload)
+        }
+        "knx_parse_group_address" => handle_knx_parse_group_address(request_id, payload),
+        "knx_build_connect_request" => handle_knx_build_connect_request(request_id, payload),
+        "knx_parse_connect_response" => handle_knx_parse_connect_response(request_id, payload),
+        "knx_build_group_read_request" => handle_knx_build_group_read_request(request_id, payload),
+        "knx_parse_tunneling_request" => handle_knx_parse_tunneling_request(request_id, payload),
+        "knx_parse_group_value_response" => {
+            handle_knx_parse_group_value_response(request_id, payload)
+        }
+        "knx_parse_tunneling_ack" => handle_knx_parse_tunneling_ack(request_id, payload),
+        "knx_build_tunneling_ack" => handle_knx_build_tunneling_ack(request_id, payload),
+        "open_knx_connection" => handle_open_knx_connection(session, request_id, payload),
+        "knx_group_read" => handle_knx_group_read(session, request_id, payload),
+        "knx_disconnect" => handle_knx_disconnect(session, request_id, payload),
+        "knx_connection_state" => handle_knx_connection_state(session, request_id, payload),
+        "knx_start_keepalive" => handle_knx_start_keepalive(session, request_id, payload),
+        "knx_stop_keepalive" => handle_knx_stop_keepalive(session, request_id, payload),
+        "knx_keepalive_status" => handle_knx_keepalive_status(session, request_id, payload),
+        // === Keyence KV Host Link ASCII（TCP 只读会话 + 编解码）===
+        "keyence_parse_address" => handle_keyence_parse_address(request_id, payload),
+        "keyence_build_connect" => handle_keyence_build_connect(request_id, payload),
+        "keyence_build_read_words" => handle_keyence_build_read_words(request_id, payload),
+        "keyence_build_read_bits" => handle_keyence_build_read_bits(request_id, payload),
+        "keyence_build_write_words" => handle_keyence_build_write_words(request_id, payload),
+        "keyence_build_write_bit" => handle_keyence_build_write_bit(request_id, payload),
+        "keyence_parse_connect" => handle_keyence_parse_connect(request_id, payload),
+        "keyence_parse_words" => handle_keyence_parse_words(request_id, payload),
+        "keyence_parse_bits" => handle_keyence_parse_bits(request_id, payload),
+        "keyence_parse_write" => handle_keyence_parse_write(request_id, payload),
+        // === LS Electric XGT FEnet（TCP 只读会话 + 编解码）===
+        "open_ls_xgt_connection" => handle_open_ls_xgt_connection(session, request_id, payload),
+        "ls_xgt_read" => handle_ls_xgt_read(session, request_id, payload),
+        "ls_xgt_read_continuous" => handle_ls_xgt_read_continuous(session, request_id, payload),
+        "ls_xgt_parse_address" => handle_ls_xgt_parse_address(request_id, payload),
+        "ls_xgt_build_read" => handle_ls_xgt_build_read(request_id, payload),
+        "ls_xgt_build_continuous_read" => handle_ls_xgt_build_continuous_read(request_id, payload),
+        "ls_xgt_build_write" => handle_ls_xgt_build_write(request_id, payload),
+        "ls_xgt_build_continuous_write" => {
+            handle_ls_xgt_build_continuous_write(request_id, payload)
+        }
+        "ls_xgt_parse_response" => handle_ls_xgt_parse_response(request_id, payload),
+        // === Panasonic MEWTOCOL-COM（首轮离线编解码）===
+        "panasonic_parse_data_address" => handle_panasonic_parse_data_address(request_id, payload),
+        "panasonic_parse_contact_address" => {
+            handle_panasonic_parse_contact_address(request_id, payload)
+        }
+        "panasonic_build_read" => handle_panasonic_build_read(request_id, payload),
+        "panasonic_build_write" => handle_panasonic_build_write(request_id, payload),
+        "panasonic_build_read_contact" => handle_panasonic_build_read_contact(request_id, payload),
+        "panasonic_build_write_contact" => {
+            handle_panasonic_build_write_contact(request_id, payload)
+        }
+        "panasonic_parse_response" => handle_panasonic_parse_response(request_id, payload),
         "fx_links_build" => handle_fx_links_build(request_id, payload),
         "fx_links_parse" => handle_fx_links_parse(request_id, payload),
         "fx_links_read" => handle_fx_links_read(request_id, payload),
@@ -830,6 +1752,33 @@ fn all_capabilities() -> Vec<&'static str> {
         "mc_1e_write",
         // 三菱 FX 串口协议(Computer Link / 编程口)
         "brand_parse_address",
+        "delta_parse_address",
+        "inovance_parse_address",
+        "xinjie_parse_address",
+        "fatek_parse_address",
+        "fatek_pack_command",
+        "fatek_build_read_discrete",
+        "fatek_build_write_discrete",
+        "fatek_build_read_words",
+        "fatek_build_write_words",
+        "fatek_parse_response",
+        "open_fatek_connection",
+        "fatek_read_words",
+        "fatek_read_discrete",
+        "fuji_sph_parse_address",
+        "fuji_sph_build_read",
+        "fuji_sph_build_write",
+        "fuji_sph_parse_response",
+        "open_fuji_sph_connection",
+        "fuji_sph_read",
+        "ge_srtp_parse_address",
+        "ge_srtp_build_handshake",
+        "ge_srtp_parse_handshake",
+        "ge_srtp_build_read",
+        "ge_srtp_build_write",
+        "ge_srtp_parse_response",
+        "open_ge_srtp_connection",
+        "ge_srtp_read",
         "fins_parse_address",
         "open_fins_tcp",
         "open_fins_udp",
@@ -859,6 +1808,9 @@ fn all_capabilities() -> Vec<&'static str> {
         "open_ppi_tcp",
         "ppi_read",
         "ppi_write",
+        "ppi_build_read",
+        "ppi_build_sa_confirm",
+        "ppi_parse_read_response",
         "start_ppi_slave",
         "stop_ppi_slave",
         "hostlink_build_fins",
@@ -870,6 +1822,119 @@ fn all_capabilities() -> Vec<&'static str> {
         "rk512_build_read",
         "rk512_build_write",
         "rk512_parse_response",
+        "open_enip_connection",
+        "enip_read_tag",
+        "enip_build_register_session",
+        "enip_build_unregister_session",
+        "enip_build_read_tag",
+        "enip_parse_frame",
+        "enip_parse_cip_response",
+        "open_ads_connection",
+        "ads_read",
+        "ads_read_device_info",
+        "ads_read_state",
+        "ads_build_read",
+        "ads_build_write",
+        "ads_build_readwrite",
+        "ads_build_read_device_info",
+        "ads_build_read_state",
+        "ads_parse_frame",
+        "ads_parse_response",
+        "open_mqtt_connection",
+        "mqtt_subscribe",
+        "mqtt_read_publish",
+        "mqtt_ping",
+        "mqtt_build_connect",
+        "mqtt_parse_connack",
+        "mqtt_build_subscribe",
+        "mqtt_parse_suback",
+        "mqtt_parse_publish",
+        "mqtt_build_pingreq",
+        "mqtt_parse_pingresp",
+        "mqtt_build_disconnect",
+        "open_iec104_connection",
+        "iec104_general_interrogation",
+        "iec104_test_frame",
+        "iec104_build_i_frame",
+        "iec104_build_s_frame",
+        "iec104_build_u_frame",
+        "iec104_parse_apdu",
+        "iec104_build_general_interrogation",
+        "iec104_parse_asdu",
+        "open_dnp3_connection",
+        "dnp3_integrity_poll",
+        "dnp3_class_scan",
+        "dnp3_read",
+        "dnp3_build_link_frame",
+        "dnp3_parse_link_frame",
+        "dnp3_build_class_scan",
+        "dnp3_build_read_request",
+        "dnp3_parse_application_response",
+        "dnp3_build_confirm",
+        "dlt645_parse_address",
+        "dlt645_parse_data_id",
+        "dlt645_build_read_request",
+        "dlt645_parse_frame",
+        "dlt645_parse_read_response",
+        "cjt188_parse_meter_type",
+        "cjt188_parse_address",
+        "cjt188_parse_data_id",
+        "cjt188_build_read_request",
+        "cjt188_parse_frame",
+        "cjt188_parse_read_response",
+        "bacnet_ip_build_whois",
+        "bacnet_ip_build_iam",
+        "bacnet_ip_parse_frame",
+        "bacnet_ip_build_read_property_request",
+        "bacnet_ip_parse_read_property_request",
+        "bacnet_ip_parse_read_property_ack",
+        "open_bacnet_ip_connection",
+        "bacnet_ip_whois",
+        "bacnet_ip_read_property_live",
+        "knx_parse_group_address",
+        "knx_build_connect_request",
+        "knx_parse_connect_response",
+        "knx_build_group_read_request",
+        "knx_parse_tunneling_request",
+        "knx_parse_group_value_response",
+        "knx_parse_tunneling_ack",
+        "knx_build_tunneling_ack",
+        "open_knx_connection",
+        "knx_group_read",
+        "knx_disconnect",
+        "knx_connection_state",
+        "knx_start_keepalive",
+        "knx_stop_keepalive",
+        "knx_keepalive_status",
+        "keyence_parse_address",
+        "keyence_build_connect",
+        "keyence_build_read_words",
+        "keyence_build_read_bits",
+        "keyence_build_write_words",
+        "keyence_build_write_bit",
+        "keyence_parse_connect",
+        "keyence_parse_words",
+        "keyence_parse_bits",
+        "keyence_parse_write",
+        "open_keyence_connection",
+        "keyence_read_words",
+        "keyence_read_bits",
+        "open_ls_xgt_connection",
+        "ls_xgt_read",
+        "ls_xgt_read_continuous",
+        "ls_xgt_parse_address",
+        "ls_xgt_build_read",
+        "ls_xgt_build_continuous_read",
+        "ls_xgt_build_write",
+        "ls_xgt_build_continuous_write",
+        "ls_xgt_parse_response",
+        "panasonic_parse_data_address",
+        "panasonic_parse_contact_address",
+        "panasonic_build_read",
+        "panasonic_build_write",
+        "panasonic_build_read_contact",
+        "panasonic_build_write_contact",
+        "panasonic_parse_response",
         "fx_links_build",
         "fx_links_parse",
         "fx_links_read",
@@ -1001,7 +2066,11 @@ fn handle_build_read_bits_rtu(request_id: &str, payload: Value, fc: u8) -> Comma
     };
     // pdu_bytes 已含 FC 首字节,RtuFrame::request 会再写一次 FC——不剥离会产出双 FC 帧
     //(从站把第二字节当地址,读错地址 256 倍偏移)。与 build_and_encode_rtu 的剥离逻辑一致。
-    let data = if pdu_bytes.first() == Some(&fc) { &pdu_bytes[1..] } else { &pdu_bytes[..] };
+    let data = if pdu_bytes.first() == Some(&fc) {
+        &pdu_bytes[1..]
+    } else {
+        &pdu_bytes[..]
+    };
     let adu = match modbus_rtu::RtuFrame::request(payload.unit_id, fc, data) {
         Ok(frame) => frame.encode(),
         Err(e) => return failure(Some(request_id.to_string()), e.into()),
@@ -1024,11 +2093,11 @@ fn handle_parse_read_bits_rtu(request_id: &str, payload: Value, fc: u8) -> Comma
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let frame = match modbus_rtu::RtuFrame::decode(&payload.response, modbus_rtu::RtuFrameRole::Response)
-    {
-        Ok(f) => f,
-        Err(e) => return failure(Some(request_id.to_string()), e.into()),
-    };
+    let frame =
+        match modbus_rtu::RtuFrame::decode(&payload.response, modbus_rtu::RtuFrameRole::Response) {
+            Ok(f) => f,
+            Err(e) => return failure(Some(request_id.to_string()), e.into()),
+        };
     if frame.unit_id() != payload.unit_id {
         return failure(
             Some(request_id.to_string()),
@@ -1125,20 +2194,15 @@ fn handle_build_write_multiple_registers_rtu(request_id: &str, payload: Value) -
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let pdu_bytes =
-        match pdu::build_write_multiple_registers_pdu(payload.address, &payload.values) {
-            Ok(p) => p,
-            Err(e) => return failure(Some(request_id.to_string()), e.into()),
-        };
+    let pdu_bytes = match pdu::build_write_multiple_registers_pdu(payload.address, &payload.values)
+    {
+        Ok(p) => p,
+        Err(e) => return failure(Some(request_id.to_string()), e.into()),
+    };
     build_and_encode_rtu(request_id, payload.unit_id, 0x10, &pdu_bytes)
 }
 
-fn build_and_encode_rtu(
-    request_id: &str,
-    unit_id: u8,
-    fc: u8,
-    pdu_bytes: &[u8],
-) -> CommandOutcome {
+fn build_and_encode_rtu(request_id: &str, unit_id: u8, fc: u8, pdu_bytes: &[u8]) -> CommandOutcome {
     // pdu_bytes 的第一个字节是 FC,但 RtuFrame 会自己加 FC,所以 data 要去掉首字节
     let data = if pdu_bytes.first() == Some(&fc) {
         &pdu_bytes[1..]
@@ -1491,11 +2555,11 @@ fn handle_build_write_multiple_registers_ascii(request_id: &str, payload: Value)
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let pdu_bytes =
-        match pdu::build_write_multiple_registers_pdu(payload.address, &payload.values) {
-            Ok(p) => p,
-            Err(e) => return failure(Some(request_id.to_string()), e.into()),
-        };
+    let pdu_bytes = match pdu::build_write_multiple_registers_pdu(payload.address, &payload.values)
+    {
+        Ok(p) => p,
+        Err(e) => return failure(Some(request_id.to_string()), e.into()),
+    };
     build_ascii_adu(request_id, payload.unit_id, &pdu_bytes)
 }
 
@@ -1704,7 +2768,11 @@ fn handle_open_udp(session: &mut Session, request_id: &str, payload: Value) -> C
     }
 }
 
-fn handle_close_connection(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_close_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: CloseConnectionPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -2042,7 +3110,8 @@ fn handle_tcp_read_device_id(
     const MAX_ITERATIONS: u8 = 32;
 
     for _ in 0..MAX_ITERATIONS {
-        let request_pdu = pdu::build_read_device_id_pdu(payload.read_device_id_code, next_object_id);
+        let request_pdu =
+            pdu::build_read_device_id_pdu(payload.read_device_id_code, next_object_id);
         let response_pdu = match session.transact_tcp(&payload.connection_id, &request_pdu) {
             Ok(p) => p,
             Err(e) => return failure(Some(request_id.to_string()), e),
@@ -2136,7 +3205,9 @@ fn handle_tcp_simple_fc(
             // FC07/11/12/17 可能只传 connectionId
             #[derive(Deserialize)]
             #[serde(rename_all = "camelCase", deny_unknown_fields)]
-            struct ConnOnly { connection_id: String }
+            struct ConnOnly {
+                connection_id: String,
+            }
             match serde_json::from_value::<ConnOnly>(payload) {
                 Ok(c) => OpenConnectionPayload {
                     connection_id: c.connection_id,
@@ -2154,7 +3225,12 @@ fn handle_tcp_simple_fc(
         0x0B => pdu::build_get_comm_event_counter_pdu(),
         0x0C => pdu::build_get_comm_event_log_pdu(),
         0x11 => pdu::build_report_slave_id_pdu(),
-        _ => return failure(Some(request_id.to_string()), CoreError::UnknownCommand(format!("unknown simple fc {fc:#04X}"))),
+        _ => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::UnknownCommand(format!("unknown simple fc {fc:#04X}")),
+            );
+        }
     };
     let response_pdu = match session.transact_tcp(&p.connection_id, &request_pdu) {
         Ok(resp) => resp,
@@ -2170,7 +3246,9 @@ fn handle_tcp_simple_fc(
             Err(_) => json!({ "status": "ok", "rawResponse": response_pdu }),
         },
         0x0B => match pdu::parse_get_comm_event_counter_response(&response_pdu) {
-            Ok((status, count)) => json!({ "status": "ok", "commStatus": status, "eventCount": count }),
+            Ok((status, count)) => {
+                json!({ "status": "ok", "commStatus": status, "eventCount": count })
+            }
             Err(_) => json!({ "status": "ok", "rawResponse": response_pdu }),
         },
         0x0C => match pdu::parse_get_comm_event_log_response(&response_pdu) {
@@ -2366,7 +3444,11 @@ fn handle_udp_write_multiple_coils(
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let values: Vec<bool> = payload.values.iter().map(|v| v.as_bool().unwrap_or(false)).collect();
+    let values: Vec<bool> = payload
+        .values
+        .iter()
+        .map(|v| v.as_bool().unwrap_or(false))
+        .collect();
     let request_pdu = match pdu::build_write_multiple_coils_pdu(payload.address, &values) {
         Ok(p) => p,
         Err(e) => return failure(Some(request_id.to_string()), e.into()),
@@ -2521,11 +3603,7 @@ fn handle_mc_build_read(request_id: &str, payload: Value) -> CommandOutcome {
         &req_data,
         0,
     );
-    success(
-        request_id.to_string(),
-        json!({ "frame": frame }),
-        false,
-    )
+    success(request_id.to_string(), json!({ "frame": frame }), false)
 }
 
 #[derive(Debug, Deserialize)]
@@ -2556,11 +3634,7 @@ fn handle_mc_build_write(request_id: &str, payload: Value) -> CommandOutcome {
         &req_data,
         0,
     );
-    success(
-        request_id.to_string(),
-        json!({ "frame": frame }),
-        false,
-    )
+    success(request_id.to_string(), json!({ "frame": frame }), false)
 }
 
 #[derive(Debug, Deserialize)]
@@ -2670,7 +3744,10 @@ fn handle_fx_links_parse(request_id: &str, payload: Value) -> CommandOutcome {
             json!({ "status": "ack", "station": null, "pc": null, "data": [], "errorCode": null }),
             false,
         ),
-        Ok(crate::fx_links::FxLinksResponse::Nak { station, error_code }) => success(
+        Ok(crate::fx_links::FxLinksResponse::Nak {
+            station,
+            error_code,
+        }) => success(
             request_id.to_string(),
             json!({
                 "status": "nak",
@@ -2765,7 +3842,9 @@ fn handle_fx_links_write_words(request_id: &str, payload: Value) -> CommandOutco
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match crate::fx_links::build_fx_links_write_words(p.station, &p.device, p.head, &p.values, p.delay) {
+    match crate::fx_links::build_fx_links_write_words(
+        p.station, &p.device, p.head, &p.values, p.delay,
+    ) {
         Ok(frame) => success(
             request_id.to_string(),
             json!({ "frame": frame, "frameHex": format_hex(&frame) }),
@@ -2780,11 +3859,11 @@ fn handle_fx_prog_build_read(request_id: &str, payload: Value) -> CommandOutcome
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let number = match crate::fx_programming::fx_prog_parse_number(&payload.device, &payload.address)
-    {
-        Ok(n) => n,
-        Err(e) => return failure(Some(request_id.to_string()), e),
-    };
+    let number =
+        match crate::fx_programming::fx_prog_parse_number(&payload.device, &payload.address) {
+            Ok(n) => n,
+            Err(e) => return failure(Some(request_id.to_string()), e),
+        };
     match crate::fx_programming::build_fx_prog_read(&payload.device, number, payload.words) {
         Ok(frame) => success(
             request_id.to_string(),
@@ -2813,11 +3892,11 @@ fn handle_fx_prog_build_write(request_id: &str, payload: Value) -> CommandOutcom
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let number = match crate::fx_programming::fx_prog_parse_number(&payload.device, &payload.address)
-    {
-        Ok(n) => n,
-        Err(e) => return failure(Some(request_id.to_string()), e),
-    };
+    let number =
+        match crate::fx_programming::fx_prog_parse_number(&payload.device, &payload.address) {
+            Ok(n) => n,
+            Err(e) => return failure(Some(request_id.to_string()), e),
+        };
     match crate::fx_programming::build_fx_prog_write(&payload.device, number, &payload.values) {
         Ok(frame) => success(
             request_id.to_string(),
@@ -2896,11 +3975,21 @@ struct OpenMcTcpPayload {
     watchdog: u16,
 }
 
-fn default_mc_network_no() -> u8 { 0x00 }
-fn default_mc_pc_no() -> u8 { 0xFF }
-fn default_mc_module_io() -> u16 { 0x03FF }
-fn default_mc_frame_type() -> String { "3e".into() }
-fn default_mc_watchdog() -> u16 { 0x0010 }
+fn default_mc_network_no() -> u8 {
+    0x00
+}
+fn default_mc_pc_no() -> u8 {
+    0xFF
+}
+fn default_mc_module_io() -> u16 {
+    0x03FF
+}
+fn default_mc_frame_type() -> String {
+    "3e".into()
+}
+fn default_mc_watchdog() -> u16 {
+    0x0010
+}
 
 fn handle_open_mc_tcp(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     let payload: OpenMcTcpPayload = match serde_json::from_value(payload) {
@@ -2911,11 +4000,14 @@ fn handle_open_mc_tcp(session: &mut Session, request_id: &str, payload: Value) -
         "3e" => crate::mc_frame::FrameType::Type3E,
         "4e" => crate::mc_frame::FrameType::Type4E,
         other => {
-            return failure(Some(request_id.to_string()), CoreError::Modbus {
-                code: "MC_BAD_FRAME_TYPE",
-                message: format!("帧类型「{other}」无效(支持 3e/4e)"),
-                details: None,
-            })
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "MC_BAD_FRAME_TYPE",
+                    message: format!("帧类型「{other}」无效(支持 3e/4e)"),
+                    details: None,
+                },
+            );
         }
     };
     let route = crate::mc_frame::AccessRoute {
@@ -2977,10 +4069,11 @@ fn handle_mc_tcp_read(session: &mut Session, request_id: &str, payload: Value) -
             false,
         );
     }
-    let values = match crate::mc_pdu::parse_read_batch_response(&resp.data, payload.points, addr.is_bit) {
-        Ok(v) => v,
-        Err(e) => return failure(Some(request_id.to_string()), e),
-    };
+    let values =
+        match crate::mc_pdu::parse_read_batch_response(&resp.data, payload.points, addr.is_bit) {
+            Ok(v) => v,
+            Err(e) => return failure(Some(request_id.to_string()), e),
+        };
     success(
         request_id.to_string(),
         json!({
@@ -3037,10 +4130,18 @@ struct McSlavePayload {
     seed: bool,
 }
 
-fn default_mc_port() -> u16 { 5000 }
-fn default_mc_seed() -> bool { true }
+fn default_mc_port() -> u16 {
+    5000
+}
+fn default_mc_seed() -> bool {
+    true
+}
 
-fn handle_start_mc_tcp_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_start_mc_tcp_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McSlavePayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3084,7 +4185,12 @@ fn handle_mc_slave_set(session: &mut Session, request_id: &str, payload: Value) 
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.mc_slave_set(&payload.slave_id, &payload.device, payload.start, &payload.values) {
+    match session.mc_slave_set(
+        &payload.slave_id,
+        &payload.device,
+        payload.start,
+        &payload.values,
+    ) {
         Ok(()) => success(
             request_id.to_string(),
             json!({ "set": true, "device": payload.device, "start": payload.start }),
@@ -3105,7 +4211,11 @@ struct McRandomReadPayload {
     addresses: Vec<String>,
 }
 
-fn handle_mc_tcp_read_random(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_mc_tcp_read_random(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McRandomReadPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3158,7 +4268,11 @@ struct McRandomWriteEntry {
     value: u16,
 }
 
-fn handle_mc_tcp_write_random(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_mc_tcp_write_random(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McRandomWritePayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3199,7 +4313,11 @@ struct McBlockPayload {
     points: u16,
 }
 
-fn handle_mc_tcp_read_blocks(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_mc_tcp_read_blocks(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McBlocksReadPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3207,7 +4325,10 @@ fn handle_mc_tcp_read_blocks(session: &mut Session, request_id: &str, payload: V
     let mut blocks = Vec::with_capacity(payload.blocks.len());
     for b in &payload.blocks {
         match crate::mc_address::parse_mc_address(&b.address) {
-            Ok(a) => blocks.push(crate::mc_pdu::McBlock { address: a, points: b.points }),
+            Ok(a) => blocks.push(crate::mc_pdu::McBlock {
+                address: a,
+                points: b.points,
+            }),
             Err(e) => return failure(Some(request_id.to_string()), e),
         }
     }
@@ -3242,7 +4363,12 @@ struct McConnOnlyPayload {
     connection_id: String,
 }
 
-fn handle_mc_remote(session: &mut Session, request_id: &str, cmd: u16, payload: Value) -> CommandOutcome {
+fn handle_mc_remote(
+    session: &mut Session,
+    request_id: &str,
+    cmd: u16,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McConnOnlyPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3297,7 +4423,9 @@ fn handle_mc_read_clock(session: &mut Session, request_id: &str, payload: Value)
     }
 }
 
-fn bcd(v: u8) -> u8 { (v >> 4) * 10 + (v & 0x0F) }
+fn bcd(v: u8) -> u8 {
+    (v >> 4) * 10 + (v & 0x0F)
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -3307,7 +4435,9 @@ struct McEchoPayload {
     data: Vec<u8>,
 }
 
-fn default_echo_payload() -> Vec<u8> { vec![0xAB, 0xCD, 0xEF] }
+fn default_echo_payload() -> Vec<u8> {
+    vec![0xAB, 0xCD, 0xEF]
+}
 
 fn handle_mc_echo_test(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     let payload: McEchoPayload = match serde_json::from_value(payload) {
@@ -3326,7 +4456,8 @@ fn handle_mc_echo_test(session: &mut Session, request_id: &str, payload: Value) 
             false,
         );
     }
-    let matched = crate::mc_pdu::parse_echo_test_response(&resp.data, &payload.data).unwrap_or(false);
+    let matched =
+        crate::mc_pdu::parse_echo_test_response(&resp.data, &payload.data).unwrap_or(false);
     success(
         request_id.to_string(),
         json!({ "endCode": 0, "matched": matched, "echoed": resp.data }),
@@ -3334,7 +4465,12 @@ fn handle_mc_echo_test(session: &mut Session, request_id: &str, payload: Value) 
     )
 }
 
-fn handle_mc_cpu_info(session: &mut Session, request_id: &str, kind: &str, payload: Value) -> CommandOutcome {
+fn handle_mc_cpu_info(
+    session: &mut Session,
+    request_id: &str,
+    kind: &str,
+    payload: Value,
+) -> CommandOutcome {
     let payload: McConnOnlyPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -3357,7 +4493,11 @@ fn handle_mc_cpu_info(session: &mut Session, request_id: &str, kind: &str, paylo
     }
     if kind == "type" {
         match crate::mc_pdu::parse_read_cpu_type_response(&resp.data) {
-            Ok(t) => success(request_id.to_string(), json!({ "endCode": 0, "cpuType": t }), false),
+            Ok(t) => success(
+                request_id.to_string(),
+                json!({ "endCode": 0, "cpuType": t }),
+                false,
+            ),
             Err(e) => failure(Some(request_id.to_string()), e),
         }
     } else {
@@ -3368,10 +4508,18 @@ fn handle_mc_cpu_info(session: &mut Session, request_id: &str, kind: &str, paylo
                     crate::mc_pdu::CpuStatus::Stop => "STOP",
                     crate::mc_pdu::CpuStatus::Pause => "PAUSE",
                     crate::mc_pdu::CpuStatus::Other(v) => {
-                        return success(request_id.to_string(), json!({ "endCode": 0, "cpuStatus": format!("OTHER({v:#04x})") }), false)
+                        return success(
+                            request_id.to_string(),
+                            json!({ "endCode": 0, "cpuStatus": format!("OTHER({v:#04x})") }),
+                            false,
+                        );
                     }
                 };
-                success(request_id.to_string(), json!({ "endCode": 0, "cpuStatus": status }), false)
+                success(
+                    request_id.to_string(),
+                    json!({ "endCode": 0, "cpuStatus": status }),
+                    false,
+                )
             }
             Err(e) => failure(Some(request_id.to_string()), e),
         }
@@ -3387,14 +4535,20 @@ fn handle_mc_build_ascii_read(request_id: &str, payload: Value) -> CommandOutcom
         #[serde(default = "default_ascii_watchdog")]
         watchdog: u16,
     }
-    fn default_ascii_watchdog() -> u16 { 0x0010 }
+    fn default_ascii_watchdog() -> u16 {
+        0x0010
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::mc_ascii::build_ascii_read_request(
-        crate::mc_frame::FrameType::Type3E, 0,
-        &crate::mc_frame::AccessRoute::default(), p.watchdog, &p.address, p.points,
+        crate::mc_frame::FrameType::Type3E,
+        0,
+        &crate::mc_frame::AccessRoute::default(),
+        p.watchdog,
+        &p.address,
+        p.points,
     ) {
         Ok(s) => success(request_id.to_string(), json!({ "ascii": s }), false),
         Err(e) => failure(Some(request_id.to_string()), e),
@@ -3410,11 +4564,14 @@ fn handle_open_mc_ascii(session: &mut Session, request_id: &str, payload: Value)
         "3e" => crate::mc_frame::FrameType::Type3E,
         "4e" => crate::mc_frame::FrameType::Type4E,
         other => {
-            return failure(Some(request_id.to_string()), CoreError::Modbus {
-                code: "MC_BAD_FRAME_TYPE",
-                message: format!("帧类型「{other}」无效(支持 3e/4e)"),
-                details: None,
-            })
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "MC_BAD_FRAME_TYPE",
+                    message: format!("帧类型「{other}」无效(支持 3e/4e)"),
+                    details: None,
+                },
+            );
         }
     };
     let route = crate::mc_frame::AccessRoute {
@@ -3424,7 +4581,12 @@ fn handle_open_mc_ascii(session: &mut Session, request_id: &str, payload: Value)
         station_no: payload.station_no,
     };
     match session.open_mc_tcp_ascii(
-        &payload.connection_id, &payload.host, payload.port, route, frame_type, payload.watchdog,
+        &payload.connection_id,
+        &payload.host,
+        payload.port,
+        route,
+        frame_type,
+        payload.watchdog,
     ) {
         Ok(()) => success(
             request_id.to_string(),
@@ -3482,10 +4644,12 @@ fn handle_brand_parse_address(request_id: &str, payload: Value) -> CommandOutcom
                 Some(request_id.to_string()),
                 CoreError::Modbus {
                     code: "BRAND_UNKNOWN",
-                    message: format!("未知品牌「{other}」(当前支持: delta-es / inovance-h3u / inovance-h5u)·汇川/信捷映射待手册确认后加入"),
+                    message: format!(
+                        "未知品牌「{other}」(当前支持: delta-es / inovance-h3u / inovance-h5u)·汇川/信捷映射待手册确认后加入"
+                    ),
                     details: None,
                 },
-            )
+            );
         }
     };
     match crate::brand_profiles::parse_brand_address(profile, &p.address) {
@@ -3507,6 +4671,53 @@ fn handle_brand_parse_address(request_id: &str, payload: Value) -> CommandOutcom
     }
 }
 
+fn handle_delta_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        series: String,
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let series = match p.series.trim().to_ascii_lowercase().as_str() {
+        "dvp" | "delta-dvp" => crate::delta::Series::Dvp,
+        "as" | "delta-as" => crate::delta::Series::As,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "DELTA_SERIES_INVALID",
+                    message: format!("未知 Delta 系列「{other}」(当前支持 DVP / AS)"),
+                    details: None,
+                },
+            );
+        }
+    };
+    match crate::delta::parse_address(series, &p.address) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "series": crate::delta::series_name(parsed.series),
+                "canonical": parsed.canonical,
+                "area": parsed.area,
+                "modbusAddress": parsed.modbus_address,
+                "modbusAddressHex": format!("0x{:04X}", parsed.modbus_address),
+                "readFunction": parsed.read_function,
+                "writeFunction": parsed.write_function,
+                "isBit": parsed.is_bit,
+                "readOnly": parsed.read_only,
+                "transport": "modbus-profile",
+                "evidence": "software-address-map; model-and-L2-pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
 // ============ 欧姆龙 FINS ============
 
 fn fins_nodes_from_payload(payload: &Value) -> crate::fins_frame::FinsNodes {
@@ -3518,6 +4729,878 @@ fn fins_nodes_from_payload(payload: &Value) -> crate::fins_frame::FinsNodes {
         n.sa1 = s as u8;
     }
     n
+}
+
+fn handle_inovance_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        series: String,
+        address: String,
+        #[serde(default)]
+        kind: Option<String>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let series_text = p.series.trim().to_ascii_lowercase();
+    let series = match series_text.as_str() {
+        "h3u" | "inovance-h3u" => crate::inovance::Series::H3u,
+        "h5u" | "inovance-h5u" => crate::inovance::Series::H5u,
+        "am" | "am-series" | "inovance-am" => crate::inovance::Series::Am,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "INOVANCE_SERIES_INVALID",
+                    message: format!(
+                        "未知汇川系列「{other}」(当前边界 H3U / H5U；AM 显式保留为未确认)"
+                    ),
+                    details: None,
+                },
+            );
+        }
+    };
+    let kind_text = p
+        .kind
+        .as_deref()
+        .unwrap_or("auto")
+        .trim()
+        .to_ascii_lowercase();
+    let kind = match kind_text.as_str() {
+        "auto" | "" => crate::inovance::AccessKind::Auto,
+        "bit" | "bool" | "coil" => crate::inovance::AccessKind::Bit,
+        "word" | "register" | "holding" => crate::inovance::AccessKind::Word,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "INOVANCE_KIND_INVALID",
+                    message: format!("未知汇川访问类型「{other}」(使用 auto / bit / word)"),
+                    details: None,
+                },
+            );
+        }
+    };
+    match crate::inovance::parse_address(series, &p.address, kind) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "series": crate::inovance::series_name(parsed.series),
+                "canonical": parsed.canonical,
+                "area": parsed.area,
+                "modbusAddress": parsed.modbus_address,
+                "modbusAddressHex": format!("0x{:04X}", parsed.modbus_address),
+                "readFunction": parsed.read_function,
+                "writeFunction": parsed.write_function,
+                "isBit": parsed.is_bit,
+                "readOnly": parsed.read_only,
+                "registerWidth": parsed.register_width,
+                "underlyingProtocol": "Modbus RTU / Modbus TCP",
+                "evidence": "vendor-address-profile; L2 pending",
+            }),
+            false,
+        ),
+        Err(e) => failure(Some(request_id.to_string()), e),
+    }
+}
+
+fn handle_xinjie_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        series: String,
+        address: String,
+        #[serde(default)]
+        kind: Option<String>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let series_text = p.series.trim().to_ascii_lowercase();
+    let series = match series_text.as_str() {
+        "xc" | "xinje-xc" => crate::xinjie::Series::Xc,
+        "xd" | "xl" | "xinje-xd" | "xinje-xl" => crate::xinjie::Series::Xd,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "XINJE_SERIES_INVALID",
+                    message: format!("未知信捷系列「{other}」(当前边界 XC / XD-XL)"),
+                    details: None,
+                },
+            );
+        }
+    };
+    let kind_text = p
+        .kind
+        .as_deref()
+        .unwrap_or("auto")
+        .trim()
+        .to_ascii_lowercase();
+    let kind = match kind_text.as_str() {
+        "auto" | "" => crate::xinjie::AccessKind::Auto,
+        "word" | "register" | "holding" => crate::xinjie::AccessKind::Word,
+        "bit" | "bool" | "coil" => crate::xinjie::AccessKind::Bit,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "XINJE_KIND_INVALID",
+                    message: format!("未知信捷访问类型「{other}」(使用 auto / word)"),
+                    details: None,
+                },
+            );
+        }
+    };
+    match crate::xinjie::parse_address(series, &p.address, kind) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "series": crate::xinjie::series_name(parsed.series),
+                "canonical": parsed.canonical,
+                "area": parsed.area,
+                "modbusAddress": parsed.modbus_address,
+                "modbusAddressHex": format!("0x{:04X}", parsed.modbus_address),
+                "readFunction": parsed.read_function,
+                "writeFunction": parsed.write_function,
+                "isBit": parsed.is_bit,
+                "readOnly": parsed.read_only,
+                "registerWidth": parsed.register_width,
+                "underlyingProtocol": "Modbus RTU / Modbus TCP",
+                "evidence": "D-register-confirmed; other-areas-model-manual-pending",
+            }),
+            false,
+        ),
+        Err(e) => failure(Some(request_id.to_string()), e),
+    }
+}
+
+fn handle_fatek_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+        #[serde(default)]
+        kind: Option<String>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let kind = match p
+        .kind
+        .as_deref()
+        .unwrap_or("auto")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "auto" | "" => crate::fatek::AccessKind::Auto,
+        "bit" | "bool" => crate::fatek::AccessKind::Bit,
+        "word" | "register" => crate::fatek::AccessKind::Word,
+        other => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "FATEK_KIND_INVALID",
+                    message: format!("未知 FATEK 访问类型「{other}」(使用 auto / bit / word)"),
+                    details: None,
+                },
+            );
+        }
+    };
+    match crate::fatek::parse_address(&p.address, kind) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "canonical": address.canonical,
+                "dataCode": address.data_code,
+                "number": address.number,
+                "isDiscrete": address.is_discrete,
+                "kind": if address.is_discrete { "bit" } else { "word" },
+                "underlyingProtocol": "FATEK native ASCII over TCP",
+                "evidence": "documented-codec; L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_open_fatek_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenFatekConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_fatek(&p.connection_id, &p.host, p.port, p.station) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "station": p.station,
+                "stationHex": format!("0x{:02X}", p.station),
+                "transport": "tcp",
+                "sessionInitialized": true,
+                "handshake": false,
+                "readOnly": true,
+                "underlyingProtocol": "FATEK native ASCII over TCP",
+                "l2Evidence": "independent TCP endpoint only; FBs/Gateway L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_read_words(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: FatekReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.fatek_read_words(&p.connection_id, &p.address, p.count) {
+        Ok((request, parsed)) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "request": request,
+                "requestHex": format_hex(&request),
+                "command": parsed.command,
+                "station": parsed.station,
+                "status": parsed.status.to_string(),
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "dataAscii": String::from_utf8_lossy(&parsed.data),
+                "expectedDataBytes": usize::from(p.count) * 4,
+                "address": p.address,
+                "count": p.count,
+                "readOnly": true,
+                "underlyingProtocol": "FATEK native ASCII over TCP",
+                "l2Evidence": "independent TCP endpoint only; FBs/Gateway L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_read_discrete(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: FatekReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.fatek_read_discrete(&p.connection_id, &p.address, p.count) {
+        Ok((request, parsed)) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "request": request,
+                "requestHex": format_hex(&request),
+                "command": parsed.command,
+                "station": parsed.station,
+                "status": parsed.status.to_string(),
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "dataAscii": String::from_utf8_lossy(&parsed.data),
+                "expectedDataBytes": p.count,
+                "address": p.address,
+                "count": p.count,
+                "readOnly": true,
+                "underlyingProtocol": "FATEK native ASCII over TCP",
+                "l2Evidence": "independent TCP endpoint only; FBs/Gateway L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_pack_command(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        command: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::pack_command(p.station, &p.command) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({ "frame": frame, "frameHex": format_hex(&frame) }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_build_read_discrete(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::build_read_discrete(p.station, &p.address, p.count) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({ "frame": frame, "frameHex": format_hex(&frame), "command": "44" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_build_write_discrete(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        values: Vec<bool>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::build_write_discrete(p.station, &p.address, &p.values) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({ "frame": frame, "frameHex": format_hex(&frame), "command": "45" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_build_read_words(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::build_read_words(p.station, &p.address, p.count) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({ "frame": frame, "frameHex": format_hex(&frame), "command": "46" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_build_write_words(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        data: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::build_write_words(p.station, &p.address, &p.data) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({ "frame": frame, "frameHex": format_hex(&frame), "command": "47" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fatek_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        command: String,
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fatek::parse_response(&p.response, p.station, &p.command) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "station": parsed.station,
+                "command": parsed.command,
+                "status": parsed.status.to_string(),
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "dataAscii": String::from_utf8_lossy(&parsed.data),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fuji_sph_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fuji_sph::parse_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "canonical": address.canonical,
+                "area": address.area,
+                "typeCode": address.type_code,
+                "typeCodeHex": format!("0x{:02X}", address.type_code),
+                "wordAddress": address.word_address,
+                "bitIndex": address.bit_index,
+                "underlyingProtocol": "Fuji MICREX-SX SPH Loader Command",
+                "defaultPort": crate::fuji_sph::DEFAULT_PORT,
+                "evidence": "documented-codec; L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_open_fuji_sph_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenFujiSphConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_fuji_sph(&p.connection_id, &p.host, p.port, p.connection_id_byte) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "connectionIdByte": p.connection_id_byte,
+                "connectionIdHex": format!("0x{:02X}", p.connection_id_byte),
+                "transport": "tcp",
+                "sessionInitialized": true,
+                "handshake": false,
+                "readOnly": true,
+                "underlyingProtocol": "Fuji MICREX-SX SPH Loader Command",
+                "l2Evidence": "independent TCP endpoint only; SPH CPU/firmware L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fuji_sph_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: FujiSphReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let expected_data_bytes = usize::from(p.words) * 2;
+    match session.fuji_sph_read(&p.connection_id, &p.address, p.words) {
+        Ok((request, parsed)) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "request": request,
+                "requestHex": format_hex(&request),
+                "responseLength": parsed.data.len() + crate::fuji_sph::FRAME_BYTES,
+                "expectedDataBytes": expected_data_bytes,
+                "cpuErrorCode": parsed.error_code,
+                "typeCode": parsed.type_code,
+                "wordAddress": parsed.word_address,
+                "words": parsed.words,
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "address": p.address,
+                "readOnly": true,
+                "underlyingProtocol": "Fuji MICREX-SX SPH Loader Command",
+                "l2Evidence": "independent TCP endpoint only; SPH CPU/firmware L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fuji_sph_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: u8,
+        address: String,
+        words: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fuji_sph::build_read(p.connection_id, &p.address, p.words) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": format_hex(&frame),
+                "command": crate::fuji_sph::READ,
+                "connectionId": p.connection_id,
+                "underlyingProtocol": "Fuji MICREX-SX SPH Loader Command",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fuji_sph_build_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: u8,
+        address: String,
+        data: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fuji_sph::build_write(p.connection_id, &p.address, &p.data) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": format_hex(&frame),
+                "command": crate::fuji_sph::WRITE,
+                "connectionId": p.connection_id,
+                "underlyingProtocol": "Fuji MICREX-SX SPH Loader Command",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_fuji_sph_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: u8,
+        command: u8,
+        expected_data_bytes: usize,
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::fuji_sph::parse_response(
+        &p.response,
+        p.connection_id,
+        p.command,
+        p.expected_data_bytes,
+    ) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": parsed.connection_id,
+                "command": parsed.command,
+                "errorCode": parsed.error_code,
+                "typeCode": parsed.type_code,
+                "wordAddress": parsed.word_address,
+                "words": parsed.words,
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ge_srtp::parse_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "canonical": address.canonical,
+                "area": address.area,
+                "byteDataCode": address.byte_data_code,
+                "byteDataCodeHex": format!("0x{:02X}", address.byte_data_code),
+                "bitDataCode": address.bit_data_code,
+                "bitDataCodeHex": address.bit_data_code.map(|code| format!("0x{code:02X}")),
+                "isWordArea": address.is_word_area,
+                "offset": address.offset,
+                "reference": u32::from(address.offset) + 1,
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+                "defaultPort": crate::ge_srtp::DEFAULT_PORT,
+                "evidence": "documented-codec; L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_open_ge_srtp_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenGeSrtpConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_ge_srtp(&p.connection_id, &p.host, p.port) {
+        Ok(handshake) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "transport": "tcp",
+                "sessionInitialized": true,
+                "responseType": handshake.response_type,
+                "marker": handshake.marker,
+                "payloadLength": handshake.payload_length,
+                "readOnly": true,
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+                "l2Evidence": "independent TCP endpoint only; real PLC L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: GeSrtpReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let expected_data_length =
+        match crate::ge_srtp::expected_read_data_bytes(&p.address, p.element_count, p.bit_access) {
+            Ok(length) => length,
+            Err(error) => return failure(Some(request_id.to_string()), error),
+        };
+    match session.ge_srtp_read(&p.connection_id, &p.address, p.element_count, p.bit_access) {
+        Ok((request, parsed)) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "request": request,
+                "requestHex": format_hex(&request),
+                "transactionId": parsed.transaction_id,
+                "responseForm": parsed.response_form,
+                "declaredLength": parsed.declared_length,
+                "expectedDataLength": expected_data_length,
+                "plcStatus": parsed.plc_status,
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "address": p.address,
+                "elementCount": p.element_count,
+                "bitAccess": p.bit_access,
+                "readOnly": true,
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+                "l2Evidence": "independent TCP endpoint only; real PLC L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_build_handshake(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {}
+    if serde_json::from_value::<P>(payload).is_err() {
+        return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope);
+    }
+    let frame = crate::ge_srtp::build_handshake();
+    success(
+        request_id.to_string(),
+        json!({
+            "frame": frame,
+            "frameHex": format_hex(&frame),
+            "headerBytes": crate::ge_srtp::HEADER_BYTES,
+            "defaultPort": crate::ge_srtp::DEFAULT_PORT,
+            "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+        }),
+        false,
+    )
+}
+
+fn handle_ge_srtp_parse_handshake(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ge_srtp::parse_handshake(&p.response) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "responseType": parsed.response_type,
+                "marker": parsed.marker,
+                "payloadLength": parsed.payload_length,
+                "sessionInitialized": true,
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        transaction_id: u16,
+        address: String,
+        element_count: u16,
+        #[serde(default)]
+        bit_access: bool,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ge_srtp::build_read(p.transaction_id, &p.address, p.element_count, p.bit_access) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": format_hex(&frame),
+                "command": crate::ge_srtp::READ,
+                "transactionId": p.transaction_id,
+                "bitAccess": p.bit_access,
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_build_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        transaction_id: u16,
+        address: String,
+        data: Vec<u8>,
+        element_count: u16,
+        #[serde(default)]
+        bit_access: bool,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ge_srtp::build_write(
+        p.transaction_id,
+        &p.address,
+        &p.data,
+        p.element_count,
+        p.bit_access,
+    ) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": format_hex(&frame),
+                "command": crate::ge_srtp::WRITE,
+                "transactionId": p.transaction_id,
+                "bitAccess": p.bit_access,
+                "dataBytes": p.data.len(),
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ge_srtp_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        transaction_id: u16,
+        expected_data_length: usize,
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ge_srtp::parse_response(&p.response, p.transaction_id, p.expected_data_length) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "transactionId": parsed.transaction_id,
+                "responseForm": parsed.response_form,
+                "declaredLength": parsed.declared_length,
+                "plcStatus": parsed.plc_status,
+                "data": parsed.data,
+                "dataHex": format_hex(&parsed.data),
+                "underlyingProtocol": "GE Series 90 / PACSystems SRTP",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
 }
 
 fn handle_fins_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
@@ -3578,7 +5661,9 @@ fn handle_open_fins_tcp(session: &mut Session, request_id: &str, payload: Value)
     }
 }
 
-fn default_fins_port() -> u16 { 9600 }
+fn default_fins_port() -> u16 {
+    9600
+}
 
 fn handle_open_fins_udp(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
@@ -3644,7 +5729,9 @@ fn handle_fins_read(session: &mut Session, request_id: &str, payload: Value) -> 
             let values: Vec<u16> = if is_bit {
                 data.iter().map(|b| *b as u16).collect()
             } else {
-                data.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect()
+                data.chunks_exact(2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect()
             };
             success(
                 request_id.to_string(),
@@ -3656,7 +5743,9 @@ fn handle_fins_read(session: &mut Session, request_id: &str, payload: Value) -> 
     }
 }
 
-fn one_count() -> u16 { 1 }
+fn one_count() -> u16 {
+    1
+}
 
 fn handle_fins_write(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
@@ -3675,7 +5764,37 @@ fn handle_fins_write(session: &mut Session, request_id: &str, payload: Value) ->
         Err(e) => return failure(Some(request_id.to_string()), e),
     };
     let is_bit = addr.kind == crate::fins_address::FinsKind::Bit;
-    let count = p.values.len() as u16;
+    let count = match u16::try_from(p.values.len()) {
+        Ok(count) => count,
+        Err(_) => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "FINS_BATCH_LIMIT",
+                    message: format!(
+                        "FINS 写入点数超过软件安全上限 {}",
+                        crate::fins_frame::FINS_MAX_POINTS
+                    ),
+                    details: Some(
+                        json!({ "maximum": crate::fins_frame::FINS_MAX_POINTS, "actual": p.values.len() }),
+                    ),
+                },
+            );
+        }
+    };
+    if let Err(e) = crate::fins_frame::validate_access_window(&addr, count) {
+        return failure(Some(request_id.to_string()), e);
+    }
+    if is_bit && p.values.iter().any(|value| *value > 1) {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "FINS_BIT_VALUE_INVALID",
+                message: "FINS 位写入值只能是 0 或 1".to_string(),
+                details: Some(json!({ "allowed": [0, 1] })),
+            },
+        );
+    }
     let data: Vec<u8> = if is_bit {
         p.values.iter().map(|v| *v as u8).collect()
     } else {
@@ -3696,13 +5815,21 @@ fn handle_fins_write(session: &mut Session, request_id: &str, payload: Value) ->
                     },
                 );
             }
-            success(request_id.to_string(), json!({ "endCode": end_code }), false)
+            success(
+                request_id.to_string(),
+                json!({ "endCode": end_code }),
+                false,
+            )
         }
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_start_fins_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_start_fins_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -3726,9 +5853,15 @@ fn handle_start_fins_slave(session: &mut Session, request_id: &str, payload: Val
     }
 }
 
-fn default_true_fins() -> bool { true }
+fn default_true_fins() -> bool {
+    true
+}
 
-fn handle_stop_fins_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_stop_fins_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -3739,12 +5872,20 @@ fn handle_stop_fins_slave(session: &mut Session, request_id: &str, payload: Valu
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.stop_fins_slave(&p.slave_id) {
-        Ok(()) => success(request_id.to_string(), json!({ "stopped": p.slave_id }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "stopped": p.slave_id }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_fins_slave_set(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_fins_slave_set(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -3811,7 +5952,11 @@ fn handle_s7_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
     }
 }
 
-fn handle_open_s7_connection(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_open_s7_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -3842,13 +5987,13 @@ fn handle_open_s7_connection(session: &mut Session, request_id: &str, payload: V
     let parse_tsap = |s: &Option<String>, field: &str| -> Result<Option<u16>, CoreError> {
         match s {
             None => Ok(None),
-            Some(hex) => u16::from_str_radix(hex.trim_start_matches("0x"), 16).map(Some).map_err(|_| {
-                CoreError::Modbus {
+            Some(hex) => u16::from_str_radix(hex.trim_start_matches("0x"), 16)
+                .map(Some)
+                .map_err(|_| CoreError::Modbus {
                     code: "S7_TSAP_INVALID",
                     message: format!("{field} 应为十六进制(如 0100),实际「{}」", hex),
                     details: None,
-                }
-            }),
+                }),
         }
     };
     let local = match parse_tsap(&p.local_tsap, "localTsap") {
@@ -3899,7 +6044,9 @@ fn default_s7_count() -> u16 {
 fn default_s7_port() -> u16 {
     102
 }
-fn default_s7_seed() -> bool { true }
+fn default_s7_seed() -> bool {
+    true
+}
 fn default_s7_slot() -> u8 {
     1
 }
@@ -3919,11 +6066,29 @@ fn s7_chunk_items(
             // 单项超预算:按元素宽度拆成多个子项(每子项独占一轮)
             let per = (budget_bytes / item.addr.kind.elem_bytes() as usize).max(1);
             let mut remaining = item.count as usize;
+            let mut consumed = 0usize;
             while remaining > 0 {
                 let take = remaining.min(per).min(u16::MAX as usize) as u16;
                 let mut sub = item.clone();
                 sub.count = take;
+                // 每个后续分片必须从前一片末尾继续，不能重复读取原始起点。
+                match item.addr.kind {
+                    crate::s7_address::S7Kind::Bit => {
+                        let absolute_bit =
+                            item.addr.byte as usize * 8 + item.addr.bit as usize + consumed;
+                        sub.addr.byte = (absolute_bit / 8) as u32;
+                        sub.addr.bit = (absolute_bit % 8) as u8;
+                    }
+                    crate::s7_address::S7Kind::Timer | crate::s7_address::S7Kind::Counter => {
+                        sub.addr.byte = item.addr.byte + consumed as u32;
+                    }
+                    _ => {
+                        sub.addr.byte = item.addr.byte
+                            + (consumed * item.addr.kind.elem_bytes() as usize) as u32;
+                    }
+                }
                 remaining -= take as usize;
+                consumed += take as usize;
                 chunks.push(vec![(origin, sub)]);
             }
             continue;
@@ -3958,7 +6123,10 @@ fn handle_s7_read(session: &mut Session, request_id: &str, payload: Value) -> Co
     let mut items: Vec<crate::s7_pdu::S7Item> = Vec::with_capacity(p.items.len());
     for raw in &p.items {
         let item_payload: S7ItemPayload = match raw {
-            Value::String(s) => S7ItemPayload { address: s.clone(), count: 1 },
+            Value::String(s) => S7ItemPayload {
+                address: s.clone(),
+                count: 1,
+            },
             other => match serde_json::from_value(other.clone()) {
                 Ok(v) => v,
                 Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -4050,7 +6218,7 @@ fn handle_s7_write(session: &mut Session, request_id: &str, payload: Value) -> C
                             message: format!("hex「{}」不合法", hex),
                             details: None,
                         },
-                    )
+                    );
                 }
             }
         } else {
@@ -4063,11 +6231,13 @@ fn handle_s7_write(session: &mut Session, request_id: &str, payload: Value) -> C
                 },
             );
         };
-        let count = it.count.unwrap_or_else(|| match crate::s7_address::parse_s7_address(&it.address) {
-            Ok(a) if a.kind == crate::s7_address::S7Kind::Bit => data.len() as u16,
-            Ok(a) => (data.len() as u16) / a.kind.elem_bytes() as u16,
-            Err(_) => 1,
-        });
+        let count =
+            it.count
+                .unwrap_or_else(|| match crate::s7_address::parse_s7_address(&it.address) {
+                    Ok(a) if a.kind == crate::s7_address::S7Kind::Bit => data.len() as u16,
+                    Ok(a) => (data.len() as u16) / a.kind.elem_bytes() as u16,
+                    Err(_) => 1,
+                });
         match crate::s7_pdu::S7Item::new(&it.address, count) {
             Ok(item) => {
                 items.push(item);
@@ -4131,7 +6301,11 @@ fn hex_parse_bytes(hex: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-fn handle_start_s7_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_start_s7_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -4166,7 +6340,11 @@ fn handle_stop_s7_slave(session: &mut Session, request_id: &str, payload: Value)
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.stop_s7_slave(&p.slave_id) {
-        Ok(()) => success(request_id.to_string(), json!({ "stopped": p.slave_id }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "stopped": p.slave_id }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4197,7 +6375,7 @@ fn handle_s7_slave_set(session: &mut Session, request_id: &str, payload: Value) 
                         message: format!("hex「{hex}」不合法"),
                         details: None,
                     },
-                )
+                );
             }
         }
     } else {
@@ -4211,7 +6389,11 @@ fn handle_s7_slave_set(session: &mut Session, request_id: &str, payload: Value) 
         );
     };
     match session.s7_slave_set(&p.slave_id, &p.address, &bytes) {
-        Ok(()) => success(request_id.to_string(), json!({ "ok": true, "address": p.address }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "ok": true, "address": p.address }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4250,31 +6432,186 @@ fn handle_open_ppi_tcp(session: &mut Session, request_id: &str, payload: Value) 
         station: u8,
     }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.open_ppi_tcp(&p.connection_id, &p.host, p.port, p.station) {
-        Ok(()) => success(request_id.to_string(), json!({ "connectionId": p.connection_id, "station": p.station, "note": "串口形态请用主站页串口 + ppi framing" }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "connectionId": p.connection_id, "station": p.station, "note": "串口形态请用主站页串口 + ppi framing" }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn default_ppi_station() -> u8 { 2 }
+fn default_ppi_station() -> u8 {
+    2
+}
+
+/// 构造原生 COM PPI 只读第一拍。Electron 负责串口句柄和 E5/SA 双拍时序，
+/// Rust 负责 S7 地址、PDU 和 PPI FCS，避免 UI/Node 各自复制一份帧规则。
+fn handle_ppi_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(default = "default_ppi_station")]
+        station: u8,
+        #[serde(default)]
+        master: u8,
+        address: String,
+        count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if p.station > 126 || p.master > 126 || p.count == 0 {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "S7_PPI_PARAM_INVALID",
+                message: "PPI 站号/主站号必须是 0..126，读取数量必须大于 0".to_string(),
+                details: None,
+            },
+        );
+    }
+    let item = match crate::s7_pdu::S7Item::new(&p.address, p.count) {
+        Ok(item) => item,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let pdu = match crate::s7_pdu::build_read_request(0, &[item]) {
+        Ok(pdu) => pdu,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let frame = crate::ppi_frame::build_sd2(p.station, p.master, crate::ppi_frame::FC_READ, &pdu);
+    success(
+        request_id.to_string(),
+        json!({
+            "station": p.station,
+            "master": p.master,
+            "address": p.address,
+            "count": p.count,
+            "pdu": pdu,
+            "frame": frame,
+            "frameHex": format_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn handle_ppi_build_sa_confirm(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(default = "default_ppi_station")]
+        station: u8,
+        #[serde(default)]
+        master: u8,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if p.station > 126 || p.master > 126 {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "S7_PPI_PARAM_INVALID",
+                message: "PPI 站号/主站号必须是 0..126".to_string(),
+                details: None,
+            },
+        );
+    }
+    let frame = crate::ppi_frame::build_sa_confirm(p.station, p.master);
+    success(
+        request_id.to_string(),
+        json!({ "station": p.station, "master": p.master, "frame": frame, "frameHex": format_hex(&frame) }),
+        false,
+    )
+}
+
+/// 解析原生 COM PPI 第二拍返回的 SD2，并保留每个 S7 数据项返回码。
+fn handle_ppi_parse_read_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let (destination, source, function_code, response_pdu) =
+        match crate::ppi_frame::parse_sd2(&p.response) {
+            Ok(value) => value,
+            Err(error) => return failure(Some(request_id.to_string()), error),
+        };
+    let ack = match crate::s7_pdu::parse_ack(&response_pdu) {
+        Ok(ack) => ack,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    if ack.error != 0 {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "S7_CPU_ERROR",
+                message: format!(
+                    "PPI S7 响应错误 0x{:04X}:{}",
+                    ack.error,
+                    crate::s7_pdu::header_error_message(ack.error)
+                ),
+                details: Some(
+                    json!({ "destination": destination, "source": source, "functionCode": function_code, "error": ack.error }),
+                ),
+            },
+        );
+    }
+    let items = match crate::s7_pdu::parse_read_response(&ack) {
+        Ok(items) => items,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    success(
+        request_id.to_string(),
+        json!({
+            "destination": destination,
+            "source": source,
+            "functionCode": function_code,
+            "pduRef": ack.pdu_ref,
+            "items": items.iter().map(|item| json!({
+                "returnCode": item.return_code,
+                "returnCodeMessage": crate::s7_pdu::item_return_code_message(item.return_code),
+                "data": item.data,
+            })).collect::<Vec<_>>(),
+        }),
+        false,
+    )
+}
 
 fn handle_ppi_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String, address: String, count: u16 }
+    struct P {
+        connection_id: String,
+        address: String,
+        count: u16,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.ppi_read(&p.connection_id, &p.address, p.count) {
-        Ok(items) => success(request_id.to_string(), json!({
-            "items": items.iter().map(|it| json!({
-                "returnCode": it.return_code,
-                "returnCodeMessage": crate::s7_pdu::item_return_code_message(it.return_code),
-                "data": it.data,
-            })).collect::<Vec<_>>(),
-        }), false),
+        Ok(items) => success(
+            request_id.to_string(),
+            json!({
+                "items": items.iter().map(|it| json!({
+                    "returnCode": it.return_code,
+                    "returnCodeMessage": crate::s7_pdu::item_return_code_message(it.return_code),
+                    "data": it.data,
+                })).collect::<Vec<_>>(),
+            }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4282,41 +6619,76 @@ fn handle_ppi_read(session: &mut Session, request_id: &str, payload: Value) -> C
 fn handle_ppi_write(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String, address: String, count: u16, values: Vec<u8> }
+    struct P {
+        connection_id: String,
+        address: String,
+        count: u16,
+        values: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.ppi_write(&p.connection_id, &p.address, p.count, &p.values) {
-        Ok(codes) => success(request_id.to_string(), json!({
-            "returnCodes": codes,
-            "returnCodeMessages": codes.iter().map(|c| crate::s7_pdu::item_return_code_message(*c)).collect::<Vec<_>>(),
-        }), false),
+        Ok(codes) => success(
+            request_id.to_string(),
+            json!({
+                "returnCodes": codes,
+                "returnCodeMessages": codes.iter().map(|c| crate::s7_pdu::item_return_code_message(*c)).collect::<Vec<_>>(),
+            }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_start_ppi_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_start_ppi_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { slave_id: String, port: u16, #[serde(default = "default_true_fins")] seed: bool }
+    struct P {
+        slave_id: String,
+        port: u16,
+        #[serde(default = "default_true_fins")]
+        seed: bool,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.start_ppi_slave(&p.slave_id, p.port, p.seed) {
-        Ok(()) => success(request_id.to_string(), json!({ "slaveId": p.slave_id, "port": p.port, "protocol": "ppi-over-tcp" }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "slaveId": p.slave_id, "port": p.port, "protocol": "ppi-over-tcp" }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_stop_ppi_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_stop_ppi_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { slave_id: String }
+    struct P {
+        slave_id: String,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.stop_ppi_slave(&p.slave_id) {
-        Ok(()) => success(request_id.to_string(), json!({ "stopped": p.slave_id }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "stopped": p.slave_id }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4324,40 +6696,112 @@ fn handle_stop_ppi_slave(session: &mut Session, request_id: &str, payload: Value
 fn handle_hostlink_build_fins(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { station: u8, #[serde(default)] area: String, #[serde(default)] byte: u32, count: Option<u16> }
+    struct P {
+        station: u8,
+        #[serde(default)]
+        area: String,
+        #[serde(default)]
+        byte: u32,
+        count: Option<u16>,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    // 构建 FINS 读帧(默认 DM 区)
-    let area_code = if p.area.is_empty() { 0x82 } else {
-        match p.area.as_str() { "DM" | "" => 0x82, "CIO" | "WR" => 0xB0, "HR" => 0xB2, _ => 0x82 }
+    if p.station > 31 || p.byte > 0x00FF_FFFF {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "HOSTLINK_PARAM_INVALID",
+                message: "HostLink FINS 站号必须是 0..31，地址必须是 0..0xFFFFFF".to_string(),
+                details: None,
+            },
+        );
+    }
+    let area_code = match p.area.to_ascii_uppercase().as_str() {
+        "" | "DM" => crate::fins_address::area::DM_WORD,
+        "CIO" => crate::fins_address::area::CIO_WORD,
+        "W" | "WR" => crate::fins_address::area::W_WORD,
+        "H" | "HR" => crate::fins_address::area::H_WORD,
+        "A" | "AR" => crate::fins_address::area::A_WORD,
+        _ => {
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "HOSTLINK_PARAM_INVALID",
+                    message: "HostLink FINS 首轮只支持 DM/CIO/W/WR/H/HR/A/AR 字区".to_string(),
+                    details: None,
+                },
+            );
+        }
     };
     let count = p.count.unwrap_or(1);
+    if !(1..=100).contains(&count) {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "HOSTLINK_PARAM_INVALID",
+                message: "HostLink FINS 首轮字读取数量必须是 1..100".to_string(),
+                details: None,
+            },
+        );
+    }
+    let fins_addr = crate::fins_address::FinsAddress {
+        area_code,
+        address: p.byte,
+        kind: crate::fins_address::FinsKind::Word,
+    };
+    if let Err(error) = crate::fins_frame::validate_access_window(&fins_addr, count) {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "HOSTLINK_PARAM_INVALID",
+                message: format!("HostLink FINS 地址窗口无效: {error}"),
+                details: Some(json!({ "address": p.byte, "count": count })),
+            },
+        );
+    }
     let fins = crate::fins_frame::build_read_frame(
-        &crate::fins_frame::FinsNodes::default(), 1,
-        &crate::fins_address::FinsAddress { area_code, address: p.byte, kind: crate::fins_address::FinsKind::Word },
+        &crate::fins_frame::FinsNodes::default(),
+        1,
+        &fins_addr,
         count,
     );
     let frame = crate::hostlink::build_hostlink_fins(p.station, &fins);
-    success(request_id.to_string(), json!({
-        "frame": frame,
-        "frameText": String::from_utf8_lossy(&frame),
-    }), false)
+    success(
+        request_id.to_string(),
+        json!({
+            "frame": frame,
+            "frameText": String::from_utf8_lossy(&frame),
+        }),
+        false,
+    )
 }
 
 fn handle_hostlink_parse_fins(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { frame: Vec<u8> }
+    struct P {
+        frame: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::hostlink::parse_hostlink_fins(&p.frame) {
         Ok(fins) => {
-            let ack = crate::fins_frame::parse_response_frame(&fins)
-                .map_err(|e| CoreError::Modbus { code: "HOSTLINK_FINS_INVALID", message: e.to_string(), details: None });
+            let ack =
+                crate::fins_frame::parse_response_frame(&fins).map_err(|e| CoreError::Modbus {
+                    code: "HOSTLINK_FINS_INVALID",
+                    message: e.to_string(),
+                    details: None,
+                });
             match ack {
-                Ok(resp) => success(request_id.to_string(), json!({ "endCode": resp.end_code, "data": resp.data }), false),
+                Ok(resp) => success(
+                    request_id.to_string(),
+                    json!({ "sid": resp.sid, "endCode": resp.end_code, "data": resp.data }),
+                    false,
+                ),
                 Err(e) => failure(Some(request_id.to_string()), e),
             }
         }
@@ -4368,23 +6812,50 @@ fn handle_hostlink_parse_fins(request_id: &str, payload: Value) -> CommandOutcom
 fn handle_hostlink_build_cmode_read(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { station: u8, dmStart: u16, wordCount: u16 }
+    struct P {
+        station: u8,
+        dm_start: u16,
+        word_count: u16,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    let frame = crate::hostlink::build_cmode_read_dm(p.station, p.dmStart, p.wordCount);
-    success(request_id.to_string(), json!({
-        "frame": frame,
-        "frameText": String::from_utf8_lossy(&frame),
-    }), false)
+    let last = u32::from(p.dm_start) + u32::from(p.word_count).saturating_sub(1);
+    if p.station > 31 || !(1..=100).contains(&p.word_count) || last > u32::from(u16::MAX) {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "HOSTLINK_PARAM_INVALID",
+                message:
+                    "HostLink C-mode 首轮要求站号 0..31、字数 1..100，且 DM 地址窗口不得超过 65535"
+                        .to_string(),
+                details: Some(
+                    json!({ "station": p.station, "dmStart": p.dm_start, "wordCount": p.word_count }),
+                ),
+            },
+        );
+    }
+    let frame = crate::hostlink::build_cmode_read_dm(p.station, p.dm_start, p.word_count);
+    success(
+        request_id.to_string(),
+        json!({
+            "frame": frame,
+            "frameText": String::from_utf8_lossy(&frame),
+        }),
+        false,
+    )
 }
 
 fn handle_hostlink_parse_cmode_read(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { frame: Vec<u8> }
+    struct P {
+        frame: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::hostlink::parse_cmode_read_dm(&p.frame) {
         Ok(words) => success(request_id.to_string(), json!({ "words": words }), false),
@@ -4408,39 +6879,62 @@ fn handle_uss_build_request(request_id: &str, payload: Value) -> CommandOutcome 
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
+    let param = p.param.unwrap_or(0);
+    let pzd = p.pzd.unwrap_or_default();
+    if p.station > 30 || param > 0x0FFF || ![0, 2, 4, 8].contains(&pzd.len()) {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "USS_INVALID",
+                message: "USS 参数读取要求站号 0..30、PNU 0..4095，PZD 长度为 0/2/4/8".to_string(),
+                details: Some(
+                    json!({ "station": p.station, "param": param, "pzdBytes": pzd.len() }),
+                ),
+            },
+        );
+    }
     let (pke, ind) = if let Some(v) = p.value {
-        let param = p.param.unwrap_or(0);
         crate::uss_frame::pke_write_16(param, v)
     } else {
-        (crate::uss_frame::pke_read(p.param.unwrap_or(0)), [0u8, 0])
+        (crate::uss_frame::pke_read(param), [0u8, 0])
     };
-    let pzd = p.pzd.unwrap_or_default();
     let frame = crate::uss_frame::build_uss_request(p.station, pke, ind, &pzd);
-    success(request_id.to_string(), json!({
-        "frame": frame,
-        "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
-        "pkeAk": format!("0x{:X}", pke[0] >> 4),
-        "pkeAkMessage": crate::uss_frame::ak_message(pke[0] >> 4),
-    }), false)
+    success(
+        request_id.to_string(),
+        json!({
+            "frame": frame,
+            "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
+            "pkeAk": format!("0x{:X}", pke[0] >> 4),
+            "pkeAkMessage": crate::uss_frame::ak_message(pke[0] >> 4),
+        }),
+        false,
+    )
 }
 
 fn handle_uss_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { frame: Vec<u8> }
+    struct P {
+        frame: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::uss_frame::parse_uss_response(&p.frame) {
-        Ok((station, pke, ind, pzd)) => success(request_id.to_string(), json!({
-            "station": station,
-            "pkeAk": format!("0x{:X}", pke[0] >> 4),
-            "pkeAkMessage": crate::uss_frame::ak_message(pke[0] >> 4),
-            "pkePnu": ((pke[0] as u16 & 0x0F) << 8) | pke[1] as u16,
-            "ind": ind,
-            "pzd": pzd,
-        }), false),
+        Ok((station, pke, ind, pzd)) => success(
+            request_id.to_string(),
+            json!({
+                "station": station,
+                "pkeAkCode": pke[0] >> 4,
+                "pkeAk": format!("0x{:X}", pke[0] >> 4),
+                "pkeAkMessage": crate::uss_frame::ak_message(pke[0] >> 4),
+                "pkePnu": ((pke[0] as u16 & 0x0F) << 8) | pke[1] as u16,
+                "ind": ind,
+                "pzd": pzd,
+            }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4448,16 +6942,25 @@ fn handle_uss_parse_response(request_id: &str, payload: Value) -> CommandOutcome
 fn handle_rk512_build_read(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { area: String, db: u16, offset: u16, count: u16 }
+    struct P {
+        area: String,
+        db: u16,
+        offset: u16,
+        count: u16,
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::rk512::build_rk512_read(&p.area, p.db, p.offset, p.count) {
-        Ok(frame) => success(request_id.to_string(), json!({
-            "frame": frame,
-            "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
-        }), false),
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
+            }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4465,16 +6968,25 @@ fn handle_rk512_build_read(request_id: &str, payload: Value) -> CommandOutcome {
 fn handle_rk512_build_write(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { area: String, db: u16, offset: u16, values: Vec<u8> }
+    struct P {
+        area: String,
+        db: u16,
+        offset: u16,
+        values: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::rk512::build_rk512_write(&p.area, p.db, p.offset, &p.values) {
-        Ok(frame) => success(request_id.to_string(), json!({
-            "frame": frame,
-            "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
-        }), false),
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": frame.iter().map(|b| format!("{b:02X}")).collect::<String>(),
+            }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4482,44 +6994,3510 @@ fn handle_rk512_build_write(request_id: &str, payload: Value) -> CommandOutcome 
 fn handle_rk512_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { frame: Vec<u8> }
+    struct P {
+        frame: Vec<u8>,
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match crate::rk512::parse_rk512_response(&p.frame) {
-        Ok((resp, data)) => success(request_id.to_string(), json!({
-            "error": resp.error,
-            "errorMessage": crate::rk512::rk512_error_message(resp.error),
-            "func": resp.func,
-            "count": resp.count,
-            "db": resp.db,
-            "offset": resp.offset,
-            "data": data,
-        }), false),
+        Ok((resp, data)) => {
+            if resp.error == 0 && data.len() != usize::from(resp.count) * 2 {
+                return failure(
+                    Some(request_id.to_string()),
+                    CoreError::Modbus {
+                        code: "RK512_LENGTH_MISMATCH",
+                        message: format!(
+                            "RK512 成功响应数据长度不匹配:期望 {}B,收到 {}B",
+                            usize::from(resp.count) * 2,
+                            data.len()
+                        ),
+                        details: Some(
+                            json!({ "expectedBytes": usize::from(resp.count) * 2, "actualBytes": data.len(), "count": resp.count }),
+                        ),
+                    },
+                );
+            }
+            success(
+                request_id.to_string(),
+                json!({
+                    "error": resp.error,
+                    "errorMessage": crate::rk512::rk512_error_message(resp.error),
+                    "func": resp.func,
+                    "count": resp.count,
+                    "db": resp.db,
+                    "offset": resp.offset,
+                    "data": data,
+                }),
+                false,
+            )
+        }
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_s7_cpu_control(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_open_enip_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenEnipConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_enip(&p.connection_id, &p.host, p.port) {
+        Ok(registered) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "transport": "tcp",
+                "encapsulation": "RegisterSession",
+                "sessionInitialized": true,
+                "sessionHandle": registered.session_handle,
+                "senderContext": registered.sender_context,
+                "protocolVersion": registered.protocol_version,
+                "options": registered.options,
+                "readOnly": true,
+                "underlyingProtocol": "Allen-Bradley EtherNet/IP/CIP explicit",
+                "l2Evidence": "independent TCP endpoint only; CompactLogix/ControlLogix model and L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_enip_read_tag(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: EnipReadTagPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.enip_read_tag(&p.connection_id, &p.tag, p.elements) {
+        Ok((request, response, sender_context)) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "tag": p.tag,
+                "elements": p.elements,
+                "request": request,
+                "requestHex": crate::enip::frame_hex(&request),
+                "senderContext": sender_context,
+                "service": response.service,
+                "serviceHex": format!("0x{:02X}", response.service),
+                "generalStatus": response.general_status,
+                "generalStatusMessage": crate::enip::cip_status_message(response.general_status),
+                "additionalStatus": response.additional_status,
+                "cpfItemType": response.cpf_item_type,
+                "data": response.data,
+                "dataHex": crate::enip::frame_hex(&response.data),
+                "readOnly": true,
+                "underlyingProtocol": "Allen-Bradley EtherNet/IP/CIP explicit",
+                "l2Evidence": "independent TCP endpoint only; CompactLogix/ControlLogix model and L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_enip_build_register_session(request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String, action: String }
+    struct P {
+        #[serde(default)]
+        session_handle: u32,
+        #[serde(default)]
+        sender_context: u64,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let frame = crate::enip::build_register_session(p.session_handle, p.sender_context);
+    success(
+        request_id.to_string(),
+        json!({
+            "command": crate::enip::ENIP_REGISTER_SESSION,
+            "sessionHandle": p.session_handle,
+            "senderContext": p.sender_context,
+            "frame": frame,
+            "frameHex": crate::enip::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn handle_enip_build_unregister_session(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        session_handle: u32,
+        #[serde(default)]
+        sender_context: u64,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let frame = crate::enip::build_unregister_session(p.session_handle, p.sender_context);
+    success(
+        request_id.to_string(),
+        json!({
+            "command": crate::enip::ENIP_UNREGISTER_SESSION,
+            "sessionHandle": p.session_handle,
+            "senderContext": p.sender_context,
+            "frame": frame,
+            "frameHex": crate::enip::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn handle_enip_build_read_tag(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(default)]
+        session_handle: u32,
+        #[serde(default)]
+        sender_context: u64,
+        tag: String,
+        #[serde(default = "default_enip_elements")]
+        elements: u16,
+    }
+    fn default_enip_elements() -> u16 {
+        1
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let path = match crate::enip::encode_tag_path(&p.tag) {
+        Ok(path) => path,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let frame =
+        match crate::enip::build_read_tag(p.session_handle, p.sender_context, &p.tag, p.elements) {
+            Ok(frame) => frame,
+            Err(error) => return failure(Some(request_id.to_string()), error),
+        };
+    success(
+        request_id.to_string(),
+        json!({
+            "command": crate::enip::ENIP_SEND_RR_DATA,
+            "cipService": crate::enip::CIP_READ_TAG,
+            "sessionHandle": p.session_handle,
+            "senderContext": p.sender_context,
+            "tag": p.tag,
+            "elements": p.elements,
+            "tagPath": path,
+            "tagPathHex": crate::enip::frame_hex(&path),
+            "frame": frame,
+            "frameHex": crate::enip::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn handle_enip_parse_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        frame: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::enip::parse_encapsulation(&p.frame) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "command": frame.command,
+                "length": frame.length,
+                "sessionHandle": frame.session_handle,
+                "status": frame.status,
+                "senderContext": frame.sender_context,
+                "senderContextHex": crate::enip::frame_hex(&frame.sender_context),
+                "options": frame.options,
+                "payload": frame.payload,
+                "payloadHex": crate::enip::frame_hex(&frame.payload),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_enip_parse_cip_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        frame: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::enip::parse_cip_response(&p.frame) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "service": response.service,
+                "serviceHex": format!("0x{:02X}", response.service),
+                "expectedReadReply": response.service == crate::enip::CIP_READ_TAG_REPLY,
+                "replyPathSize": response.reply_path_size,
+                "generalStatus": response.general_status,
+                "generalStatusHex": format!("0x{:02X}", response.general_status),
+                "generalStatusMessage": crate::enip::cip_status_message(response.general_status),
+                "cipOk": response.general_status == 0,
+                "additionalStatus": response.additional_status,
+                "cpfItemType": response.cpf_item_type,
+                "data": response.data,
+                "dataHex": crate::enip::frame_hex(&response.data),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+// === Beckhoff ADS/AMS（TCP 只读会话 + 编解码）===
+
+fn ads_live_result(
+    request_id: &str,
+    connection_id: &str,
+    mode: &str,
+    request: Vec<u8>,
+    response_frame: Vec<u8>,
+    response: crate::ads::AdsResponse,
+) -> CommandOutcome {
+    let mut result = json!({
+        "connectionId": connection_id,
+        "mode": mode,
+        "request": request,
+        "requestHex": crate::ads::frame_hex(&request),
+        "response": response_frame,
+        "responseHex": crate::ads::frame_hex(&response_frame),
+        "command": response.frame.command,
+        "commandHex": format!("0x{:04X}", response.frame.command),
+        "targetNetId": crate::ads::net_id_string(&response.frame.target_net_id),
+        "targetPort": response.frame.target_port,
+        "sourceNetId": crate::ads::net_id_string(&response.frame.source_net_id),
+        "sourcePort": response.frame.source_port,
+        "stateFlags": response.frame.state_flags,
+        "invokeId": response.frame.invoke_id,
+        "amsError": response.frame.ams_error,
+        "adsResult": response.ads_result,
+        "adsResultHex": format!("0x{:08X}", response.ads_result),
+        "adsResultMessage": crate::ads::ads_error_message(response.ads_result),
+        "adsOk": response.ads_result == 0,
+        "data": response.data,
+        "dataHex": crate::ads::frame_hex(&response.data),
+        "declaredDataLength": response.declared_data_length,
+        "readOnly": true,
+        "underlyingProtocol": "Beckhoff ADS/AMS over TCP",
+        "l2Evidence": "independent TCP endpoint only; AMS Route/TwinCAT model and L2 pending",
+    });
+    if response.ads_result == 0 && response.frame.command == crate::ads::ADS_READ_DEVICE_INFO {
+        if let Ok((major, minor, build, device_name)) = crate::ads::parse_device_info(&response) {
+            result["deviceInfo"] = json!({ "majorVersion": major, "minorVersion": minor, "versionBuild": build, "deviceName": device_name });
+        }
+    }
+    if response.ads_result == 0 && response.frame.command == crate::ads::ADS_READ_STATE {
+        if let Ok((ads_state, device_state)) = crate::ads::parse_state(&response) {
+            result["state"] = json!({ "adsState": ads_state, "deviceState": device_state, "isRunning": ads_state == 5 });
+        }
+    }
+    success(request_id.to_string(), result, false)
+}
+
+fn handle_open_ads_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenAdsConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let target_net_id = match crate::ads::parse_net_id(&p.target_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let source_net_id = match crate::ads::parse_net_id(&p.source_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match session.open_ads(
+        &p.connection_id,
+        &p.host,
+        p.port,
+        target_net_id,
+        p.target_port,
+        source_net_id,
+        p.source_port,
+    ) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "targetNetId": p.target_net_id,
+                "targetPort": p.target_port,
+                "sourceNetId": p.source_net_id,
+                "sourcePort": p.source_port,
+                "transport": "tcp",
+                "handshake": false,
+                "sessionInitialized": true,
+                "amsRoute": "caller-supplied endpoint; no automatic route creation",
+                "readOnly": true,
+                "underlyingProtocol": "Beckhoff ADS/AMS over TCP",
+                "l2Evidence": "independent TCP endpoint only; AMS Route/TwinCAT model and L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: AdsReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.ads_read(
+        &p.connection_id,
+        p.index_group,
+        p.index_offset,
+        p.read_length,
+    ) {
+        Ok((request, response_frame, response)) => ads_live_result(
+            request_id,
+            &p.connection_id,
+            "read",
+            request,
+            response_frame,
+            response,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_read_device_info(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.ads_read_device_info(&p.connection_id) {
+        Ok((request, response_frame, response)) => ads_live_result(
+            request_id,
+            &p.connection_id,
+            "readDeviceInfo",
+            request,
+            response_frame,
+            response,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_read_state(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.ads_read_state(&p.connection_id) {
+        Ok((request, response_frame, response)) => ads_live_result(
+            request_id,
+            &p.connection_id,
+            "readState",
+            request,
+            response_frame,
+            response,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn mqtt_live_boundary(connection_id: &str) -> serde_json::Value {
+    json!({
+        "connectionId": connection_id,
+        "readOnly": true,
+        "underlyingProtocol": "MQTT 3.1.1 over TCP",
+        "l2Evidence": "independent TCP peer plus Aedes MQTT 3.1.1 broker interoperability; production broker/auth/TLS/Sparkplug L2 pending"
+    })
+}
+
+fn handle_open_mqtt_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenMqttConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_mqtt(
+        &p.connection_id,
+        &p.host,
+        p.port,
+        &p.client_id,
+        p.keep_alive,
+        p.clean_session,
+    ) {
+        Ok(connack) => {
+            let mut result = mqtt_live_boundary(&p.connection_id);
+            result["host"] = json!(p.host);
+            result["port"] = json!(p.port);
+            result["transport"] = json!("tcp");
+            result["clientId"] = json!(p.client_id);
+            result["keepAlive"] = json!(p.keep_alive);
+            result["cleanSession"] = json!(p.clean_session);
+            result["sessionPresent"] = json!(connack.session_present);
+            result["returnCode"] = json!(connack.return_code);
+            result["returnCodeMessage"] =
+                json!(crate::mqtt::return_code_message(connack.return_code));
+            result["handshake"] = json!("CONNECT/CONNACK");
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_subscribe(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: MqttSubscribePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.mqtt_subscribe(&p.connection_id, &p.topic_filter, p.qos) {
+        Ok((request, response, suback)) => {
+            let mut result = mqtt_live_boundary(&p.connection_id);
+            result["topicFilter"] = json!(p.topic_filter);
+            result["qos"] = json!(p.qos);
+            result["packetId"] = json!(suback.packet_id);
+            result["returnCode"] = json!(suback.return_code);
+            result["returnCodeMessage"] =
+                json!(crate::mqtt::return_code_message(suback.return_code));
+            result["request"] = json!(request);
+            result["requestHex"] = json!(crate::mqtt::frame_hex(&request));
+            result["response"] = json!(response);
+            result["responseHex"] = json!(crate::mqtt::frame_hex(&response));
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_read_publish(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: MqttConnectionIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.mqtt_read_publish(&p.connection_id) {
+        Ok((frame, publish)) => {
+            let mut result = mqtt_live_boundary(&p.connection_id);
+            result["packetType"] = json!(crate::mqtt::PACKET_PUBLISH);
+            result["topic"] = json!(publish.topic);
+            result["qos"] = json!(publish.qos);
+            result["dup"] = json!(publish.dup);
+            result["retain"] = json!(publish.retain);
+            result["packetId"] = json!(publish.packet_id);
+            result["payload"] = json!(publish.payload);
+            result["payloadHex"] = json!(crate::mqtt::frame_hex(&publish.payload));
+            result["payloadUtf8"] = std::str::from_utf8(&publish.payload)
+                .ok()
+                .map(str::to_owned)
+                .into();
+            result["frame"] = json!(frame);
+            result["frameHex"] = json!(crate::mqtt::frame_hex(&frame));
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_ping(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttConnectionIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.mqtt_ping(&p.connection_id) {
+        Ok((request, response)) => {
+            let mut result = mqtt_live_boundary(&p.connection_id);
+            result["request"] = json!(request);
+            result["requestHex"] = json!(crate::mqtt::frame_hex(&request));
+            result["response"] = json!(response);
+            result["responseHex"] = json!(crate::mqtt::frame_hex(&response));
+            result["ping"] = json!(true);
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_build_connect(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttBuildConnectPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::build_connect(&p.client_id, p.keep_alive, p.clean_session) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "packetType": crate::mqtt::PACKET_CONNECT,
+                "protocolName": "MQTT",
+                "protocolLevel": crate::mqtt::MQTT_PROTOCOL_LEVEL_311,
+                "clientId": p.client_id,
+                "keepAlive": p.keep_alive,
+                "cleanSession": p.clean_session,
+                "frame": frame,
+                "frameHex": crate::mqtt::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_parse_connack(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::parse_connack(&p.frame) {
+        Ok(connack) => success(
+            request_id.to_string(),
+            json!({
+                "packetType": crate::mqtt::PACKET_CONNACK,
+                "sessionPresent": connack.session_present,
+                "returnCode": connack.return_code,
+                "returnCodeMessage": crate::mqtt::return_code_message(connack.return_code),
+                "frameHex": crate::mqtt::frame_hex(&p.frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_build_subscribe(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttBuildSubscribePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::build_subscribe(p.packet_id, &p.topic_filter, p.qos) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "packetType": crate::mqtt::PACKET_SUBSCRIBE,
+                "packetId": p.packet_id,
+                "topicFilter": p.topic_filter,
+                "qos": p.qos,
+                "frame": frame,
+                "frameHex": crate::mqtt::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_parse_suback(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::parse_suback(&p.frame) {
+        Ok(suback) => success(
+            request_id.to_string(),
+            json!({
+                "packetType": crate::mqtt::PACKET_SUBACK,
+                "packetId": suback.packet_id,
+                "returnCode": suback.return_code,
+                "returnCodeMessage": crate::mqtt::return_code_message(suback.return_code),
+                "frameHex": crate::mqtt::frame_hex(&p.frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_parse_publish(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::parse_publish(&p.frame) {
+        Ok(publish) => success(
+            request_id.to_string(),
+            json!({
+                "packetType": crate::mqtt::PACKET_PUBLISH,
+                "topic": publish.topic,
+                "qos": publish.qos,
+                "dup": publish.dup,
+                "retain": publish.retain,
+                "packetId": publish.packet_id,
+                "payload": publish.payload,
+                "payloadHex": crate::mqtt::frame_hex(&publish.payload),
+                "payloadUtf8": std::str::from_utf8(&publish.payload).ok(),
+                "frameHex": crate::mqtt::frame_hex(&p.frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_build_pingreq(request_id: &str) -> CommandOutcome {
+    let frame = crate::mqtt::build_pingreq();
+    success(
+        request_id.to_string(),
+        json!({ "packetType": crate::mqtt::PACKET_PINGREQ, "frame": frame, "frameHex": crate::mqtt::frame_hex(&frame), "readOnly": true }),
+        false,
+    )
+}
+
+fn handle_mqtt_parse_pingresp(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: MqttFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::mqtt::parse_pingresp(&p.frame) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "packetType": crate::mqtt::PACKET_PINGRESP, "ping": true, "frameHex": crate::mqtt::frame_hex(&p.frame), "readOnly": true }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_mqtt_build_disconnect(request_id: &str) -> CommandOutcome {
+    let frame = crate::mqtt::build_disconnect();
+    success(
+        request_id.to_string(),
+        json!({ "packetType": crate::mqtt::PACKET_DISCONNECT, "frame": frame, "frameHex": crate::mqtt::frame_hex(&frame), "readOnly": true }),
+        false,
+    )
+}
+
+fn iec104_live_boundary(connection_id: &str) -> serde_json::Value {
+    json!({
+        "connectionId": connection_id,
+        "role": "clientMaster",
+        "readOnly": true,
+        "underlyingProtocol": "IEC 60870-5-104 over TCP",
+        "controlsEnabled": false,
+        "clockSyncEnabled": false,
+        "l2Evidence": "independent scripted TCP outstation peer; production RTU/IED L2 pending"
+    })
+}
+
+fn handle_open_iec104_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenIec104ConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_iec104(
+        &p.connection_id,
+        &p.host,
+        p.port,
+        p.common_address,
+        p.originator_address,
+    ) {
+        Ok((request, response)) => {
+            let mut result = iec104_live_boundary(&p.connection_id);
+            result["host"] = json!(p.host);
+            result["port"] = json!(p.port);
+            result["transport"] = json!("tcp");
+            result["commonAddress"] = json!(p.common_address);
+            result["originatorAddress"] = json!(p.originator_address);
+            result["handshake"] = json!("STARTDT_ACT/STARTDT_CON");
+            result["request"] = json!(request);
+            result["requestHex"] = json!(crate::iec104::frame_hex(&request));
+            result["response"] = json!(response);
+            result["responseHex"] = json!(crate::iec104::frame_hex(&response));
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_general_interrogation(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: Iec104InterrogationPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.iec104_general_interrogation(&p.connection_id, p.group) {
+        Ok(interrogation) => {
+            let request_hex = crate::iec104::frame_hex(&interrogation.request_frame);
+            let received_hex = interrogation
+                .received_frames
+                .iter()
+                .map(|frame| crate::iec104::frame_hex(frame))
+                .collect::<Vec<_>>();
+            let acknowledgement_hex = interrogation
+                .acknowledgement_frames
+                .iter()
+                .map(|frame| crate::iec104::frame_hex(frame))
+                .collect::<Vec<_>>();
+            let point_count = interrogation.points.len();
+            let mut result = iec104_live_boundary(&p.connection_id);
+            result["operation"] = json!("generalInterrogation");
+            result["group"] = json!(interrogation.group);
+            result["qualifier"] = json!(interrogation.qualifier);
+            result["request"] = json!(interrogation.request_frame);
+            result["requestHex"] = json!(request_hex);
+            result["receivedFrames"] = json!(interrogation.received_frames);
+            result["receivedFrameHex"] = json!(received_hex);
+            result["acknowledgementFrames"] = json!(interrogation.acknowledgement_frames);
+            result["acknowledgementFrameHex"] = json!(acknowledgement_hex);
+            result["points"] = json!(interrogation.points);
+            result["pointCount"] = json!(point_count);
+            result["activationConfirmed"] = json!(interrogation.activation_confirmed);
+            result["activationTerminated"] = json!(interrogation.activation_terminated);
+            result["finalSendSequence"] = json!(interrogation.final_send_sequence);
+            result["finalReceiveSequence"] = json!(interrogation.final_receive_sequence);
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_test_frame(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: Iec104ConnectionIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.iec104_test_frame(&p.connection_id) {
+        Ok((request, response)) => {
+            let mut result = iec104_live_boundary(&p.connection_id);
+            result["operation"] = json!("testFrame");
+            result["confirmed"] = json!(true);
+            result["request"] = json!(request);
+            result["requestHex"] = json!(crate::iec104::frame_hex(&request));
+            result["response"] = json!(response);
+            result["responseHex"] = json!(crate::iec104::frame_hex(&response));
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_build_i_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104BuildIFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::iec104::build_i_frame(p.send_sequence, p.receive_sequence, &p.asdu) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "format": "I",
+                "sendSequence": p.send_sequence,
+                "receiveSequence": p.receive_sequence,
+                "asdu": p.asdu,
+                "frame": frame,
+                "frameHex": crate::iec104::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_build_s_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104BuildSFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::iec104::build_s_frame(p.receive_sequence) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "format": "S",
+                "receiveSequence": p.receive_sequence,
+                "frame": frame,
+                "frameHex": crate::iec104::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn parse_iec104_u_function(value: &str) -> Result<crate::iec104::UFunction, CoreError> {
+    let normalized = value.trim().to_ascii_lowercase().replace(['_', '-'], "");
+    match normalized.as_str() {
+        "startdtact" | "startdatatransferactivation" => {
+            Ok(crate::iec104::UFunction::StartDataTransferActivation)
+        }
+        "startdtcon" | "startdatatransferconfirmation" => {
+            Ok(crate::iec104::UFunction::StartDataTransferConfirmation)
+        }
+        "stopdtact" | "stopdatatransferactivation" => {
+            Ok(crate::iec104::UFunction::StopDataTransferActivation)
+        }
+        "stopdtcon" | "stopdatatransferconfirmation" => {
+            Ok(crate::iec104::UFunction::StopDataTransferConfirmation)
+        }
+        "testfract" | "testframeactivation" => Ok(crate::iec104::UFunction::TestFrameActivation),
+        "testfrcon" | "testframeconfirmation" => {
+            Ok(crate::iec104::UFunction::TestFrameConfirmation)
+        }
+        _ => Err(CoreError::Modbus {
+            code: "IEC104_PARAM_INVALID",
+            message: format!("未知 IEC104 U 帧功能: {value}"),
+            details: Some(json!({ "function": value })),
+        }),
+    }
+}
+
+fn handle_iec104_build_u_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104BuildUFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match parse_iec104_u_function(&p.function) {
+        Ok(function) => {
+            let frame = crate::iec104::build_u_frame(function);
+            success(
+                request_id.to_string(),
+                json!({
+                    "format": "U",
+                    "function": function,
+                    "functionName": function.name(),
+                    "frame": frame,
+                    "frameHex": crate::iec104::frame_hex(&frame),
+                    "readOnly": true
+                }),
+                false,
+            )
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_parse_apdu(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104FramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::iec104::parse_apdu(&p.frame) {
+        Ok(apdu) => success(
+            request_id.to_string(),
+            json!({
+                "format": apdu.format(),
+                "apdu": apdu,
+                "frameHex": crate::iec104::frame_hex(&p.frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_build_general_interrogation(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104BuildInterrogationPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let asdu = match crate::iec104::build_general_interrogation_asdu(
+        p.common_address,
+        p.group,
+        p.originator_address,
+    ) {
+        Ok(asdu) => asdu,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::iec104::build_i_frame(p.send_sequence, p.receive_sequence, &asdu) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "operation": "generalInterrogation",
+                "commonAddress": p.common_address,
+                "originatorAddress": p.originator_address,
+                "group": p.group,
+                "qualifier": 20 + p.group,
+                "sendSequence": p.send_sequence,
+                "receiveSequence": p.receive_sequence,
+                "asdu": asdu,
+                "asduHex": crate::iec104::frame_hex(&asdu),
+                "frame": frame,
+                "frameHex": crate::iec104::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_iec104_parse_asdu(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Iec104AsduPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::iec104::parse_asdu(&p.asdu) {
+        Ok(asdu) => {
+            let points = if crate::iec104::is_monitoring_type(asdu.type_id) {
+                match crate::iec104::decode_telemetry(&asdu) {
+                    Ok(points) => points,
+                    Err(error) => return failure(Some(request_id.to_string()), error),
+                }
+            } else {
+                Vec::new()
+            };
+            success(
+                request_id.to_string(),
+                json!({
+                    "asdu": asdu,
+                    "asduHex": crate::iec104::frame_hex(&p.asdu),
+                    "points": points,
+                    "pointCount": points.len(),
+                    "readOnly": true
+                }),
+                false,
+            )
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn dnp3_live_boundary(connection_id: &str) -> serde_json::Value {
+    json!({
+        "connectionId": connection_id,
+        "role": "master",
+        "readOnly": true,
+        "underlyingProtocol": "DNP3 over TCP",
+        "controlsEnabled": false,
+        "timeSyncEnabled": false,
+        "secureAuthenticationEnabled": false,
+        "serialEnabled": false,
+        "stackSelection": "Nexus MIT bounded implementation; maintained Step Function stack evaluated but non-production license not accepted",
+        "l2Evidence": "independent scripted TCP outstation peer only; third-party production stack and real RTU/IED L2 pending"
+    })
+}
+
+fn dnp3_scan_outcome(
+    request_id: &str,
+    connection_id: &str,
+    result: crate::dnp3::ScanResult,
+) -> CommandOutcome {
+    let request_hex = result
+        .request_frames
+        .iter()
+        .map(|frame| crate::dnp3::frame_hex(frame))
+        .collect::<Vec<_>>();
+    let response_hex = result
+        .response_frames
+        .iter()
+        .map(|frame| crate::dnp3::frame_hex(frame))
+        .collect::<Vec<_>>();
+    let confirmation_hex = result
+        .confirmation_frames
+        .iter()
+        .map(|frame| crate::dnp3::frame_hex(frame))
+        .collect::<Vec<_>>();
+    let point_count = result.points.len();
+    let unsolicited_count = result.unsolicited_responses.len();
+    let mut value = dnp3_live_boundary(connection_id);
+    value["operation"] = json!(result.operation);
+    value["classes"] = json!(result.classes);
+    value["requestFrames"] = json!(result.request_frames);
+    value["requestFrameHex"] = json!(request_hex);
+    value["responseFrames"] = json!(result.response_frames);
+    value["responseFrameHex"] = json!(response_hex);
+    value["confirmationFrames"] = json!(result.confirmation_frames);
+    value["confirmationFrameHex"] = json!(confirmation_hex);
+    value["initialApplicationSequence"] = json!(result.initial_application_sequence);
+    value["finalApplicationSequence"] = json!(result.final_application_sequence);
+    value["finalTransportSequence"] = json!(result.final_transport_sequence);
+    value["iin"] = json!(result.iin);
+    value["points"] = json!(result.points);
+    value["pointCount"] = json!(point_count);
+    value["unsolicitedResponses"] = json!(result.unsolicited_responses);
+    value["unsolicitedResponseCount"] = json!(unsolicited_count);
+    success(request_id.to_string(), value, false)
+}
+
+fn handle_open_dnp3_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenDnp3ConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_dnp3(
+        &p.connection_id,
+        &p.host,
+        p.port,
+        p.master_address,
+        p.outstation_address,
+    ) {
+        Ok(()) => {
+            let mut result = dnp3_live_boundary(&p.connection_id);
+            result["host"] = json!(p.host);
+            result["port"] = json!(p.port);
+            result["transport"] = json!("tcp");
+            result["masterAddress"] = json!(p.master_address);
+            result["outstationAddress"] = json!(p.outstation_address);
+            result["tcpConnected"] = json!(true);
+            result["applicationHandshake"] = json!(false);
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_integrity_poll(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: Dnp3ConnectionIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.dnp3_integrity_poll(&p.connection_id) {
+        Ok(result) => dnp3_scan_outcome(request_id, &p.connection_id, result),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_class_scan(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: Dnp3ClassScanPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.dnp3_class_scan(
+        &p.connection_id,
+        p.class0,
+        p.class1,
+        p.class2,
+        p.class3,
+        "classScan",
+    ) {
+        Ok(result) => dnp3_scan_outcome(request_id, &p.connection_id, result),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3ReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.dnp3_read(&p.connection_id, p.group, p.variation, p.start, p.stop) {
+        Ok(result) => dnp3_scan_outcome(request_id, &p.connection_id, result),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_build_link_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3BuildLinkPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dnp3::build_link_frame(p.control, p.destination, p.source, &p.user_data) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "control": p.control,
+                "destination": p.destination,
+                "source": p.source,
+                "userData": p.user_data,
+                "frame": frame,
+                "frameHex": crate::dnp3::frame_hex(&frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_parse_link_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3FramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dnp3::parse_link_frame(&p.frame) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "link": frame,
+                "frameHex": crate::dnp3::frame_hex(&p.frame),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_build_class_scan(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3BuildClassScanPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dnp3::build_class_scan(p.sequence, p.class0, p.class1, p.class2, p.class3) {
+        Ok(pdu) => success(
+            request_id.to_string(),
+            json!({
+                "sequence": p.sequence,
+                "classes": [p.class0, p.class1, p.class2, p.class3],
+                "function": crate::dnp3::FUNCTION_READ,
+                "pdu": pdu,
+                "pduHex": crate::dnp3::frame_hex(&pdu),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_build_read_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3BuildReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let request = match (p.start, p.stop) {
+        (Some(start), Some(stop)) => {
+            crate::dnp3::build_read_request(p.sequence, p.group, p.variation, start, stop)
+        }
+        (None, None) => crate::dnp3::build_read_all_request(p.sequence, p.group, p.variation),
+        _ => Err(CoreError::Modbus {
+            code: "DNP3_RANGE_INCOMPLETE",
+            message: "DNP3 start/stop 必须同时提供或同时省略".into(),
+            details: Some(json!({ "start": p.start, "stop": p.stop })),
+        }),
+    };
+    match request {
+        Ok(pdu) => success(
+            request_id.to_string(),
+            json!({
+                "sequence": p.sequence,
+                "group": p.group,
+                "variation": p.variation,
+                "start": p.start,
+                "stop": p.stop,
+                "function": crate::dnp3::FUNCTION_READ,
+                "pdu": pdu,
+                "pduHex": crate::dnp3::frame_hex(&pdu),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_parse_application_response(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3ApplicationPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dnp3::parse_application_response(&p.pdu) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "response": response,
+                "pduHex": crate::dnp3::frame_hex(&p.pdu),
+                "pointCount": response.points.len(),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dnp3_build_confirm(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dnp3ConfirmPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dnp3::build_confirm(p.sequence, p.unsolicited) {
+        Ok(pdu) => success(
+            request_id.to_string(),
+            json!({
+                "sequence": p.sequence,
+                "unsolicited": p.unsolicited,
+                "function": crate::dnp3::FUNCTION_CONFIRM,
+                "pdu": pdu,
+                "pduHex": crate::dnp3::frame_hex(&pdu),
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dlt645_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dlt645AddressPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dlt645::parse_address(&p.address) {
+        Ok(address_bytes) => success(
+            request_id.to_string(),
+            json!({
+                "address": crate::dlt645::format_address(&address_bytes)
+                    .expect("validated address must format"),
+                "addressBytes": address_bytes,
+                "addressHex": crate::dlt645::frame_hex(&address_bytes),
+                "byteOrder": "leastSignificantPairFirst",
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dlt645_parse_data_id(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dlt645DataIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let version = match p.version.parse::<crate::dlt645::Version>() {
+        Ok(version) => version,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::dlt645::parse_data_identifier(version, &p.data_id) {
+        Ok(identifier) => success(
+            request_id.to_string(),
+            json!({
+                "identifier": identifier,
+                "wireHexBeforeOffset": crate::dlt645::frame_hex(&identifier.wire_bytes),
+                "offset": crate::dlt645::DATA_OFFSET,
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dlt645_build_read_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dlt645BuildReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let version = match p.version.parse::<crate::dlt645::Version>() {
+        Ok(version) => version,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::dlt645::build_read_request(version, &p.address, &p.data_id, p.preamble_count) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "version": version,
+                "address": p.address.trim(),
+                "dataId": p.data_id.to_ascii_uppercase(),
+                "preambleCount": p.preamble_count,
+                "control": version.read_request_control(),
+                "frame": frame,
+                "frameHex": crate::dlt645::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dlt645_parse_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dlt645FramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::dlt645::parse_frame(&p.frame) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "parsed": frame,
+                "frameHex": crate::dlt645::frame_hex(&p.frame),
+                "offsetDecoded": true,
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_dlt645_parse_read_response(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Dlt645ParseReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let version = match p.version.parse::<crate::dlt645::Version>() {
+        Ok(version) => version,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::dlt645::parse_read_response(&p.frame, version, &p.address, &p.data_id) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "response": response,
+                "frameHex": crate::dlt645::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_parse_meter_type(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188MeterTypePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match p.meter_type.parse::<crate::cjt188::MeterType>() {
+        Ok(meter_type) => success(
+            request_id.to_string(),
+            json!({
+                "meterType": meter_type,
+                "meterTypeCode": meter_type.code(),
+                "label": meter_type.label(),
+                "cumulativeFlowUnit": meter_type.cumulative_flow_unit(),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188AddressPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::cjt188::parse_address(&p.address) {
+        Ok(address_bytes) => success(
+            request_id.to_string(),
+            json!({
+                "address": crate::cjt188::format_address(&address_bytes)
+                    .expect("validated address must format"),
+                "addressBytes": address_bytes,
+                "addressHex": crate::cjt188::frame_hex(&address_bytes),
+                "byteOrder": "leastSignificantPairFirst",
+                "broadcast": address_bytes == [0xAA; 7],
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_parse_data_id(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188DataIdPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::cjt188::parse_data_identifier(&p.data_id) {
+        Ok(identifier) => success(
+            request_id.to_string(),
+            json!({
+                "identifier": identifier,
+                "wireHex": crate::cjt188::frame_hex(&identifier.wire_bytes),
+                "byteOrder": "canonicalHighByteFirst",
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_build_read_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188BuildReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let meter_type = match p.meter_type.parse::<crate::cjt188::MeterType>() {
+        Ok(meter_type) => meter_type,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::cjt188::build_read_request(
+        meter_type,
+        &p.address,
+        &p.data_id,
+        p.sequence,
+        p.preamble_count,
+    ) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "meterType": meter_type,
+                "address": p.address.trim().to_ascii_uppercase(),
+                "dataId": p.data_id.to_ascii_uppercase(),
+                "sequence": p.sequence,
+                "preambleCount": p.preamble_count,
+                "control": crate::cjt188::READ_DATA_CONTROL,
+                "frame": frame,
+                "frameHex": crate::cjt188::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_parse_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188FramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::cjt188::parse_frame(&p.frame) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "parsed": frame,
+                "frameHex": crate::cjt188::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_cjt188_parse_read_response(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: Cjt188ParseReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let meter_type = match p.meter_type.parse::<crate::cjt188::MeterType>() {
+        Ok(meter_type) => meter_type,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::cjt188::parse_read_response(
+        &p.frame, meter_type, &p.address, &p.data_id, p.sequence,
+    ) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "response": response,
+                "frameHex": crate::cjt188::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "serial"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn parse_bacnet_segmentation(value: &str) -> Result<crate::bacnet::Segmentation, CoreError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "both" | "segmented-both" | "0" => Ok(crate::bacnet::Segmentation::Both),
+        "transmit" | "segmented-transmit" | "1" => Ok(crate::bacnet::Segmentation::Transmit),
+        "receive" | "segmented-receive" | "2" => Ok(crate::bacnet::Segmentation::Receive),
+        "none" | "no-segmentation" | "3" => Ok(crate::bacnet::Segmentation::None),
+        other => Err(CoreError::Modbus {
+            code: "BACNET_SEGMENTATION_INVALID",
+            message: "BACnet Segmentation 只能是 both、transmit、receive 或 none".into(),
+            details: Some(serde_json::json!({ "segmentation": other })),
+        }),
+    }
+}
+
+fn handle_bacnet_ip_build_whois(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: BacnetIpWhoIsPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::bacnet::build_whois_request(p.low_limit, p.high_limit, p.broadcast) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "service": "who-is",
+                "lowLimit": p.low_limit,
+                "highLimit": p.high_limit,
+                "global": p.low_limit.is_none() && p.high_limit.is_none(),
+                "broadcast": p.broadcast,
+                "bvlcFunction": if p.broadcast {
+                    crate::bacnet::BVLC_ORIGINAL_BROADCAST_NPDU
+                } else {
+                    crate::bacnet::BVLC_ORIGINAL_UNICAST_NPDU
+                },
+                "frame": frame,
+                "frameHex": crate::bacnet::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_build_iam(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: BacnetIpIamPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let segmentation = match parse_bacnet_segmentation(&p.segmentation) {
+        Ok(segmentation) => segmentation,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::bacnet::build_iam_request(
+        p.device_instance,
+        p.max_apdu,
+        segmentation,
+        p.vendor_id,
+        p.broadcast,
+    ) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "service": "i-am",
+                "deviceInstance": p.device_instance,
+                "maxApdu": p.max_apdu,
+                "segmentation": segmentation,
+                "vendorId": p.vendor_id,
+                "broadcast": p.broadcast,
+                "bvlcFunction": if p.broadcast {
+                    crate::bacnet::BVLC_ORIGINAL_BROADCAST_NPDU
+                } else {
+                    crate::bacnet::BVLC_ORIGINAL_UNICAST_NPDU
+                },
+                "frame": frame,
+                "frameHex": crate::bacnet::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_parse_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: BacnetIpFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::bacnet::parse_frame(&p.frame) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "parsed": parsed,
+                "frameHex": crate::bacnet::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn bacnet_read_property_request(
+    p: &BacnetIpReadPropertyRequestPayload,
+) -> crate::bacnet::ReadPropertyRequest {
+    crate::bacnet::ReadPropertyRequest {
+        object_type: p.object_type,
+        object_instance: p.object_instance,
+        property_identifier: p.property_identifier,
+        property_array_index: p.property_array_index,
+        invoke_id: p.invoke_id,
+    }
+}
+
+fn handle_bacnet_ip_build_read_property_request(
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: BacnetIpReadPropertyRequestPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::bacnet::build_read_property_request(
+        p.object_type,
+        p.object_instance,
+        p.property_identifier,
+        p.property_array_index,
+        p.invoke_id,
+    ) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "request": bacnet_read_property_request(&p),
+                "frame": frame,
+                "frameHex": crate::bacnet::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_parse_read_property_request(
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: BacnetIpReadPropertyFramePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::bacnet::parse_read_property_request(&p.frame) {
+        Ok(request) => success(
+            request_id.to_string(),
+            json!({
+                "request": request,
+                "frameHex": crate::bacnet::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_parse_read_property_ack(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: BacnetIpReadPropertyAckPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let expected = p
+        .expected_request
+        .as_ref()
+        .map(bacnet_read_property_request);
+    match crate::bacnet::parse_read_property_ack(&p.frame, expected.as_ref()) {
+        Ok(ack) => success(
+            request_id.to_string(),
+            json!({
+                "ack": ack,
+                "frameHex": crate::bacnet::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn bacnet_live_boundary(connection_id: &str) -> serde_json::Value {
+    json!({
+        "connectionId": connection_id,
+        "role": "client",
+        "readOnly": true,
+        "underlyingProtocol": "BACnet/IPv4 over UDP",
+        "controlsEnabled": false,
+        "writePropertyEnabled": false,
+        "readPropertyMultipleEnabled": false,
+        "covEnabled": false,
+        "bbmdEnabled": false,
+        "foreignDeviceEnabled": false,
+        "l2Evidence": "bacstack 0.0.1-beta.14 independent stack interoperability passed; real building device L2 pending"
+    })
+}
+
+fn handle_open_bacnet_ip_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: BacnetIpOpenPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_bacnet_ip(&p.connection_id, &p.host, p.port) {
+        Ok(()) => {
+            let mut result = bacnet_live_boundary(&p.connection_id);
+            result["host"] = json!(p.host);
+            result["port"] = json!(p.port);
+            result["transport"] = json!("udp");
+            result["udpConnected"] = json!(true);
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_whois(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: BacnetIpWhoisLivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.bacnet_whois(&p.connection_id, p.low_limit, p.high_limit, p.timeout_ms) {
+        Ok(result) => {
+            let mut value = bacnet_live_boundary(&p.connection_id);
+            value["operation"] = json!("who-is");
+            value["requestFrame"] = json!(result.request_frame);
+            value["requestFrameHex"] = json!(crate::bacnet::frame_hex(&result.request_frame));
+            value["responseFrames"] = json!(result.response_frames);
+            value["responseFrameHex"] = json!(
+                result
+                    .response_frames
+                    .iter()
+                    .map(|frame| crate::bacnet::frame_hex(frame))
+                    .collect::<Vec<_>>()
+            );
+            value["responses"] = json!(result.responses);
+            value["responseCount"] = json!(result.response_count);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_bacnet_ip_read_property_live(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: BacnetIpReadPropertyLivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.bacnet_read_property(
+        &p.connection_id,
+        p.object_type,
+        p.object_instance,
+        p.property_identifier,
+        p.property_array_index,
+        p.timeout_ms,
+    ) {
+        Ok(result) => {
+            let mut value = bacnet_live_boundary(&p.connection_id);
+            value["operation"] = json!("read-property");
+            value["request"] = json!(result.request);
+            value["requestFrame"] = json!(result.request_frame);
+            value["requestFrameHex"] = json!(crate::bacnet::frame_hex(&result.request_frame));
+            value["responseFrame"] = json!(result.response_frame);
+            value["responseFrameHex"] = json!(crate::bacnet::frame_hex(&result.response_frame));
+            value["ack"] = json!(result.ack);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_parse_group_address(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxGroupAddressPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::parse_group_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "address": address,
+                "text": crate::knx::format_group_address(address),
+                "wireBytes": address.value.to_be_bytes(),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_build_connect_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxConnectRequestPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::build_connect_request(&p.local_ip, p.local_port) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": crate::knx::frame_hex(&frame),
+                "defaultPort": crate::knx::DEFAULT_PORT,
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_parse_connect_response(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxConnectResponsePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::parse_connect_response(&p.frame) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "response": response,
+                "frameHex": crate::knx::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_build_group_read_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxGroupReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let address = match crate::knx::parse_group_address(&p.address) {
+        Ok(address) => address,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::knx::build_group_read_request(p.channel_id, p.sequence, address) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "address": address,
+                "frame": frame,
+                "frameHex": crate::knx::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_parse_tunneling_request(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxTunnelingRequestPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::parse_tunneling_request(&p.frame) {
+        Ok(request) => success(
+            request_id.to_string(),
+            json!({
+                "request": request,
+                "frameHex": crate::knx::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_parse_group_value_response(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxTunnelingRequestPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::parse_group_value_response(&p.frame) {
+        Ok(response) => {
+            let ack = crate::knx::build_tunneling_ack(response.channel_id, response.sequence, 0);
+            match ack {
+                Ok(ack) => success(
+                    request_id.to_string(),
+                    json!({
+                        "response": response,
+                        "suggestedAck": ack,
+                        "suggestedAckHex": crate::knx::frame_hex(&ack),
+                        "frameHex": crate::knx::frame_hex(&p.frame),
+                        "readOnly": true,
+                        "transport": "udp-offline"
+                    }),
+                    false,
+                ),
+                Err(error) => failure(Some(request_id.to_string()), error),
+            }
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_parse_tunneling_ack(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxTunnelingRequestPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::parse_tunneling_ack(&p.frame) {
+        Ok(ack) => success(
+            request_id.to_string(),
+            json!({
+                "ack": ack,
+                "frameHex": crate::knx::frame_hex(&p.frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_build_tunneling_ack(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: KnxTunnelingAckPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::knx::build_tunneling_ack(p.channel_id, p.sequence, p.status) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "frame": frame,
+                "frameHex": crate::knx::frame_hex(&frame),
+                "readOnly": true,
+                "transport": "udp-offline"
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn knx_live_boundary(connection_id: &str) -> serde_json::Value {
+    json!({
+        "connectionId": connection_id,
+        "role": "client",
+        "readOnly": true,
+        "underlyingProtocol": "KNXnet/IP Tunneling v1 over UDP/IPv4",
+        "groupWriteEnabled": false,
+        "sceneControlEnabled": false,
+        "routingEnabled": false,
+        "deviceManagementEnabled": false,
+        "secureEnabled": false,
+        "l2Evidence": "knx 2.5.4 independent-stack codec interoperability passed in development test; real interface/router L2 pending"
+    })
+}
+
+fn handle_open_knx_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxOpenLivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_knx_tunnel(&p.connection_id, &p.host, p.port, p.timeout_ms) {
+        Ok(result) => {
+            let mut value = knx_live_boundary(&p.connection_id);
+            value["host"] = json!(p.host);
+            value["port"] = json!(p.port);
+            value["transport"] = json!("udp");
+            value["udpConnected"] = json!(true);
+            value["requestFrame"] = json!(result.request_frame);
+            value["requestFrameHex"] = json!(crate::knx::frame_hex(&result.request_frame));
+            value["response"] = json!(result.response);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_group_read(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxGroupReadLivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.knx_group_read(&p.connection_id, &p.address, p.timeout_ms) {
+        Ok(result) => {
+            let mut value = knx_live_boundary(&p.connection_id);
+            value["operation"] = json!("group-value-read");
+            value["requestFrame"] = json!(result.request_frame);
+            value["requestFrameHex"] = json!(crate::knx::frame_hex(&result.request_frame));
+            value["acknowledgementFrame"] = json!(result.acknowledgement_frame);
+            value["acknowledgementFrameHex"] =
+                json!(crate::knx::frame_hex(&result.acknowledgement_frame));
+            value["responseFrame"] = json!(result.response_frame);
+            value["responseFrameHex"] = json!(crate::knx::frame_hex(&result.response_frame));
+            value["responseAckFrame"] = json!(result.response_ack_frame);
+            value["responseAckFrameHex"] = json!(crate::knx::frame_hex(&result.response_ack_frame));
+            value["address"] = json!(result.address);
+            value["source"] = json!(result.source);
+            value["payload"] = json!(result.payload);
+            value["normalizedSmallValue"] = json!(result.normalized_small_value);
+            value["sequence"] = json!(result.sequence);
+            value["attempts"] = json!(result.attempts);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_disconnect(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxDisconnectLivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.knx_disconnect(&p.connection_id, p.timeout_ms) {
+        Ok(response) => {
+            let mut value = knx_live_boundary(&p.connection_id);
+            value["operation"] = json!("disconnect");
+            value["disconnected"] = json!(true);
+            value["response"] = json!(response);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_connection_state(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxConnectionStatePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.knx_connection_state(&p.connection_id, p.timeout_ms) {
+        Ok(result) => {
+            let mut value = knx_live_boundary(&p.connection_id);
+            value["operation"] = json!("connection-state");
+            value["requestFrame"] = json!(result.request_frame);
+            value["requestFrameHex"] = json!(crate::knx::frame_hex(&result.request_frame));
+            value["response"] = json!(result.response);
+            value["attempts"] = json!(result.attempts);
+            success(request_id.to_string(), value, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_start_keepalive(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxKeepalivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.start_knx_keepalive(&p.connection_id, p.interval_ms) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "keepaliveEnabled": true,
+                "intervalMs": p.interval_ms.max(100),
+                "automatic": true,
+                "reconnectPolicy": "explicit-connect-only",
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_stop_keepalive(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxKeepalivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.stop_knx_keepalive(&p.connection_id) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "keepaliveEnabled": false,
+                "automatic": false,
+                "readOnly": true
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_knx_keepalive_status(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KnxKeepalivePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let enabled = session.knx_keepalive_status(&p.connection_id);
+    success(
+        request_id.to_string(),
+        json!({
+            "connectionId": p.connection_id,
+            "keepaliveEnabled": enabled,
+            "automatic": enabled,
+            "reconnectPolicy": "explicit-connect-only",
+            "readOnly": true
+        }),
+        false,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AdsContextPayload {
+    target_net_id: String,
+    target_port: u16,
+    source_net_id: String,
+    source_port: u16,
+    #[serde(default)]
+    invoke_id: u32,
+}
+
+fn ads_context(
+    p: &AdsContextPayload,
+) -> Result<
+    (
+        [u8; crate::ads::AMS_NET_ID_BYTES],
+        [u8; crate::ads::AMS_NET_ID_BYTES],
+    ),
+    CoreError,
+> {
+    Ok((
+        crate::ads::parse_net_id(&p.target_net_id)?,
+        crate::ads::parse_net_id(&p.source_net_id)?,
+    ))
+}
+
+fn ads_endpoint_expectation(
+    net_id: Option<&str>,
+    port: Option<u16>,
+) -> Result<Option<crate::ads::EndpointExpectation>, CoreError> {
+    if net_id.is_none() && port.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(crate::ads::EndpointExpectation {
+        net_id: net_id.map(crate::ads::parse_net_id).transpose()?,
+        port,
+    }))
+}
+
+fn ads_frame_result(request_id: &str, frame: Vec<u8>) -> CommandOutcome {
+    match crate::ads::parse_frame(&frame) {
+        Ok(parsed) => success(
+            request_id.to_string(),
+            json!({
+                "command": parsed.command,
+                "commandHex": format!("0x{:04X}", parsed.command),
+                "targetNetId": crate::ads::net_id_string(&parsed.target_net_id),
+                "targetPort": parsed.target_port,
+                "sourceNetId": crate::ads::net_id_string(&parsed.source_net_id),
+                "sourcePort": parsed.source_port,
+                "invokeId": parsed.invoke_id,
+                "stateFlags": parsed.state_flags,
+                "stateFlagsHex": format!("0x{:04X}", parsed.state_flags),
+                "dataLength": parsed.data_length,
+                "amsError": parsed.ams_error,
+                "payload": parsed.payload,
+                "payloadHex": crate::ads::frame_hex(&parsed.payload),
+                "frame": frame,
+                "frameHex": crate::ads::frame_hex(&frame),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        target_net_id: String,
+        target_port: u16,
+        source_net_id: String,
+        source_port: u16,
+        #[serde(default)]
+        invoke_id: u32,
+        index_group: u32,
+        index_offset: u32,
+        read_length: u32,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let target = match crate::ads::parse_net_id(&p.target_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let source = match crate::ads::parse_net_id(&p.source_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::ads::build_read(
+        &target,
+        p.target_port,
+        &source,
+        p.source_port,
+        p.invoke_id,
+        p.index_group,
+        p.index_offset,
+        p.read_length,
+    ) {
+        Ok(frame) => ads_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_build_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        target_net_id: String,
+        target_port: u16,
+        source_net_id: String,
+        source_port: u16,
+        #[serde(default)]
+        invoke_id: u32,
+        index_group: u32,
+        index_offset: u32,
+        #[serde(default)]
+        data: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let target = match crate::ads::parse_net_id(&p.target_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let source = match crate::ads::parse_net_id(&p.source_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::ads::build_write(
+        &target,
+        p.target_port,
+        &source,
+        p.source_port,
+        p.invoke_id,
+        p.index_group,
+        p.index_offset,
+        &p.data,
+    ) {
+        Ok(frame) => ads_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_build_readwrite(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        target_net_id: String,
+        target_port: u16,
+        source_net_id: String,
+        source_port: u16,
+        #[serde(default)]
+        invoke_id: u32,
+        index_group: u32,
+        index_offset: u32,
+        read_length: u32,
+        #[serde(default)]
+        write_data: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let target = match crate::ads::parse_net_id(&p.target_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    let source = match crate::ads::parse_net_id(&p.source_net_id) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::ads::build_read_write(
+        &target,
+        p.target_port,
+        &source,
+        p.source_port,
+        p.invoke_id,
+        p.index_group,
+        p.index_offset,
+        p.read_length,
+        &p.write_data,
+    ) {
+        Ok(frame) => ads_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_build_read_device_info(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: AdsContextPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let (target, source) = match ads_context(&p) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::ads::build_read_device_info(
+        &target,
+        p.target_port,
+        &source,
+        p.source_port,
+        p.invoke_id,
+    ) {
+        Ok(frame) => ads_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_build_read_state(request_id: &str, payload: Value) -> CommandOutcome {
+    let p: AdsContextPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let (target, source) = match ads_context(&p) {
+        Ok(value) => value,
+        Err(error) => return failure(Some(request_id.to_string()), error),
+    };
+    match crate::ads::build_read_state(&target, p.target_port, &source, p.source_port, p.invoke_id)
+    {
+        Ok(frame) => ads_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_parse_frame(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        frame: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ads::parse_frame(&p.frame) {
+        Ok(frame) => success(
+            request_id.to_string(),
+            json!({
+                "command": frame.command,
+                "commandHex": format!("0x{:04X}", frame.command),
+                "targetNetId": crate::ads::net_id_string(&frame.target_net_id),
+                "targetPort": frame.target_port,
+                "sourceNetId": crate::ads::net_id_string(&frame.source_net_id),
+                "sourcePort": frame.source_port,
+                "stateFlags": frame.state_flags,
+                "stateFlagsHex": format!("0x{:04X}", frame.state_flags),
+                "dataLength": frame.data_length,
+                "amsError": frame.ams_error,
+                "invokeId": frame.invoke_id,
+                "payload": frame.payload,
+                "payloadHex": crate::ads::frame_hex(&frame.payload),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ads_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        frame: Vec<u8>,
+        #[serde(default)]
+        expected_invoke_id: Option<u32>,
+        #[serde(default)]
+        expected_command: Option<u16>,
+        #[serde(default)]
+        expected_target_net_id: Option<String>,
+        #[serde(default)]
+        expected_target_port: Option<u16>,
+        #[serde(default)]
+        expected_source_net_id: Option<String>,
+        #[serde(default)]
+        expected_source_port: Option<u16>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let expected_target =
+        match ads_endpoint_expectation(p.expected_target_net_id.as_deref(), p.expected_target_port)
+        {
+            Ok(value) => value,
+            Err(error) => return failure(Some(request_id.to_string()), error),
+        };
+    let expected_source =
+        match ads_endpoint_expectation(p.expected_source_net_id.as_deref(), p.expected_source_port)
+        {
+            Ok(value) => value,
+            Err(error) => return failure(Some(request_id.to_string()), error),
+        };
+    match crate::ads::parse_response_with_endpoints(
+        &p.frame,
+        p.expected_invoke_id,
+        p.expected_command,
+        expected_target.as_ref(),
+        expected_source.as_ref(),
+    ) {
+        Ok(response) => {
+            let mut result = json!({
+                "command": response.frame.command,
+                "commandHex": format!("0x{:04X}", response.frame.command),
+                "targetNetId": crate::ads::net_id_string(&response.frame.target_net_id),
+                "targetPort": response.frame.target_port,
+                "sourceNetId": crate::ads::net_id_string(&response.frame.source_net_id),
+                "sourcePort": response.frame.source_port,
+                "stateFlags": response.frame.state_flags,
+                "invokeId": response.frame.invoke_id,
+                "amsError": response.frame.ams_error,
+                "adsResult": response.ads_result,
+                "adsResultHex": format!("0x{:08X}", response.ads_result),
+                "adsResultMessage": crate::ads::ads_error_message(response.ads_result),
+                "adsOk": response.ads_result == 0,
+                "data": response.data,
+                "dataHex": crate::ads::frame_hex(&response.data),
+                "declaredDataLength": response.declared_data_length,
+            });
+            if response.ads_result == 0
+                && response.frame.command == crate::ads::ADS_READ_DEVICE_INFO
+            {
+                if let Ok((major, minor, build, device_name)) =
+                    crate::ads::parse_device_info(&response)
+                {
+                    result["deviceInfo"] = json!({ "majorVersion": major, "minorVersion": minor, "versionBuild": build, "deviceName": device_name });
+                }
+            }
+            if response.ads_result == 0 && response.frame.command == crate::ads::ADS_READ_STATE {
+                if let Ok((ads_state, device_state)) = crate::ads::parse_state(&response) {
+                    result["state"] = json!({ "adsState": ads_state, "deviceState": device_state, "isRunning": ads_state == 5 });
+                }
+            }
+            success(request_id.to_string(), result, false)
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+// === Keyence KV Host Link ASCII（TCP 只读会话 + 编解码）===
+
+fn keyence_frame_result(request_id: &str, frame: Vec<u8>) -> CommandOutcome {
+    let text = String::from_utf8_lossy(&frame).to_string();
+    success(
+        request_id.to_string(),
+        json!({
+            "port": crate::keyence::DEFAULT_PORT,
+            "frame": frame,
+            "text": text,
+            "frameHex": crate::keyence::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn handle_open_keyence_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenKeyenceConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let station = if p.use_station { Some(p.station) } else { None };
+    match session.open_keyence(&p.connection_id, &p.host, p.port, station) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "station": station,
+                "useStation": station.is_some(),
+                "transport": "tcp",
+                "handshake": if station.is_some() { "CR NN -> CC" } else { "CR -> CC" },
+                "handshakeValidated": true,
+                "sessionInitialized": true,
+                "readOnly": true,
+                "underlyingProtocol": "Keyence KV Host Link ASCII over TCP",
+                "l2Evidence": "independent TCP endpoint only; KV model/firmware/L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_read_words(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KeyenceReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.keyence_read_words(&p.connection_id, &p.address, p.count) {
+        Ok((request, values, station)) => {
+            let data_ascii = values
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let data_hex = values
+                .iter()
+                .map(|value| format!("{value:04X}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            success(
+                request_id.to_string(),
+                json!({
+                    "connectionId": p.connection_id,
+                    "request": request,
+                    "requestText": String::from_utf8_lossy(&request),
+                    "requestHex": crate::keyence::frame_hex(&request),
+                    "station": station,
+                    "address": p.address,
+                    "count": p.count,
+                    "data": values,
+                    "dataAscii": data_ascii,
+                    "dataHex": data_hex,
+                    "readOnly": true,
+                    "underlyingProtocol": "Keyence KV Host Link ASCII over TCP",
+                    "l2Evidence": "independent TCP endpoint only; KV model/firmware/L2 pending",
+                }),
+                false,
+            )
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_read_bits(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: KeyenceReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.keyence_read_bits(&p.connection_id, &p.address, p.count) {
+        Ok((request, values, station)) => {
+            let data_ascii = values
+                .iter()
+                .map(|value| if *value { '1' } else { '0' })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            success(
+                request_id.to_string(),
+                json!({
+                    "connectionId": p.connection_id,
+                    "request": request,
+                    "requestText": String::from_utf8_lossy(&request),
+                    "requestHex": crate::keyence::frame_hex(&request),
+                    "station": station,
+                    "address": p.address,
+                    "count": p.count,
+                    "data": values,
+                    "dataAscii": data_ascii,
+                    "readOnly": true,
+                    "underlyingProtocol": "Keyence KV Host Link ASCII over TCP",
+                    "l2Evidence": "independent TCP endpoint only; KV model/firmware/L2 pending",
+                }),
+                false,
+            )
+        }
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::parse_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "device": address.device,
+                "offset": address.offset,
+                "isBit": address.is_bit,
+                "commandAddress": address.command_address,
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_build_connect(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(default)]
+        station: Option<u8>,
+        #[serde(default)]
+        use_station: bool,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if p.station.unwrap_or(0) > 31 {
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "KEYENCE_PARAM_INVALID",
+                message: "Keyence Host Link 站号必须是 0..31".to_string(),
+                details: Some(json!({ "station": p.station })),
+            },
+        );
+    }
+    keyence_frame_result(
+        request_id,
+        crate::keyence::build_connect(if p.use_station {
+            Some(p.station.unwrap_or(0))
+        } else {
+            None
+        }),
+    )
+}
+
+fn handle_keyence_build_read_words(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+        count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::build_read_words(&p.address, p.count) {
+        Ok(frame) => keyence_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_build_read_bits(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+        count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::build_read_bits(&p.address, p.count) {
+        Ok(frame) => keyence_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_build_write_words(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+        values: Vec<u16>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::build_write_words(&p.address, &p.values) {
+        Ok(frame) => keyence_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_build_write_bit(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+        value: bool,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::build_write_bit(&p.address, p.value) {
+        Ok(frame) => keyence_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_parse_connect(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::parse_connect_response(&p.response) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "ok": true, "response": "CC" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_parse_words(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: String,
+        expected_count: usize,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::parse_word_response(&p.response, p.expected_count) {
+        Ok(values) => success(
+            request_id.to_string(),
+            json!({ "values": values, "count": values.len() }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_parse_bits(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: String,
+        expected_count: usize,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::parse_bit_response(&p.response, p.expected_count) {
+        Ok(values) => success(
+            request_id.to_string(),
+            json!({ "values": values, "count": values.len() }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_keyence_parse_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        response: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::keyence::parse_write_response(&p.response) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "ok": true, "response": "OK" }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+// === LS Electric XGT FEnet（TCP 只读会话 + 编解码）===
+
+fn handle_open_ls_xgt_connection(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: OpenLsXgtConnectionPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.open_ls_xgt(
+        &p.connection_id,
+        &p.host,
+        p.port,
+        p.cpu,
+        p.base_no,
+        p.slot_no,
+        &p.company_id,
+    ) {
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({
+                "connectionId": p.connection_id,
+                "host": p.host,
+                "port": p.port,
+                "companyId": p.company_id,
+                "cpu": p.cpu,
+                "cpuHex": format!("0x{:02X}", p.cpu),
+                "baseNo": p.base_no,
+                "slotNo": p.slot_no,
+                "transport": "tcp",
+                "handshake": false,
+                "sessionInitialized": true,
+                "readOnly": true,
+                "underlyingProtocol": "LS Electric XGT FEnet over TCP",
+                "l2Evidence": "independent TCP endpoint only; XGK/XGI/XGR model/firmware/L2 pending",
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn ls_xgt_live_result(
+    request_id: &str,
+    connection_id: &str,
+    variable_name: &str,
+    mode: &str,
+    request: Vec<u8>,
+    response: crate::ls_xgt::XgtResponse,
+) -> CommandOutcome {
+    success(
+        request_id.to_string(),
+        json!({
+            "connectionId": connection_id,
+            "variableName": variable_name,
+            "mode": mode,
+            "request": request,
+            "requestHex": crate::ls_xgt::frame_hex(&request),
+            "companyId": response.company_id,
+            "cpu": response.cpu,
+            "source": response.source,
+            "invokeId": response.invoke_id,
+            "applicationLength": response.application_length,
+            "baseNo": response.base_no,
+            "slotNo": response.slot_no,
+            "command": response.command,
+            "dataType": response.data_type,
+            "blockCount": response.block_count,
+            "dataLength": response.data_length,
+            "data": response.data,
+            "dataHex": crate::ls_xgt::frame_hex(&response.data),
+            "readOnly": true,
+            "underlyingProtocol": "LS Electric XGT FEnet over TCP",
+            "l2Evidence": "independent TCP endpoint only; XGK/XGI/XGR model/firmware/L2 pending",
+        }),
+        false,
+    )
+}
+
+fn handle_ls_xgt_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+    let p: LsXgtReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.ls_xgt_read(&p.connection_id, &p.variable_name, p.data_type) {
+        Ok((request, response)) => ls_xgt_live_result(
+            request_id,
+            &p.connection_id,
+            &p.variable_name,
+            "individual",
+            request,
+            response,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_read_continuous(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    let p: LsXgtContinuousReadPayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match session.ls_xgt_read_continuous(&p.connection_id, &p.variable_name, p.byte_count) {
+        Ok((request, response)) => ls_xgt_live_result(
+            request_id,
+            &p.connection_id,
+            &p.variable_name,
+            "continuous",
+            request,
+            response,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn ls_xgt_frame_result(request_id: &str, frame: Vec<u8>) -> CommandOutcome {
+    success(
+        request_id.to_string(),
+        json!({
+            "port": crate::ls_xgt::DEFAULT_PORT,
+            "frame": frame,
+            "frameHex": crate::ls_xgt::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LsXgtFrameContext {
+    #[serde(default = "default_ls_xgt_invoke_id")]
+    invoke_id: u16,
+    #[serde(default = "default_ls_xgt_cpu")]
+    cpu: u8,
+    #[serde(default)]
+    base_no: u8,
+    #[serde(default = "default_ls_xgt_slot_no")]
+    slot_no: u8,
+    #[serde(default = "default_ls_xgt_company_id")]
+    company_id: String,
+}
+
+fn default_ls_xgt_invoke_id() -> u16 {
+    1
+}
+
+fn default_ls_xgt_cpu() -> u8 {
+    crate::ls_xgt::CPU_XGK
+}
+
+fn default_ls_xgt_slot_no() -> u8 {
+    3
+}
+
+fn default_ls_xgt_company_id() -> String {
+    "LSIS-XGT".to_string()
+}
+
+fn handle_ls_xgt_parse_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::parse_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "area": address.area.to_string(),
+                "dataType": address.data_type,
+                "dataTypeHex": format!("0x{:02X}", address.data_type),
+                "offset": address.offset,
+                "variableName": address.variable_name,
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(flatten)]
+        context: LsXgtFrameContext,
+        variable_name: String,
+        data_type: u8,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::build_individual_read(
+        &p.variable_name,
+        p.data_type,
+        p.context.invoke_id,
+        p.context.cpu,
+        p.context.base_no,
+        p.context.slot_no,
+        &p.context.company_id,
+    ) {
+        Ok(frame) => ls_xgt_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_build_continuous_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(flatten)]
+        context: LsXgtFrameContext,
+        variable_name: String,
+        byte_count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::build_continuous_read(
+        &p.variable_name,
+        p.byte_count,
+        p.context.invoke_id,
+        p.context.cpu,
+        p.context.base_no,
+        p.context.slot_no,
+        &p.context.company_id,
+    ) {
+        Ok(frame) => ls_xgt_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_build_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(flatten)]
+        context: LsXgtFrameContext,
+        variable_name: String,
+        data_type: u8,
+        #[serde(default)]
+        value: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::build_individual_write(
+        &p.variable_name,
+        p.data_type,
+        &p.value,
+        p.context.invoke_id,
+        p.context.cpu,
+        p.context.base_no,
+        p.context.slot_no,
+        &p.context.company_id,
+    ) {
+        Ok(frame) => ls_xgt_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_build_continuous_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        #[serde(flatten)]
+        context: LsXgtFrameContext,
+        variable_name: String,
+        #[serde(default)]
+        value: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::build_continuous_write(
+        &p.variable_name,
+        &p.value,
+        p.context.invoke_id,
+        p.context.cpu,
+        p.context.base_no,
+        p.context.slot_no,
+        &p.context.company_id,
+    ) {
+        Ok(frame) => ls_xgt_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_ls_xgt_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        frame: Vec<u8>,
+        #[serde(default)]
+        expected_invoke_id: Option<u16>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::ls_xgt::parse_response(&p.frame, p.expected_invoke_id) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "companyId": response.company_id,
+                "cpu": response.cpu,
+                "source": response.source,
+                "invokeId": response.invoke_id,
+                "applicationLength": response.application_length,
+                "baseNo": response.base_no,
+                "slotNo": response.slot_no,
+                "command": response.command,
+                "commandHex": format!("0x{:02X}", response.command),
+                "dataType": response.data_type,
+                "dataTypeHex": format!("0x{:02X}", response.data_type),
+                "errorStatus": response.error_status,
+                "errorStatusHex": format!("0x{:04X}", response.error_status),
+                "blockCount": response.block_count,
+                "dataLength": response.data_length,
+                "data": response.data,
+                "dataHex": crate::ls_xgt::frame_hex(&response.data),
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+// === Panasonic MEWTOCOL-COM（首轮只做软件编解码；不建立串口）===
+
+fn panasonic_frame_result(request_id: &str, frame: Vec<u8>) -> CommandOutcome {
+    success(
+        request_id.to_string(),
+        json!({
+            "transport": "serial",
+            "frame": frame,
+            "text": crate::panasonic::frame_text(&frame),
+            "frameHex": crate::panasonic::frame_hex(&frame),
+        }),
+        false,
+    )
+}
+
+fn panasonic_station(value: u8) -> Result<u8, CoreError> {
+    if !(crate::panasonic::MIN_STATION..=crate::panasonic::MAX_STATION).contains(&value) {
+        return Err(CoreError::Modbus {
+            code: "PANASONIC_PARAM_INVALID",
+            message: "MEWTOCOL 站号必须为 1..32".to_string(),
+            details: Some(json!({ "station": value })),
+        });
+    }
+    Ok(value)
+}
+
+fn handle_panasonic_parse_data_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::panasonic::parse_data_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "areaCode": address.area_code.to_string(),
+                "address": address.address,
+                "canonical": address.canonical,
+                "isContact": false,
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_parse_contact_address(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::panasonic::parse_contact_address(&p.address) {
+        Ok(address) => success(
+            request_id.to_string(),
+            json!({
+                "areaCode": address.area_code.to_string(),
+                "linearAddress": address.linear_address,
+                "contactNumber": address.contact_number,
+                "canonical": address.canonical,
+                "isContact": true,
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_build_read(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        word_count: u16,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if let Err(error) = panasonic_station(p.station) {
+        return failure(Some(request_id.to_string()), error);
+    }
+    match crate::panasonic::build_read(p.station, &p.address, p.word_count) {
+        Ok(frame) => panasonic_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_build_write(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        #[serde(default)]
+        data: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if let Err(error) = panasonic_station(p.station) {
+        return failure(Some(request_id.to_string()), error);
+    }
+    match crate::panasonic::build_write(p.station, &p.address, &p.data) {
+        Ok(frame) => panasonic_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_build_read_contact(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if let Err(error) = panasonic_station(p.station) {
+        return failure(Some(request_id.to_string()), error);
+    }
+    match crate::panasonic::build_read_contact(p.station, &p.address) {
+        Ok(frame) => panasonic_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_build_write_contact(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        address: String,
+        value: bool,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    if let Err(error) = panasonic_station(p.station) {
+        return failure(Some(request_id.to_string()), error);
+    }
+    match crate::panasonic::build_write_contact(p.station, &p.address, p.value) {
+        Ok(frame) => panasonic_frame_result(request_id, frame),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_panasonic_parse_response(request_id: &str, payload: Value) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        station: u8,
+        #[serde(default)]
+        expected_command: String,
+        #[serde(default)]
+        expected_header: Option<String>,
+        #[serde(default)]
+        response: Vec<u8>,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let expected_header = match p.expected_header.as_deref() {
+        None | Some("") => None,
+        Some(value) if value.chars().count() == 1 => value.chars().next(),
+        Some(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    match crate::panasonic::parse_response(
+        &p.response,
+        p.station,
+        &p.expected_command,
+        expected_header,
+    ) {
+        Ok(response) => success(
+            request_id.to_string(),
+            json!({
+                "header": response.header.to_string(),
+                "station": response.station,
+                "command": response.command,
+                "payload": response.payload,
+                "errorCode": response.error_code,
+                "raw": response.raw,
+            }),
+            false,
+        ),
+        Err(error) => failure(Some(request_id.to_string()), error),
+    }
+}
+
+fn handle_s7_cpu_control(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct P {
+        connection_id: String,
+        action: String,
+    }
+    let p: P = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.s7_cpu_control(&p.connection_id, &p.action) {
-        Ok((code, msg)) => success(request_id.to_string(), json!({ "result": code, "message": msg }), false),
+        Ok((code, msg)) => success(
+            request_id.to_string(),
+            json!({ "result": code, "message": msg }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_s7_read_status(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_s7_read_status(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String }
+    struct P {
+        connection_id: String,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.s7_read_status(&p.connection_id) {
         Ok(mode) => success(request_id.to_string(), json!({ "mode": mode }), false),
@@ -4530,12 +10508,20 @@ fn handle_s7_read_status(session: &mut Session, request_id: &str, payload: Value
 fn handle_s7_password(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String, password: String }
+    struct P {
+        connection_id: String,
+        password: String,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.s7_password(&p.connection_id, &p.password) {
-        Ok(()) => success(request_id.to_string(), json!({ "ok": true, "note": "S7-1200/1500 无会话密码机制,仅 300/400 有效" }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "ok": true, "note": "S7-1200/1500 无会话密码机制,仅 300/400 有效" }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4543,12 +10529,21 @@ fn handle_s7_password(session: &mut Session, request_id: &str, payload: Value) -
 fn handle_open_fw_tcp(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { connection_id: String, host: String, port: u16 }
+    struct P {
+        connection_id: String,
+        host: String,
+        port: u16,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.open_fw_tcp(&p.connection_id, &p.host, p.port) {
-        Ok(()) => success(request_id.to_string(), json!({ "connectionId": p.connection_id, "port": p.port }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "connectionId": p.connection_id, "port": p.port }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4569,13 +10564,26 @@ struct FwAddrPayload {
 fn handle_fw_read(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     // 注意:不用 serde(flatten) —— flatten 与 deny_unknown_fields 组合存在字段丢失的已知问题
     let p: FwAddrPayload = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     let Some(org) = crate::s7_fetchwrite::fw_area_code(&p.area) else {
-        return failure(Some(request_id.to_string()), CoreError::Modbus {
-            code: "S7_FW_INVALID", message: format!("区「{}」不支持(DB/M/I/Q/C/T)", p.area), details: None });
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "S7_FW_INVALID",
+                message: format!("区「{}」不支持(DB/M/I/Q/C/T)", p.area),
+                details: None,
+            },
+        );
     };
-    match session.fw_read(&p.connection_id, org, p.db, p.address, p.length.unwrap_or(0)) {
+    match session.fw_read(
+        &p.connection_id,
+        org,
+        p.db,
+        p.address,
+        p.length.unwrap_or(0),
+    ) {
         Ok(data) => success(request_id.to_string(), json!({ "data": data }), false),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
@@ -4583,27 +10591,54 @@ fn handle_fw_read(session: &mut Session, request_id: &str, payload: Value) -> Co
 
 fn handle_fw_write(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     let p: FwAddrPayload = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     let Some(org) = crate::s7_fetchwrite::fw_area_code(&p.area) else {
-        return failure(Some(request_id.to_string()), CoreError::Modbus {
-            code: "S7_FW_INVALID", message: format!("区「{}」不支持", p.area), details: None });
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "S7_FW_INVALID",
+                message: format!("区「{}」不支持", p.area),
+                details: None,
+            },
+        );
     };
-    match session.fw_write(&p.connection_id, org, p.db, p.address, &p.values.unwrap_or_default()) {
+    match session.fw_write(
+        &p.connection_id,
+        org,
+        p.db,
+        p.address,
+        &p.values.unwrap_or_default(),
+    ) {
         Ok(()) => success(request_id.to_string(), json!({ "ok": true }), false),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
 
-fn handle_start_fw_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_start_fw_slave(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { slave_id: String, port: u16, #[serde(default = "default_true_fins")] seed: bool }
+    struct P {
+        slave_id: String,
+        port: u16,
+        #[serde(default = "default_true_fins")]
+        seed: bool,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.start_fw_slave(&p.slave_id, p.port, p.seed) {
-        Ok(()) => success(request_id.to_string(), json!({ "slaveId": p.slave_id, "port": p.port }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "slaveId": p.slave_id, "port": p.port }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4611,12 +10646,19 @@ fn handle_start_fw_slave(session: &mut Session, request_id: &str, payload: Value
 fn handle_stop_fw_slave(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct P { slave_id: String }
+    struct P {
+        slave_id: String,
+    }
     let p: P = match serde_json::from_value(payload) {
-        Ok(p) => p, Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     match session.stop_fw_slave(&p.slave_id) {
-        Ok(()) => success(request_id.to_string(), json!({ "stopped": p.slave_id }), false),
+        Ok(()) => success(
+            request_id.to_string(),
+            json!({ "stopped": p.slave_id }),
+            false,
+        ),
         Err(e) => failure(Some(request_id.to_string()), e),
     }
 }
@@ -4643,20 +10685,15 @@ fn handle_open_mc_1e(session: &mut Session, request_id: &str, payload: Value) ->
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Mc1eAddrPayload {
-    connection_id: String,
-    address: String,
-}
-
 fn mc_1e_split(address: &str) -> Result<(String, u32), CoreError> {
     let a = address.trim();
-    let split = a.find(|c: char| c.is_ascii_digit()).ok_or_else(|| CoreError::Modbus {
-        code: "MC_ADDRESS_INVALID",
-        message: format!("「{a}」不是有效的软元件地址(如 D100/M100/X17)"),
-        details: None,
-    })?;
+    let split = a
+        .find(|c: char| c.is_ascii_digit())
+        .ok_or_else(|| CoreError::Modbus {
+            code: "MC_ADDRESS_INVALID",
+            message: format!("「{a}」不是有效的软元件地址(如 D100/M100/X17)"),
+            details: None,
+        })?;
     let (prefix, num_str) = a.split_at(split);
     let num = crate::fx_programming::fx_prog_parse_number(prefix, num_str)?;
     Ok((prefix.to_uppercase(), num))
@@ -4678,8 +10715,15 @@ fn handle_mc_1e_read(session: &mut Session, request_id: &str, payload: Value) ->
         Ok(v) => v,
         Err(e) => return failure(Some(request_id.to_string()), e),
     };
-    let is_bit = matches!(prefix.as_str(), "X" | "Y" | "M" | "S" | "B" | "TS" | "TC" | "CS" | "CC" | "SS" | "SC");
-    let cmd = if is_bit { crate::mc_1e::CMD1E_BIT_READ } else { crate::mc_1e::CMD1E_WORD_READ };
+    let is_bit = matches!(
+        prefix.as_str(),
+        "X" | "Y" | "M" | "S" | "B" | "TS" | "TC" | "CS" | "CC" | "SS" | "SC"
+    );
+    let cmd = if is_bit {
+        crate::mc_1e::CMD1E_BIT_READ
+    } else {
+        crate::mc_1e::CMD1E_WORD_READ
+    };
     let req = match crate::mc_1e::build_1e_read(cmd, &prefix, num, p.points, 10) {
         Ok(r) => r,
         Err(e) => return failure(Some(request_id.to_string()), e),
@@ -4699,11 +10743,9 @@ fn handle_mc_1e_read(session: &mut Session, request_id: &str, payload: Value) ->
             json!({ "endCode": 0, "isBit": true, "values": b.iter().map(|v| if *v { 1 } else { 0 }).collect::<Vec<u16>>() }),
             false,
         ),
-        Ok(crate::mc_1e::OneEResponse::WriteAck) => success(
-            request_id.to_string(),
-            json!({ "endCode": 0 }),
-            false,
-        ),
+        Ok(crate::mc_1e::OneEResponse::WriteAck) => {
+            success(request_id.to_string(), json!({ "endCode": 0 }), false)
+        }
         Ok(crate::mc_1e::OneEResponse::Error { code, detail }) => success(
             request_id.to_string(),
             json!({ "endCode": code, "detail": detail, "message": crate::mc_1e::onee_error_message(code, detail) }),
@@ -4729,13 +10771,23 @@ fn handle_mc_1e_write(session: &mut Session, request_id: &str, payload: Value) -
         Ok(v) => v,
         Err(e) => return failure(Some(request_id.to_string()), e),
     };
-    let is_bit = matches!(prefix.as_str(), "X" | "Y" | "M" | "S" | "B" | "TS" | "TC" | "CS" | "CC" | "SS" | "SC");
+    let is_bit = matches!(
+        prefix.as_str(),
+        "X" | "Y" | "M" | "S" | "B" | "TS" | "TC" | "CS" | "CC" | "SS" | "SC"
+    );
     let count = u16::try_from(p.values.len()).unwrap_or(0);
     let req = if is_bit {
         let bits: Vec<bool> = p.values.iter().map(|v| *v != 0).collect();
         crate::mc_1e::build_1e_write(crate::mc_1e::CMD1E_BIT_WRITE, &prefix, num, &[], &bits, 10)
     } else {
-        crate::mc_1e::build_1e_write(crate::mc_1e::CMD1E_WORD_WRITE, &prefix, num, &p.values, &[], 10)
+        crate::mc_1e::build_1e_write(
+            crate::mc_1e::CMD1E_WORD_WRITE,
+            &prefix,
+            num,
+            &p.values,
+            &[],
+            10,
+        )
     };
     let req = match req {
         Ok(r) => r,
@@ -4746,18 +10798,31 @@ fn handle_mc_1e_write(session: &mut Session, request_id: &str, payload: Value) -
         Ok(r) => r,
         Err(e) => return failure(Some(request_id.to_string()), e),
     };
-    match crate::mc_1e::parse_1e_response(&resp, if is_bit { crate::mc_1e::CMD1E_BIT_WRITE } else { crate::mc_1e::CMD1E_WORD_WRITE }, 0) {
-        Ok(crate::mc_1e::OneEResponse::WriteAck) => success(request_id.to_string(), json!({ "endCode": 0 }), false),
+    match crate::mc_1e::parse_1e_response(
+        &resp,
+        if is_bit {
+            crate::mc_1e::CMD1E_BIT_WRITE
+        } else {
+            crate::mc_1e::CMD1E_WORD_WRITE
+        },
+        0,
+    ) {
+        Ok(crate::mc_1e::OneEResponse::WriteAck) => {
+            success(request_id.to_string(), json!({ "endCode": 0 }), false)
+        }
         Ok(crate::mc_1e::OneEResponse::Error { code, detail }) => success(
             request_id.to_string(),
             json!({ "endCode": code, "detail": detail, "message": crate::mc_1e::onee_error_message(code, detail) }),
             false,
         ),
-        _ => failure(Some(request_id.to_string()), CoreError::Modbus {
-            code: "MC_1E_UNEXPECTED_RESPONSE",
-            message: "1E 写响应格式异常".into(),
-            details: None,
-        }),
+        _ => failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "MC_1E_UNEXPECTED_RESPONSE",
+                message: "1E 写响应格式异常".into(),
+                details: None,
+            },
+        ),
     }
 }
 
@@ -4771,11 +10836,14 @@ fn handle_open_mc_udp(session: &mut Session, request_id: &str, payload: Value) -
         "3e" => crate::mc_frame::FrameType::Type3E,
         "4e" => crate::mc_frame::FrameType::Type4E,
         other => {
-            return failure(Some(request_id.to_string()), CoreError::Modbus {
-                code: "MC_BAD_FRAME_TYPE",
-                message: format!("帧类型「{other}」无效(支持 3e/4e)"),
-                details: None,
-            })
+            return failure(
+                Some(request_id.to_string()),
+                CoreError::Modbus {
+                    code: "MC_BAD_FRAME_TYPE",
+                    message: format!("帧类型「{other}」无效(支持 3e/4e)"),
+                    details: None,
+                },
+            );
         }
     };
     let route = crate::mc_frame::AccessRoute {
@@ -4785,7 +10853,12 @@ fn handle_open_mc_udp(session: &mut Session, request_id: &str, payload: Value) -
         station_no: payload.station_no,
     };
     match session.open_mc_udp(
-        &payload.connection_id, &payload.host, payload.port, route, frame_type, payload.watchdog,
+        &payload.connection_id,
+        &payload.host,
+        payload.port,
+        route,
+        frame_type,
+        payload.watchdog,
     ) {
         Ok(()) => success(
             request_id.to_string(),
@@ -4860,7 +10933,11 @@ fn handle_mc_udp_write(session: &mut Session, request_id: &str, payload: Value) 
     }
 }
 
-fn handle_mc_ascii_write(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
+fn handle_mc_ascii_write(
+    session: &mut Session,
+    request_id: &str,
+    payload: Value,
+) -> CommandOutcome {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase", deny_unknown_fields)]
     struct P {
@@ -4894,7 +10971,9 @@ fn handle_mc_c24_read(request_id: &str, payload: Value) -> CommandOutcome {
         #[serde(default)]
         station: u8,
     }
-    fn default_c24_format() -> String { "1".into() }
+    fn default_c24_format() -> String {
+        "1".into()
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -4932,7 +11011,9 @@ fn handle_mc_c24_parse_read(request_id: &str, payload: Value) -> CommandOutcome 
         #[serde(default = "default_c24_format")]
         format: String,
     }
-    fn default_c24_format() -> String { "1".into() }
+    fn default_c24_format() -> String {
+        "1".into()
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -4947,11 +11028,14 @@ fn handle_mc_c24_parse_read(request_id: &str, payload: Value) -> CommandOutcome 
     };
     // 应用区 = 结束代码(2 LE) + 数据
     if app.len() < 2 {
-        return failure(Some(request_id.to_string()), CoreError::Modbus {
-            code: "MC_SERIAL_FRAME_TOO_SHORT",
-            message: format!("C24 应用区 {} 字节,短于结束代码 2 字节", app.len()),
-            details: None,
-        });
+        return failure(
+            Some(request_id.to_string()),
+            CoreError::Modbus {
+                code: "MC_SERIAL_FRAME_TOO_SHORT",
+                message: format!("C24 应用区 {} 字节,短于结束代码 2 字节", app.len()),
+                details: None,
+            },
+        );
     }
     let end_code = u16::from_le_bytes([app[0], app[1]]);
     if end_code != 0 {
@@ -4982,7 +11066,9 @@ fn mc_serial_format_from_str(format: &str) -> Result<crate::mc_serial::McSerialF
         "4" => Ok(McSerialFormat::Format4BinaryNoChecksum),
         other => Err(CoreError::Modbus {
             code: "MC_SERIAL_BAD_FORMAT",
-            message: format!("数据格式「{other}」无效(支持 1=ASCII和校验 / 3=二进制和校验 / 4=二进制无校验)"),
+            message: format!(
+                "数据格式「{other}」无效(支持 1=ASCII和校验 / 3=二进制和校验 / 4=二进制无校验)"
+            ),
             details: None,
         }),
     }
@@ -5016,7 +11102,10 @@ fn handle_mc_serial_build_3c(request_id: &str, payload: Value) -> CommandOutcome
                 }
                 crate::mc_serial::McSerialFormat::Format3Binary => {
                     let n = frame.len();
-                    Some(format!("{:04X}", u16::from_le_bytes([frame[n - 2], frame[n - 1]])))
+                    Some(format!(
+                        "{:04X}",
+                        u16::from_le_bytes([frame[n - 2], frame[n - 1]])
+                    ))
                 }
                 crate::mc_serial::McSerialFormat::Format4BinaryNoChecksum => None,
             };
@@ -5077,7 +11166,9 @@ fn handle_mc_1e_build_read(request_id: &str, payload: Value) -> CommandOutcome {
         #[serde(default = "default_1e_watchdog")]
         watchdog: u16,
     }
-    fn default_1e_watchdog() -> u16 { 10 }
+    fn default_1e_watchdog() -> u16 {
+        10
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -5114,13 +11205,16 @@ fn handle_mc_1e_build_write(request_id: &str, payload: Value) -> CommandOutcome 
         #[serde(default = "default_1e_watchdog")]
         watchdog: u16,
     }
-    fn default_1e_watchdog() -> u16 { 10 }
+    fn default_1e_watchdog() -> u16 {
+        10
+    }
     let p: P = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
     let bits: Vec<bool> = p.values_bits.iter().map(|v| *v != 0).collect();
-    match crate::mc_1e::build_1e_write(p.cmd, &p.device, p.head, &p.values_words, &bits, p.watchdog) {
+    match crate::mc_1e::build_1e_write(p.cmd, &p.device, p.head, &p.values_words, &bits, p.watchdog)
+    {
         Ok(frame) => success(
             request_id.to_string(),
             json!({ "frame": frame, "frameHex": format_hex(&frame) }),
@@ -5268,8 +11362,12 @@ fn handle_slave_set_value(
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.slave_set_value(&payload.slave_id, &payload.area, payload.address, &payload.values)
-    {
+    match session.slave_set_value(
+        &payload.slave_id,
+        &payload.area,
+        payload.address,
+        &payload.values,
+    ) {
         Ok(()) => success(
             request_id.to_string(),
             json!({ "set": true, "slaveId": payload.slave_id, "area": payload.area }),
@@ -5288,8 +11386,12 @@ fn handle_slave_set_coil(
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.slave_set_coil(&payload.slave_id, &payload.area, payload.address, &payload.values)
-    {
+    match session.slave_set_coil(
+        &payload.slave_id,
+        &payload.area,
+        payload.address,
+        &payload.values,
+    ) {
         Ok(()) => success(
             request_id.to_string(),
             json!({ "set": true, "slaveId": payload.slave_id, "area": payload.area }),
@@ -5299,11 +11401,7 @@ fn handle_slave_set_coil(
     }
 }
 
-fn handle_slave_clear(
-    session: &mut Session,
-    request_id: &str,
-    payload: Value,
-) -> CommandOutcome {
+fn handle_slave_clear(session: &mut Session, request_id: &str, payload: Value) -> CommandOutcome {
     let payload: SlaveClearPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
@@ -5391,8 +11489,12 @@ fn handle_serial_slave_set_value(
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.serial_slave_set_value(&payload.slave_id, &payload.area, payload.address, &payload.values)
-    {
+    match session.serial_slave_set_value(
+        &payload.slave_id,
+        &payload.area,
+        payload.address,
+        &payload.values,
+    ) {
         Ok(()) => success(
             request_id.to_string(),
             json!({ "set": true, "slaveId": payload.slave_id }),
@@ -5411,8 +11513,12 @@ fn handle_serial_slave_get_memory(
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.serial_slave_get_memory(&payload.slave_id, &payload.area, payload.address, payload.count)
-    {
+    match session.serial_slave_get_memory(
+        &payload.slave_id,
+        &payload.area,
+        payload.address,
+        payload.count,
+    ) {
         Ok(values) => success(
             request_id.to_string(),
             json!({ "values": values, "slaveId": payload.slave_id }),
@@ -5422,17 +11528,17 @@ fn handle_serial_slave_get_memory(
     }
 }
 
-fn handle_slave_get_memory(
-    session: &Session,
-    request_id: &str,
-    payload: Value,
-) -> CommandOutcome {
+fn handle_slave_get_memory(session: &Session, request_id: &str, payload: Value) -> CommandOutcome {
     let payload: SlaveGetMemoryPayload = match serde_json::from_value(payload) {
         Ok(p) => p,
         Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
     };
-    match session.slave_get_memory(&payload.slave_id, &payload.area, payload.address, payload.count)
-    {
+    match session.slave_get_memory(
+        &payload.slave_id,
+        &payload.area,
+        payload.address,
+        payload.count,
+    ) {
         Ok(values) => success(
             request_id.to_string(),
             json!({
@@ -5489,7 +11595,7 @@ fn handle_parse_frame_online(request_id: &str, payload: Value) -> CommandOutcome
     };
     let transport = payload.transport.as_str();
     // 解析帧
-    let (unit_id, pdu_data, fc, checksum_status) = if transport == "ascii" {
+    let (unit_id, _pdu_data, fc, checksum_status) = if transport == "ascii" {
         match crate::modbus_ascii::parse_ascii_frame(&payload.bytes) {
             Ok((uid, pdu)) => {
                 let fc_val = pdu.first().copied().unwrap_or(0);
@@ -5568,7 +11674,11 @@ fn handle_parse_frame_offline(request_id: &str, payload: Value) -> CommandOutcom
         );
     };
     let info = crate::frame_parser::parse_frame(&bytes, &p.transport);
-    success(request_id.to_string(), serde_json::to_value(info).unwrap_or(json!({})), false)
+    success(
+        request_id.to_string(),
+        serde_json::to_value(info).unwrap_or(json!({})),
+        false,
+    )
 }
 
 fn fc_name(fc: u8) -> &'static str {
@@ -5649,7 +11759,7 @@ fn handle_stop_poll_stream(
 }
 
 /// 检查 PDU 是否为异常响应,如果是返回对应的 failure outcome。
-fn check_pdu_exception(pdu_bytes: &[u8], expected_fc: u8) -> Option<CommandOutcome> {
+fn check_pdu_exception(pdu_bytes: &[u8], _expected_fc: u8) -> Option<CommandOutcome> {
     if pdu_bytes.is_empty() {
         return None;
     }
@@ -5682,9 +11792,7 @@ fn format_hex(bytes: &[u8]) -> String {
         .join(" ")
 }
 
-fn format_read_registers_result(
-    parsed: &modbus_rtu::ParsedReadHoldingRegistersResponse,
-) -> Value {
+fn format_read_registers_result(parsed: &modbus_rtu::ParsedReadHoldingRegistersResponse) -> Value {
     match parsed.exception_code {
         Some(code) => json!({
             "status": "exception",
@@ -5804,6 +11912,17 @@ mod tests {
         assert!(capabilities.contains(&json!("tcp_write_multiple_registers")));
         assert!(capabilities.contains(&json!("build_write_single_coil")));
         assert!(!outcome.shutdown);
+    }
+
+    #[test]
+    fn s7_large_read_chunks_advance_the_source_address() {
+        let item = crate::s7_pdu::S7Item::new("DB1.DBB1000", 600).unwrap();
+        let chunks = s7_chunk_items(&[item], 449);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0][0].1.addr.byte, 1000);
+        assert_eq!(chunks[0][0].1.count, 449);
+        assert_eq!(chunks[1][0].1.addr.byte, 1449);
+        assert_eq!(chunks[1][0].1.count, 151);
     }
 
     #[test]
@@ -5978,7 +12097,10 @@ mod tests {
         let result = parsed.response.result.unwrap();
         assert_eq!(result["status"], "ok");
         // 0xA5 = 1010 0101(位顺序:低位在前)
-        assert_eq!(result["coils"], json!([true, false, true, false, false, true, false, true]));
+        assert_eq!(
+            result["coils"],
+            json!([true, false, true, false, false, true, false, true])
+        );
     }
 
     #[test]
@@ -6155,8 +12277,10 @@ mod tests {
         // 文档 §3.2.4 示例:WR 读 D200 起 10 字
         assert_eq!(
             result["frame"],
-            json!([0x05, 0x30, 0x30, 0x46, 0x46, 0x57, 0x52, 0x30, 0x44, 0x30, 0x30, 0x43,
-                   0x38, 0x30, 0x30, 0x30, 0x41, 0x03, 0x42, 0x38, 0x0D, 0x0A])
+            json!([
+                0x05, 0x30, 0x30, 0x46, 0x46, 0x57, 0x52, 0x30, 0x44, 0x30, 0x30, 0x43, 0x38, 0x30,
+                0x30, 0x30, 0x41, 0x03, 0x42, 0x38, 0x0D, 0x0A
+            ])
         );
         assert_eq!(result["checksum"], json!("B8"));
 
@@ -6202,7 +12326,11 @@ mod tests {
         expect.push(0x0D);
         expect.push(0x0A);
         assert_eq!(result["frame"], json!(expect));
-        assert_eq!(result["checksum"], json!("4D"), "手算:0x60+0x3EA+0x03=0x44D→4D");
+        assert_eq!(
+            result["checksum"],
+            json!("4D"),
+            "手算:0x60+0x3EA+0x03=0x44D→4D"
+        );
 
         // 响应解析还原应用区(格式3 二进制 + 和校验)
         let resp_app: Vec<u8> = vec![0x00, 0x00, 0x34, 0x12];
@@ -6233,7 +12361,10 @@ mod tests {
             &mut session,
             r#"{"protocolVersion":1,"requestId":"mcs-cap","command":"hello","payload":{}}"#,
         );
-        let caps = hello.response.result.unwrap()["capabilities"].as_array().unwrap().clone();
+        let caps = hello.response.result.unwrap()["capabilities"]
+            .as_array()
+            .unwrap()
+            .clone();
         assert!(caps.contains(&json!("mc_serial_build_3c")));
         assert!(caps.contains(&json!("mc_serial_parse_3c")));
         assert!(caps.contains(&json!("mc_1e_build_read")));
@@ -6269,11 +12400,16 @@ mod tests {
         );
         assert!(built.response.ok);
         let result = built.response.result.unwrap();
-        assert_eq!(result["frameHex"], json!("01 FF 0A 00 64 00 00 00 44 2A 0C 00"));
+        assert_eq!(
+            result["frameHex"],
+            json!("01 FF 0A 00 64 00 00 00 44 2A 0C 00")
+        );
         assert_eq!(result["deviceCode"], json!("D*"));
         assert_eq!(
             result["frame"],
-            json!([0x01, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x0C, 0x00])
+            json!([
+                0x01, 0xFF, 0x0A, 0x00, 0x64, 0x00, 0x00, 0x00, 0x44, 0x2A, 0x0C, 0x00
+            ])
         );
     }
 
@@ -6294,7 +12430,10 @@ mod tests {
         );
         assert!(built.response.ok);
         let result = built.response.result.unwrap();
-        assert_eq!(result["frameHex"], json!("02 FF 0A 00 00 00 00 00 4D 2A 03 00 05 00"));
+        assert_eq!(
+            result["frameHex"],
+            json!("02 FF 0A 00 00 00 00 00 4D 2A 03 00 05 00")
+        );
 
         // 字读响应:81 00 + 34 12 → D100=0x1234
         let parsed = run(
@@ -6372,7 +12511,10 @@ mod tests {
             .to_string(),
         );
         assert!(!bad.response.ok);
-        assert_eq!(bad.response.error.unwrap().code, "MC_1E_DEVICE_CLASS_MISMATCH");
+        assert_eq!(
+            bad.response.error.unwrap().code,
+            "MC_1E_DEVICE_CLASS_MISMATCH"
+        );
     }
 
     /// FX 编程口:fx_prog_build_read 构造(文档 §3.3.5(1) 向量)+ fx_prog_parse 解析
@@ -6393,7 +12535,9 @@ mod tests {
         let result = built.response.result.unwrap();
         assert_eq!(
             result["frame"],
-            json!([0x02, 0x30, 0x31, 0x30, 0x46, 0x36, 0x30, 0x34, 0x03, 0x37, 0x34])
+            json!([
+                0x02, 0x30, 0x31, 0x30, 0x46, 0x36, 0x30, 0x34, 0x03, 0x37, 0x34
+            ])
         );
 
         // 读响应:数据 "3412"(D123 = 0x1234,低字节在前)
@@ -6425,9 +12569,147 @@ mod tests {
             .to_string(),
         );
         assert!(parsed.response.ok);
+        assert_eq!(parsed.response.result.unwrap()["status"], json!("ack"));
+    }
+
+    #[test]
+    fn hostlink_fins_command_keeps_area_codes_distinct_and_rejects_unsafe_input() {
+        let mut session = Session::new();
+        let w = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "hl-w",
+                "command": "hostlink_build_fins",
+                "payload": { "station": 0, "area": "W", "byte": 0, "count": 1 }
+            })
+            .to_string(),
+        );
+        assert!(w.response.ok);
+        let w_text = w.response.result.unwrap()["frameText"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            w_text.contains("B1"),
+            "W word area must use FINS 0xB1: {w_text}"
+        );
+
+        let cio = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "hl-cio",
+                "command": "hostlink_build_fins",
+                "payload": { "station": 0, "area": "CIO", "byte": 0, "count": 1 }
+            })
+            .to_string(),
+        );
+        assert!(cio.response.ok);
+        let cio_text = cio.response.result.unwrap()["frameText"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            cio_text.contains("B0"),
+            "CIO word area must use FINS 0xB0: {cio_text}"
+        );
+
+        let bad = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "hl-bad",
+                "command": "hostlink_build_fins",
+                "payload": { "station": 32, "area": "W", "byte": 0, "count": 1 }
+            })
+            .to_string(),
+        );
+        assert!(!bad.response.ok);
+        assert_eq!(bad.response.error.unwrap().code, "HOSTLINK_PARAM_INVALID");
+
+        let overflow = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "hl-range",
+                "command": "hostlink_build_fins",
+                "payload": { "station": 0, "area": "DM", "byte": 0xFFFFFF, "count": 2 }
+            })
+            .to_string(),
+        );
+        assert!(!overflow.response.ok);
         assert_eq!(
-            parsed.response.result.unwrap()["status"],
-            json!("ack")
+            overflow.response.error.unwrap().code,
+            "HOSTLINK_PARAM_INVALID"
+        );
+
+        let cmode_overflow = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "cmode-range",
+                "command": "hostlink_build_cmode_read",
+                "payload": { "station": 0, "dmStart": 65535, "wordCount": 2 }
+            })
+            .to_string(),
+        );
+        assert!(!cmode_overflow.response.ok);
+        assert_eq!(
+            cmode_overflow.response.error.unwrap().code,
+            "HOSTLINK_PARAM_INVALID"
+        );
+    }
+
+    #[test]
+    fn fins_network_commands_fail_closed_on_batch_window_and_bit_values() {
+        let mut session = Session::new();
+        let oversized_read = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "fins-limit-read",
+                "command": "fins_read",
+                "payload": { "connectionId": "missing", "address": "D100", "count": 513 }
+            })
+            .to_string(),
+        );
+        assert!(!oversized_read.response.ok);
+        assert_eq!(
+            oversized_read.response.error.unwrap().code,
+            "FINS_BATCH_LIMIT"
+        );
+
+        let overflowing_window = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "fins-range-read",
+                "command": "fins_read",
+                "payload": { "connectionId": "missing", "address": "D16777215", "count": 2 }
+            })
+            .to_string(),
+        );
+        assert!(!overflowing_window.response.ok);
+        assert_eq!(
+            overflowing_window.response.error.unwrap().code,
+            "FINS_ADDRESS_RANGE"
+        );
+
+        let bad_bit_write = run(
+            &mut session,
+            &json!({
+                "protocolVersion": 1,
+                "requestId": "fins-bit-value",
+                "command": "fins_write",
+                "payload": { "connectionId": "missing", "address": "CIO0.00", "values": [2] }
+            })
+            .to_string(),
+        );
+        assert!(!bad_bit_write.response.ok);
+        assert_eq!(
+            bad_bit_write.response.error.unwrap().code,
+            "FINS_BIT_VALUE_INVALID"
         );
     }
 }

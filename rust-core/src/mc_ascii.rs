@@ -11,9 +11,11 @@
 //! 长度字段语义与 Binary 相同:请求 = 定时器(2)+指令区;响应 = 结束代码(2)+数据区。
 
 use crate::error::CoreError;
-use crate::mc_address::{parse_mc_address, McAddress};
+use crate::mc_address::{McAddress, parse_mc_address};
 use crate::mc_frame::{AccessRoute, FrameType};
-use crate::mc_pdu::{CMD_READ_BATCH, CMD_WRITE_BATCH, MAX_READ_BITS, MAX_READ_WORDS, SUBCMD_BIT, SUBCMD_WORD};
+use crate::mc_pdu::{
+    CMD_READ_BATCH, CMD_WRITE_BATCH, MAX_READ_BITS, MAX_READ_WORDS, SUBCMD_BIT, SUBCMD_WORD,
+};
 
 /// 软元件代码的 ASCII 表示(§6.1 `*` 规则)。
 /// 星号集合 = X/Y/B/SB/SW/ZR/DX/DY(文档 §6.1 ASCII 代码列:X=`9C*` Y=`9D*` B=`A0*`...);
@@ -118,7 +120,12 @@ pub fn build_ascii_write_request(
     }
     let subcmd = if addr.is_bit { SUBCMD_BIT } else { SUBCMD_WORD };
     // 二进制等效:指令区 = 10 + 位count/字count*2
-    let body_bin_len = 10 + if addr.is_bit { values.len() } else { values.len() * 2 };
+    let body_bin_len = 10
+        + if addr.is_bit {
+            values.len()
+        } else {
+            values.len() * 2
+        };
     let data_len = 2 + body_bin_len;
 
     let mut s = String::with_capacity(80);
@@ -188,7 +195,8 @@ pub fn parse_ascii_response(s: &str) -> Result<AsciiResponse, CoreError> {
     };
     // [路由 10 字符][长度 4][结束代码 4][数据...]
     let len_off = off + 10;
-    let data_len = usize::from_str_radix(&s[len_off..len_off + 4], 16).map_err(|_| bad_ascii(&s[len_off..len_off + 4]))?;
+    let data_len = usize::from_str_radix(&s[len_off..len_off + 4], 16)
+        .map_err(|_| bad_ascii(&s[len_off..len_off + 4]))?;
     let end_code = u16::from_str_radix(&s[len_off + 4..len_off + 8], 16)
         .map_err(|_| bad_ascii(&s[len_off + 4..len_off + 8]))?;
     let data_ascii = s[len_off + 8..].to_string();
@@ -198,11 +206,19 @@ pub fn parse_ascii_response(s: &str) -> Result<AsciiResponse, CoreError> {
     if data_ascii.len() > expect_chars {
         return Err(CoreError::Modbus {
             code: "MC_LENGTH_MISMATCH",
-            message: format!("ASCII 长度字段 {data_len} 与数据 {} 字符不符(最多 {expect_chars})", data_ascii.len()),
+            message: format!(
+                "ASCII 长度字段 {data_len} 与数据 {} 字符不符(最多 {expect_chars})",
+                data_ascii.len()
+            ),
             details: None,
         });
     }
-    Ok(AsciiResponse { frame_type, sequence: seq, end_code, data_ascii })
+    Ok(AsciiResponse {
+        frame_type,
+        sequence: seq,
+        end_code,
+        data_ascii,
+    })
 }
 
 /// 从 ASCII 响应数据区解出字值(每 4 字符一字)。
@@ -234,7 +250,11 @@ pub fn ascii_bits(resp: &AsciiResponse, count: usize) -> Result<Vec<u16>, CoreEr
     }
     Ok((0..count)
         .map(|i| {
-            if resp.data_ascii.as_bytes()[i] == b'1' { 1u16 } else { 0u16 }
+            if resp.data_ascii.as_bytes()[i] == b'1' {
+                1u16
+            } else {
+                0u16
+            }
         })
         .collect())
 }
@@ -255,9 +275,25 @@ mod tests {
     #[test]
     fn read_request_matches_doc_vector() {
         let s = build_ascii_read_request(
-            FrameType::Type3E, 0, &AccessRoute::default(), 0x0010, "D100", 1,
-        ).unwrap();
-        assert_eq!(s, "500000FFFF0300" .to_string() + "000C" + "0010" + "0401" + "0001" + "000064" + "A8" + "0001");
+            FrameType::Type3E,
+            0,
+            &AccessRoute::default(),
+            0x0010,
+            "D100",
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            s,
+            "500000FFFF0300".to_string()
+                + "000C"
+                + "0010"
+                + "0401"
+                + "0001"
+                + "000064"
+                + "A8"
+                + "0001"
+        );
         assert_eq!(s, "500000FFFF0300000C001004010001000064A80001");
     }
 
@@ -275,8 +311,14 @@ mod tests {
     #[test]
     fn x_device_code_has_star_suffix() {
         let s = build_ascii_read_request(
-            FrameType::Type3E, 0, &AccessRoute::default(), 0x0010, "X0", 1,
-        ).unwrap();
+            FrameType::Type3E,
+            0,
+            &AccessRoute::default(),
+            0x0010,
+            "X0",
+            1,
+        )
+        .unwrap();
         assert!(s.contains("9C*"), "X 的 ASCII 代码应为 9C*: {s}");
         // 位读子命令 0000
         assert!(s.contains("04010000"), "位读子命令 0000: {s}");
@@ -286,8 +328,14 @@ mod tests {
     #[test]
     fn m_device_code_no_star() {
         let s = build_ascii_read_request(
-            FrameType::Type3E, 0, &AccessRoute::default(), 0x0010, "M100", 1,
-        ).unwrap();
+            FrameType::Type3E,
+            0,
+            &AccessRoute::default(),
+            0x0010,
+            "M100",
+            1,
+        )
+        .unwrap();
         assert!(s.contains("90"), "M 的 ASCII 代码应为 90: {s}");
         assert!(!s.contains("90*"), "十进制区不带星号");
     }
@@ -296,8 +344,14 @@ mod tests {
     #[test]
     fn write_bits_single_char_data() {
         let s = build_ascii_write_request(
-            FrameType::Type3E, 0, &AccessRoute::default(), 0x0010, "M100", &[1, 0, 1],
-        ).unwrap();
+            FrameType::Type3E,
+            0,
+            &AccessRoute::default(),
+            0x0010,
+            "M100",
+            &[1, 0, 1],
+        )
+        .unwrap();
         // 尾部 3 位 = "101"
         assert!(s.ends_with("0003101"), "位写数据应为单字符 101: {s}");
     }
@@ -306,8 +360,14 @@ mod tests {
     #[test]
     fn write_words_four_chars() {
         let s = build_ascii_write_request(
-            FrameType::Type3E, 0, &AccessRoute::default(), 0x0010, "D100", &[0x1234, 0xABCD],
-        ).unwrap();
+            FrameType::Type3E,
+            0,
+            &AccessRoute::default(),
+            0x0010,
+            "D100",
+            &[0x1234, 0xABCD],
+        )
+        .unwrap();
         assert!(s.ends_with("00021234ABCD"), "字写数据 1234ABCD: {s}");
     }
 
@@ -315,8 +375,14 @@ mod tests {
     #[test]
     fn frame_4e_ascii_with_sequence() {
         let s = build_ascii_read_request(
-            FrameType::Type4E, 0x1234, &AccessRoute::default(), 0x0010, "D100", 1,
-        ).unwrap();
+            FrameType::Type4E,
+            0x1234,
+            &AccessRoute::default(),
+            0x0010,
+            "D100",
+            1,
+        )
+        .unwrap();
         assert!(s.starts_with("54001234"), "4E ASCII 副帧头+序列号: {s}");
     }
 

@@ -5,8 +5,8 @@
 
 use serde::Serialize;
 
-use crate::modbus_rtu::{self, RtuFrame, RtuFrameRole};
 use crate::modbus_ascii;
+use crate::modbus_rtu::{self, RtuFrame, RtuFrameRole};
 use crate::modbus_tcp;
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,11 +80,7 @@ fn parse_rtu(bytes: &[u8]) -> FrameInfo {
 
 fn parse_ascii(bytes: &[u8]) -> FrameInfo {
     match modbus_ascii::parse_ascii_frame(bytes) {
-        Ok((unit_id, pdu)) => {
-            let fc = pdu.first().copied().unwrap_or(0);
-            let info = build_info_from_pdu(unit_id as u16, &pdu, "ascii", "valid");
-            info
-        }
+        Ok((unit_id, pdu)) => build_info_from_pdu(unit_id as u16, &pdu, "ascii", "valid"),
         Err(e) => invalid_frame("ascii", bytes, &e.to_string()),
     }
 }
@@ -92,7 +88,8 @@ fn parse_ascii(bytes: &[u8]) -> FrameInfo {
 fn parse_tcp(bytes: &[u8]) -> FrameInfo {
     match modbus_tcp::parse_mbap_frame(bytes) {
         Ok((header, pdu)) => {
-            let mut info = build_info_from_pdu(header.unit_id as u16, &pdu, "tcp", "not_applicable");
+            let mut info =
+                build_info_from_pdu(header.unit_id as u16, &pdu, "tcp", "not_applicable");
             info.unit_id = header.unit_id as u16;
             info
         }
@@ -137,7 +134,10 @@ fn build_info_from_rtu(frame: RtuFrame, raw: &[u8], checksum: &str, transport: &
         base_function_code: base_fc,
         is_exception,
         exception_code: frame.exception_code(),
-        exception_name: frame.exception_code().map(modbus_rtu::modbus_exception_name).map(String::from),
+        exception_name: frame
+            .exception_code()
+            .map(modbus_rtu::modbus_exception_name)
+            .map(String::from),
         address: extract_address(base_fc, &data),
         quantity: extract_quantity(base_fc, &data),
         write_address: None,
@@ -169,9 +169,14 @@ fn build_info_from_pdu(unit_id: u16, pdu: &[u8], transport: &str, checksum: &str
         function_name: fc_name(base_fc).to_string(),
         base_function_code: base_fc,
         is_exception,
-        exception_code: if is_exception { data.first().copied() } else { None },
+        exception_code: if is_exception {
+            data.first().copied()
+        } else {
+            None
+        },
         exception_name: if is_exception {
-            data.first().map(|&c| modbus_rtu::modbus_exception_name(c).to_string())
+            data.first()
+                .map(|&c| modbus_rtu::modbus_exception_name(c).to_string())
         } else {
             None
         },
@@ -289,15 +294,33 @@ fn extract_coils(fc: u8, data: &[u8], is_exception: bool) -> Vec<bool> {
     bits
 }
 
-fn format_summary(unit_id: u8, fc: u8, base_fc: u8, is_exception: bool, data: &[u8], transport: &str) -> String {
+fn format_summary(
+    unit_id: u8,
+    fc: u8,
+    base_fc: u8,
+    is_exception: bool,
+    data: &[u8],
+    transport: &str,
+) -> String {
     let name = fc_name(base_fc);
     let exc = if is_exception {
         let code = data.first().copied().unwrap_or(0);
-        format!(" (异常 0x{:02X} {})", code, modbus_rtu::modbus_exception_name(code))
+        format!(
+            " (异常 0x{:02X} {})",
+            code,
+            modbus_rtu::modbus_exception_name(code)
+        )
     } else {
         String::new()
     };
-    format!("[{}] 站号 {} FC 0x{:02X} {}{}", transport.to_uppercase(), unit_id, fc, name, exc)
+    format!(
+        "[{}] 站号 {} FC 0x{:02X} {}{}",
+        transport.to_uppercase(),
+        unit_id,
+        fc,
+        name,
+        exc
+    )
 }
 
 #[cfg(test)]
@@ -352,7 +375,9 @@ mod tests {
     #[test]
     fn parse_tcp_frame() {
         // MBAP + FC03: TID=0001 PID=0000 LEN=0006 UID=01 FC=03 addr=0000 qty=000A
-        let bytes = [0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x0A];
+        let bytes = [
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x0A,
+        ];
         let info = parse_frame(&bytes, "tcp");
         assert!(info.is_valid);
         assert_eq!(info.unit_id, 1);
@@ -389,7 +414,9 @@ mod tests {
 
     #[test]
     fn infer_tcp_from_protocol_id_zero() {
-        let bytes = [0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x0A];
+        let bytes = [
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x0A,
+        ];
         let info = parse_frame(&bytes, "auto");
         assert!(info.is_valid);
         assert_eq!(info.transport, "tcp");

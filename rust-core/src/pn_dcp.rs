@@ -36,7 +36,11 @@ pub const SERVICE_TYPE_REQUEST: u8 = 0x00;
 pub const SERVICE_TYPE_SUCCESS: u8 = 0x01;
 
 fn dcp_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "DCP_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "DCP_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// DCP 帧头(不含 Ethernet 头,即 DCP 协议体)
@@ -86,7 +90,11 @@ impl DcpBlock {
 
 /// 构建 Identify All 多播请求(扫描全网 PROFINET 设备)。
 pub fn build_identify_all(xid: u32) -> Vec<u8> {
-    let block = DcpBlock { option: 0xFF, sub_option: 0xFF, data: vec![] };
+    let block = DcpBlock {
+        option: 0xFF,
+        sub_option: 0xFF,
+        data: vec![],
+    };
     let block_bytes = block.encode();
     let header = DcpHeader {
         service_id: SERVICE_IDENTIFY,
@@ -131,7 +139,11 @@ pub fn build_set_ip(xid: u32, ip: [u8; 4], mask: [u8; 4], gateway: [u8; 4]) -> V
     data.extend_from_slice(&ip);
     data.extend_from_slice(&mask);
     data.extend_from_slice(&gateway);
-    let block = DcpBlock { option: 0x01, sub_option: 0x02, data };
+    let block = DcpBlock {
+        option: 0x01,
+        sub_option: 0x02,
+        data,
+    };
     let block_bytes = block.encode();
     let header = DcpHeader {
         service_id: SERVICE_SET,
@@ -148,7 +160,11 @@ pub fn build_set_ip(xid: u32, ip: [u8; 4], mask: [u8; 4], gateway: [u8; 4]) -> V
 
 /// 构建闪灯(Factory Reset / Blink)请求。
 pub fn build_blink_led(xid: u32) -> Vec<u8> {
-    let block = DcpBlock { option: 0x05, sub_option: 0x03, data: vec![0x00, 0x00, 0x00, 0x01] };
+    let block = DcpBlock {
+        option: 0x05,
+        sub_option: 0x03,
+        data: vec![0x00, 0x00, 0x00, 0x01],
+    };
     let block_bytes = block.encode();
     let header = DcpHeader {
         service_id: SERVICE_SET,
@@ -193,7 +209,9 @@ pub fn parse_identify_response(frame: &[u8]) -> Result<DcpDevice, CoreError> {
 
         match (option, sub) {
             (0x02, 0x01) => {
-                dev.name = String::from_utf8(data.to_vec()).ok().filter(|s| !s.is_empty());
+                dev.name = String::from_utf8(data.to_vec())
+                    .ok()
+                    .filter(|s| !s.is_empty());
             }
             (0x01, 0x02) if data.len() >= 13 => {
                 // data[0]=IP 方式(0=静态,1=DHCP,2=自动,3=本地)
@@ -249,17 +267,21 @@ pub fn parse_lldp(frame: &[u8]) -> Result<LldpInfo, CoreError> {
         let tlv_len = (((type_hi & 0x01) as usize) << 8) | type_lo as usize;
         let data = &frame[off + 2..(off + 2 + tlv_len).min(frame.len())];
         match tlv_type {
-            0x00 => break,                   // End of LLDPDU
-            0x05 => {                        // System Name
+            0x00 => break, // End of LLDPDU
+            0x05 => {
+                // System Name
                 info.system_name = String::from_utf8(data.to_vec()).ok();
             }
-            0x04 => {                        // Port Description
+            0x04 => {
+                // Port Description
                 info.port_description = String::from_utf8(data.to_vec()).ok();
             }
-            0x06 => {                        // System Description
+            0x06 => {
+                // System Description
                 info.system_description = String::from_utf8(data.to_vec()).ok();
             }
-            0x02 => {                        // Port ID (subtype + value)
+            0x02 => {
+                // Port ID (subtype + value)
                 if data.len() > 1 {
                     info.port_id = String::from_utf8(data[1..].to_vec()).ok();
                 }
@@ -309,7 +331,18 @@ mod tests {
     #[test]
     fn parse_identify_response_with_name_and_ip() {
         // 构造响应:头(10B) + 块1 设备名(02 01 00 05 "test1") + 块2 IP(01 02 00 0D 00 192.168.0.1 255.255.255.0 192.168.0.254)
-        let mut f = vec![SERVICE_IDENTIFY, SERVICE_TYPE_SUCCESS, 0, 0, 0, 1, 0, 0, 0, 0];
+        let mut f = vec![
+            SERVICE_IDENTIFY,
+            SERVICE_TYPE_SUCCESS,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+        ];
         f.extend_from_slice(&[0x02, 0x01, 0x00, 0x05]);
         f.extend_from_slice(b"test1");
         f.push(0x00); // padding(name 长度 5 是奇数)
@@ -330,7 +363,8 @@ mod tests {
         f.push((5 << 1) as u8 & 0xFE); // type=5, no length high bit
         f.push(4); // length low
         f.extend_from_slice(b"PLC1");
-        f.push(0); f.push(0); // End TLV
+        f.push(0);
+        f.push(0); // End TLV
         let info = parse_lldp(&f).unwrap();
         assert_eq!(info.system_name, Some("PLC1".into()));
     }

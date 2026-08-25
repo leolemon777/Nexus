@@ -18,7 +18,11 @@ pub const FC_WRITE: u8 = 0x7C;
 pub const SC_E5: u8 = 0xE5;
 
 fn ppi_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "S7_PPI_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "S7_PPI_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// SD2 长帧计算术和校验(DA..PDU)。
@@ -59,7 +63,9 @@ pub fn parse_sd2(frame: &[u8]) -> Result<(u8, u8, u8, Vec<u8>), CoreError> {
     // #15: PPI 单帧数据量上限 234 字节(u8 LGE 回绕防护);超限需上层分片
     let total_data = frame[1] as usize - 3;
     if total_data > 234 + 26 {
-        return Err(ppi_err(format!("PPI 帧数据量 {total_data}B 超上限(单帧 ≤260B;超过请分片)")));
+        return Err(ppi_err(format!(
+            "PPI 帧数据量 {total_data}B 超上限(单帧 ≤260B;超过请分片)"
+        )));
     }
     let le = frame[1] as usize;
     if frame.len() < 4 + le + 2 {
@@ -71,7 +77,10 @@ pub fn parse_sd2(frame: &[u8]) -> Result<(u8, u8, u8, Vec<u8>), CoreError> {
         return Err(ppi_err("PPI 帧无结束符 0x16"));
     }
     if fcs_sum(body) != fcs {
-        return Err(ppi_err(format!("FCS 校验失败(算术和):期望 0x{fcs:02X} 实得 0x{:02X}", fcs_sum(body))));
+        return Err(ppi_err(format!(
+            "FCS 校验失败(算术和):期望 0x{fcs:02X} 实得 0x{:02X}",
+            fcs_sum(body)
+        )));
     }
     Ok((body[0], body[1], body[2], body[3..].to_vec()))
 }
@@ -79,7 +88,7 @@ pub fn parse_sd2(frame: &[u8]) -> Result<(u8, u8, u8, Vec<u8>), CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::s7_pdu::{build_read_request, S7Item};
+    use crate::s7_pdu::{S7Item, build_read_request};
 
     /// golden:站 2 主 0 读 VB100 3 字节(grok 调研逐字节样例)
     #[test]
@@ -87,14 +96,20 @@ mod tests {
         let items = [S7Item::new("VB100", 3).unwrap()];
         let pdu = build_read_request(0, &items).unwrap();
         // 内嵌 PDU 与 golden 的 32 01 … 84 00 03 20 一致(V 区=DB1, 地址 100<<3=0x320, BYTE×3)
-        assert_eq!(&pdu[..14], &[0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x04, 0x01, 0x12, 0x0A]);
+        assert_eq!(
+            &pdu[..14],
+            &[
+                0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x04, 0x01, 0x12, 0x0A
+            ]
+        );
         let frame = build_sd2(2, 0, FC_READ, &pdu);
         assert_eq!(
             frame,
-            vec![0x68, 0x1B, 0x1B, 0x68, 0x02, 0x00, 0x6C,
-                 0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x04, 0x01,
-                 0x12, 0x0A, 0x10, 0x02, 0x00, 0x03, 0x00, 0x01, 0x84, 0x00, 0x03, 0x20,
-                 0x8D, 0x16]
+            vec![
+                0x68, 0x1B, 0x1B, 0x68, 0x02, 0x00, 0x6C, 0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x0E, 0x00, 0x00, 0x04, 0x01, 0x12, 0x0A, 0x10, 0x02, 0x00, 0x03, 0x00, 0x01, 0x84,
+                0x00, 0x03, 0x20, 0x8D, 0x16
+            ]
         );
     }
 
@@ -109,12 +124,15 @@ mod tests {
         assert_eq!(frame.last(), Some(&0x16));
         // 数据项尾部:00(RC) 04(TS) 00 08(8bit) 12(数据) 16(ED)
         let n = frame.len();
-        assert_eq!(&frame[n-7..], &[0x00, 0x04, 0x00, 0x08, 0x12, 0xBF, 0x16]); // 数据项+FCS(BF)+ED
+        assert_eq!(&frame[n - 7..], &[0x00, 0x04, 0x00, 0x08, 0x12, 0xBF, 0x16]); // 数据项+FCS(BF)+ED
     }
 
     #[test]
     fn sa_confirm_matches_golden() {
-        assert_eq!(build_sa_confirm(2, 0), vec![0x10, 0x02, 0x00, 0x5C, 0x5E, 0x16]);
+        assert_eq!(
+            build_sa_confirm(2, 0),
+            vec![0x10, 0x02, 0x00, 0x5C, 0x5E, 0x16]
+        );
     }
 
     /// 响应回环:本地构造自洽 SD2 响应帧(数据 99 34 56)→ 剥壳 → S7 Ack → 数据
@@ -122,8 +140,8 @@ mod tests {
     #[test]
     fn parse_response_constructed() {
         let ack_pdu: Vec<u8> = vec![
-            0x32, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x07, 0x00, 0x00,
-            0x04, 0x01, 0xFF, 0x04, 0x00, 0x18, 0x99, 0x34, 0x56,
+            0x32, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x07, 0x00, 0x00, 0x04, 0x01,
+            0xFF, 0x04, 0x00, 0x18, 0x99, 0x34, 0x56,
         ];
         let frame = build_sd2(0, 2, 0x08, &ack_pdu);
         let (da, sa, fc, pdu) = parse_sd2(&frame).unwrap();

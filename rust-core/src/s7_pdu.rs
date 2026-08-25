@@ -15,7 +15,7 @@
 //! `RC(1) + TS(1) + Length(2 BE) + data + [奇数长度且非末项补 1 字节]` —— **无 0x00 保留头**。
 
 use crate::error::CoreError;
-use crate::s7_address::{parse_s7_address, S7Address, S7Kind};
+use crate::s7_address::{S7Address, S7Kind, parse_s7_address};
 
 /// ROSCTR(Message Type)
 pub const ROSCTR_JOB: u8 = 0x01;
@@ -43,7 +43,11 @@ fn data_transport_size(kind: S7Kind) -> u8 {
 }
 
 fn err(code: &'static str, msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code, message: msg.into(), details: None }
+    CoreError::Modbus {
+        code,
+        message: msg.into(),
+        details: None,
+    }
 }
 
 // ============ 通用头 ============
@@ -87,7 +91,10 @@ pub fn parse_ack(pdu: &[u8]) -> Result<S7Ack, CoreError> {
     if rosctr == ROSCTR_ACK_DATA {
         return Err(err(
             "S7_PDU_INVALID",
-            format!("Ack_Data 长度不自洽:12+参数{param_len}+数据{data_len} ≠ 帧长{}", pdu.len()),
+            format!(
+                "Ack_Data 长度不自洽:12+参数{param_len}+数据{data_len} ≠ 帧长{}",
+                pdu.len()
+            ),
         ));
     }
     if 10 + param_len + data_len == pdu.len() {
@@ -101,12 +108,21 @@ pub fn parse_ack(pdu: &[u8]) -> Result<S7Ack, CoreError> {
     }
     Err(err(
         "S7_PDU_INVALID",
-        format!("长度自校验失败:头10/12+参数{param_len}+数据{data_len} ≠ 帧长{}", pdu.len()),
+        format!(
+            "长度自校验失败:头10/12+参数{param_len}+数据{data_len} ≠ 帧长{}",
+            pdu.len()
+        ),
     ))
 }
 
 /// S7 头(10 字节,Job/Userdata 用)。
-fn s7_header(rosctr: u8, pdu_ref: u16, reserved: u16, param_len: usize, data_len: usize) -> Vec<u8> {
+fn s7_header(
+    rosctr: u8,
+    pdu_ref: u16,
+    reserved: u16,
+    param_len: usize,
+    data_len: usize,
+) -> Vec<u8> {
     let mut h = Vec::with_capacity(10);
     h.push(0x32);
     h.push(rosctr);
@@ -120,7 +136,12 @@ fn s7_header(rosctr: u8, pdu_ref: u16, reserved: u16, param_len: usize, data_len
 // ============ Setup Communication(0xF0) ============
 
 /// 构建 PDU 协商请求(python-snap7 3.0 默认 AMQ 1/1、PDU 480;真实抓包同构)。
-pub fn build_setup_request(pdu_ref: u16, amq_caller: u16, amq_called: u16, pdu_len: u16) -> Vec<u8> {
+pub fn build_setup_request(
+    pdu_ref: u16,
+    amq_caller: u16,
+    amq_called: u16,
+    pdu_len: u16,
+) -> Vec<u8> {
     let mut out = s7_header(ROSCTR_JOB, pdu_ref, 0x0000, 8, 0);
     out.extend_from_slice(&[FUN_SETUP, 0x00]);
     out.extend_from_slice(&amq_caller.to_be_bytes());
@@ -132,7 +153,10 @@ pub fn build_setup_request(pdu_ref: u16, amq_caller: u16, amq_called: u16, pdu_l
 /// Setup 响应 → (amq_caller, amq_called, 协商 PDU 长度)。
 pub fn parse_setup_response(ack: &S7Ack) -> Result<(u16, u16, u16), CoreError> {
     if ack.param.len() != 8 || ack.param[0] != FUN_SETUP {
-        return Err(err("S7_PDU_INVALID", "Setup 响应参数区不是 8 字节 0xF0 结构"));
+        return Err(err(
+            "S7_PDU_INVALID",
+            "Setup 响应参数区不是 8 字节 0xF0 结构",
+        ));
     }
     Ok((
         u16::from_be_bytes([ack.param[2], ack.param[3]]),
@@ -153,7 +177,10 @@ pub struct S7Item {
 
 impl S7Item {
     pub fn new(address: &str, count: u16) -> Result<Self, CoreError> {
-        Ok(Self { addr: parse_s7_address(address)?, count })
+        Ok(Self {
+            addr: parse_s7_address(address)?,
+            count,
+        })
     }
 
     /// 编码 12 字节 AnyPointer 地址项(请求侧 TS)。
@@ -165,7 +192,9 @@ impl S7Item {
         let ts = self.addr.kind.transport_size();
         let wire_count: u16 = match self.addr.kind {
             S7Kind::Bit | S7Kind::Timer | S7Kind::Counter => self.count,
-            _ => self.count.saturating_mul(self.addr.kind.elem_bytes() as u16),
+            _ => self
+                .count
+                .saturating_mul(self.addr.kind.elem_bytes() as u16),
         };
         let db = self.addr.db;
         let addr_bytes = self.addr.encode_any_address();
@@ -198,7 +227,10 @@ impl S7Item {
 /// 构建读请求。
 pub fn build_read_request(pdu_ref: u16, items: &[S7Item]) -> Result<Vec<u8>, CoreError> {
     if items.is_empty() || items.len() > MAX_ITEMS {
-        return Err(err("S7_ITEM_COUNT", format!("Item 数量应为 1-{MAX_ITEMS},实际 {}", items.len())));
+        return Err(err(
+            "S7_ITEM_COUNT",
+            format!("Item 数量应为 1-{MAX_ITEMS},实际 {}", items.len()),
+        ));
     }
     let param_len = 2 + items.len() * 12;
     let mut out = s7_header(ROSCTR_JOB, pdu_ref, 0x0000, param_len, 0);
@@ -265,7 +297,10 @@ pub fn parse_read_response(ack: &S7Ack) -> Result<Vec<ReadItemData>, CoreError> 
     let mut off = 0usize;
     for i in 0..item_count {
         if off + 4 > ack.data.len() {
-            return Err(err("S7_RESPONSE_TRUNCATED", format!("读响应第 {i} 项数据不完整")));
+            return Err(err(
+                "S7_RESPONSE_TRUNCATED",
+                format!("读响应第 {i} 项数据不完整"),
+            ));
         }
         let rc = ack.data[off];
         let ts = ack.data[off + 1];
@@ -277,9 +312,15 @@ pub fn parse_read_response(ack: &S7Ack) -> Result<Vec<ReadItemData>, CoreError> 
             _ => length,
         } as usize;
         if off + byte_len > ack.data.len() {
-            return Err(err("S7_RESPONSE_TRUNCATED", format!("读响应第 {i} 项数据体不足")));
+            return Err(err(
+                "S7_RESPONSE_TRUNCATED",
+                format!("读响应第 {i} 项数据体不足"),
+            ));
         }
-        results.push(ReadItemData { return_code: rc, data: ack.data[off..off + byte_len].to_vec() });
+        results.push(ReadItemData {
+            return_code: rc,
+            data: ack.data[off..off + byte_len].to_vec(),
+        });
         off += byte_len;
         // 奇数长度且非末项 → 1 字节偶数填充
         if i + 1 < item_count && byte_len % 2 != 0 {
@@ -302,7 +343,10 @@ pub fn build_write_request(
     data_blocks: &[Vec<u8>],
 ) -> Result<Vec<u8>, CoreError> {
     if items.is_empty() || items.len() > MAX_ITEMS {
-        return Err(err("S7_ITEM_COUNT", format!("Item 数量应为 1-{MAX_ITEMS},实际 {}", items.len())));
+        return Err(err(
+            "S7_ITEM_COUNT",
+            format!("Item 数量应为 1-{MAX_ITEMS},实际 {}", items.len()),
+        ));
     }
     if items.len() != data_blocks.len() {
         return Err(err("S7_WRITE_MISMATCH", "items 与 data 数量不一致"));
@@ -314,7 +358,11 @@ pub fn build_write_request(
         if data.len() != expected {
             return Err(err(
                 "S7_WRITE_MISMATCH",
-                format!("第 {i} 项数据长度 {} 与地址 {} 需要的 {expected} 不符", data.len(), item.addr.display()),
+                format!(
+                    "第 {i} 项数据长度 {} 与地址 {} 需要的 {expected} 不符",
+                    data.len(),
+                    item.addr.display()
+                ),
             ));
         }
         let ts = data_transport_size(item.addr.kind);
@@ -346,7 +394,10 @@ pub fn build_write_request(
 /// 解析写响应:每项 1 字节返回码。
 pub fn parse_write_response(ack: &S7Ack) -> Result<Vec<u8>, CoreError> {
     if ack.param.first() != Some(&FUN_WRITE) {
-        return Err(err("S7_PDU_INVALID", "不是 Write 响应(参数区首字节非 0x05)"));
+        return Err(err(
+            "S7_PDU_INVALID",
+            "不是 Write 响应(参数区首字节非 0x05)",
+        ));
     }
     let item_count = *ack.param.get(1).unwrap_or(&0) as usize;
     if ack.data.len() < item_count {
@@ -359,8 +410,7 @@ pub fn parse_write_response(ack: &S7Ack) -> Result<Vec<u8>, CoreError> {
 
 /// ROSCTR=0x07(Userdata)头(10B)+参数区
 fn userdata_header(pdu_ref: u16, param_len: usize, data_len: usize) -> Vec<u8> {
-    let mut out = s7_header(ROSCTR_USERDATA, pdu_ref, 0x0000, param_len, data_len);
-    out
+    s7_header(ROSCTR_USERDATA, pdu_ref, 0x0000, param_len, data_len)
 }
 
 /// 停止 CPU(Job + Fun 0x29 + 'P_PROGRAM')。
@@ -410,7 +460,16 @@ pub fn control_result_message(code: u8) -> &'static str {
 /// golden(deep-dive §6.4 TIA 抓包):param `00 01 12 04 11 44 01 00` + data `FF 09 00 04 04 24 00 00`。
 pub fn build_szl_request(pdu_ref: u16, szl_id: u16, index: u16) -> Vec<u8> {
     let param = [0x00u8, 0x01, 0x12, 0x04, 0x11, 0x44, 0x01, 0x00];
-    let data = [0xFFu8, 0x09, 0x00, 0x04, (szl_id >> 8) as u8, szl_id as u8, (index >> 8) as u8, index as u8];
+    let data = [
+        0xFFu8,
+        0x09,
+        0x00,
+        0x04,
+        (szl_id >> 8) as u8,
+        szl_id as u8,
+        (index >> 8) as u8,
+        index as u8,
+    ];
     let mut out = userdata_header(pdu_ref, param.len(), data.len());
     out.extend_from_slice(&param);
     out.extend_from_slice(&data);
@@ -458,7 +517,9 @@ pub fn build_password_job(pdu_ref: u16, password: &str) -> Vec<u8> {
         pwd[c] = raw[c] ^ 0x55 ^ pwd[c - 2];
     }
     let param = [0x00u8, 0x01, 0x12, 0x04, 0x11, 0x45, 0x01, 0x00];
-    let data = [0xFFu8, 0x09, 0x00, 0x08, pwd[0], pwd[1], pwd[2], pwd[3], pwd[4], pwd[5], pwd[6], pwd[7]];
+    let data = [
+        0xFFu8, 0x09, 0x00, 0x08, pwd[0], pwd[1], pwd[2], pwd[3], pwd[4], pwd[5], pwd[6], pwd[7],
+    ];
     let mut out = userdata_header(pdu_ref, param.len(), data.len());
     out.extend_from_slice(&param);
     out.extend_from_slice(&data);
@@ -491,8 +552,8 @@ mod tests {
         assert_eq!(
             pdu,
             vec![
-                0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0xF0, 0x00, 0x00,
-                0x01, 0x00, 0x01, 0x01, 0xE0
+                0x32, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x01,
+                0x00, 0x01, 0x01, 0xE0
             ]
         );
     }
@@ -521,7 +582,8 @@ mod tests {
             vec![
                 0x32, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x0E, 0x00, 0x00, // 头
                 0x04, 0x01, // Read,1 item
-                0x12, 0x0A, 0x10, 0x02, 0x00, 0x04, 0x00, 0x01, 0x84, 0x00, 0x00, 0x00, // item
+                0x12, 0x0A, 0x10, 0x02, 0x00, 0x04, 0x00, 0x01, 0x84, 0x00, 0x00,
+                0x00, // item
             ]
         );
     }
@@ -532,7 +594,9 @@ mod tests {
         let item = S7Item::new("DB1.DBX2.0", 1).unwrap();
         assert_eq!(
             item.encode_any_item(),
-            [0x12, 0x0A, 0x10, 0x01, 0x00, 0x01, 0x00, 0x01, 0x84, 0x00, 0x00, 0x10]
+            [
+                0x12, 0x0A, 0x10, 0x01, 0x00, 0x01, 0x00, 0x01, 0x84, 0x00, 0x00, 0x10
+            ]
         );
     }
 
@@ -556,8 +620,20 @@ mod tests {
             0xFF, 0x09, 0x00, 0x02, 0x00, 0x11, // Item8 OCTET len=2B(Counter)
         ];
         let mut full = vec![
-            0x32, ROSCTR_ACK_DATA, 0x00, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
-            0x04, 0x08,
+            0x32,
+            ROSCTR_ACK_DATA,
+            0x00,
+            0x00,
+            0x00,
+            0x07,
+            0x00,
+            0x02,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x04,
+            0x08,
         ];
         let data_len = (data.len() as u16).to_be_bytes();
         full[8..10].copy_from_slice(&data_len);
@@ -581,8 +657,28 @@ mod tests {
     #[test]
     fn parses_4byte_read_response_bit_length() {
         let pdu = vec![
-            0x32, ROSCTR_ACK_DATA, 0x00, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x08, 0x00, 0x00,
-            0x04, 0x01, 0xFF, 0x04, 0x00, 0x20, 0x12, 0x34, 0x56, 0x78,
+            0x32,
+            ROSCTR_ACK_DATA,
+            0x00,
+            0x00,
+            0x00,
+            0x02,
+            0x00,
+            0x02,
+            0x00,
+            0x08,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0xFF,
+            0x04,
+            0x00,
+            0x20,
+            0x12,
+            0x34,
+            0x56,
+            0x78,
         ];
         let ack = parse_ack(&pdu).unwrap();
         let items = parse_read_response(&ack).unwrap();
@@ -595,8 +691,24 @@ mod tests {
     #[test]
     fn read_item_error_code_surface() {
         let pdu = vec![
-            0x32, ROSCTR_ACK_DATA, 0x00, 0x00, 0x00, 0x05, 0x00, 0x02, 0x00, 0x04, 0x00, 0x00,
-            0x04, 0x01, 0x0A, 0x00, 0x00, 0x00,
+            0x32,
+            ROSCTR_ACK_DATA,
+            0x00,
+            0x00,
+            0x00,
+            0x05,
+            0x00,
+            0x02,
+            0x00,
+            0x04,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0x0A,
+            0x00,
+            0x00,
+            0x00,
         ];
         let ack = parse_ack(&pdu).unwrap();
         let items = parse_read_response(&ack).unwrap();
@@ -616,7 +728,8 @@ mod tests {
             vec![
                 0x32, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x0E, 0x00, 0x08, // 头
                 0x05, 0x01, // Write,1 item
-                0x12, 0x0A, 0x10, 0x02, 0x00, 0x04, 0x00, 0x01, 0x84, 0x00, 0x00, 0x00, // item
+                0x12, 0x0A, 0x10, 0x02, 0x00, 0x04, 0x00, 0x01, 0x84, 0x00, 0x00,
+                0x00, // item
                 0x00, 0x04, 0x00, 0x20, // data item:占位 + TS=0x04 + 32bit
                 0x12, 0x34, 0x56, 0x78,
             ]
@@ -630,7 +743,9 @@ mod tests {
         let data = [vec![0x00u8]];
         let pdu = build_write_request(0x0001, &items, &data).unwrap();
         // 参数项:TS=01,len=1,DB=0,Area=83(M),Addr=0x08(1*8)
-        let expect_item = [0x12u8, 0x0A, 0x10, 0x01, 0x00, 0x01, 0x00, 0x00, 0x83, 0x00, 0x00, 0x08];
+        let expect_item = [
+            0x12u8, 0x0A, 0x10, 0x01, 0x00, 0x01, 0x00, 0x00, 0x83, 0x00, 0x00, 0x08,
+        ];
         assert_eq!(&pdu[12..24], &expect_item);
         // 数据项
         assert_eq!(&pdu[24..29], &[0x00, 0x03, 0x00, 0x01, 0x00]);
@@ -640,8 +755,21 @@ mod tests {
     #[test]
     fn parses_write_response() {
         let pdu = vec![
-            0x32, ROSCTR_ACK_DATA, 0x00, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00,
-            0x05, 0x01, 0xFF,
+            0x32,
+            ROSCTR_ACK_DATA,
+            0x00,
+            0x00,
+            0x00,
+            0x03,
+            0x00,
+            0x02,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x05,
+            0x01,
+            0xFF,
         ];
         let ack = parse_ack(&pdu).unwrap();
         let rcs = parse_write_response(&ack).unwrap();
@@ -670,7 +798,9 @@ mod tests {
             .map(|i| S7Item::new(&format!("DB1.DBW{}", i * 2), 1).unwrap())
             .collect();
         assert!(build_read_request(1, &items).is_ok());
-        let too_many: Vec<S7Item> = (0..21).map(|i| S7Item::new(&format!("M{}", i), 1).unwrap()).collect();
+        let too_many: Vec<S7Item> = (0..21)
+            .map(|i| S7Item::new(&format!("M{}", i), 1).unwrap())
+            .collect();
         assert!(build_read_request(1, &too_many).is_err());
     }
 
@@ -705,8 +835,17 @@ mod tests {
     fn stop_job_matches_capture() {
         let pdu = build_stop_job(0x0002);
         // TPKT+COTP 后:32 01 00 00 00 02 00 10 00 00 + 29 ...
-        assert_eq!(&pdu[..10], &[0x32, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00, 0x00]);
-        assert_eq!(&pdu[10..26], &[0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, b'P', b'_', b'P', b'R', b'O', b'G', b'R', b'A', b'M']);
+        assert_eq!(
+            &pdu[..10],
+            &[0x32, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00, 0x00]
+        );
+        assert_eq!(
+            &pdu[10..26],
+            &[
+                0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, b'P', b'_', b'P', b'R', b'O', b'G', b'R',
+                b'A', b'M'
+            ]
+        );
     }
 
     #[test]
@@ -724,19 +863,45 @@ mod tests {
     fn szl_request_matches_tia_capture() {
         let pdu = build_szl_request(3, 0x0424, 0);
         // golden(TIA goOnline[4]):param 00 01 12 04 11 44 01 00 + data FF 09 00 04 04 24 00 00
-        assert_eq!(&pdu[10..18], &[0x00, 0x01, 0x12, 0x04, 0x11, 0x44, 0x01, 0x00]);
-        assert_eq!(&pdu[18..26], &[0xFF, 0x09, 0x00, 0x04, 0x04, 0x24, 0x00, 0x00]);
+        assert_eq!(
+            &pdu[10..18],
+            &[0x00, 0x01, 0x12, 0x04, 0x11, 0x44, 0x01, 0x00]
+        );
+        assert_eq!(
+            &pdu[18..26],
+            &[0xFF, 0x09, 0x00, 0x04, 0x04, 0x24, 0x00, 0x00]
+        );
         assert_eq!(pdu[1], ROSCTR_USERDATA);
     }
 
     #[test]
     fn szl_response_parse_and_mode() {
         // 构造完整 SZL 响应数据区(golden 结构 §6.4):FF 09 00 1C + 04 24 00 00 00 14 00 01 + 20B 记录(RUN)
-        let mut data = vec![0xFFu8, 0x09, 0x00, 0x1C, 0x04, 0x24, 0x00, 0x00, 0x00, 0x14, 0x00, 0x01];
-        data.extend_from_slice(&[0x51, 0x44, 0xFF, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let mut data = vec![
+            0xFFu8, 0x09, 0x00, 0x1C, 0x04, 0x24, 0x00, 0x00, 0x00, 0x14, 0x00, 0x01,
+        ];
+        data.extend_from_slice(&[
+            0x51, 0x44, 0xFF, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
         let full = {
-            let mut h = vec![0x32u8, ROSCTR_USERDATA, 0x00, 0x00, 0x00, 0x03, 0x00, 0x0C, 0x00, 0x20, 0x00, 0x00];
-            h.extend_from_slice(&[0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00]);
+            let mut h = vec![
+                0x32u8,
+                ROSCTR_USERDATA,
+                0x00,
+                0x00,
+                0x00,
+                0x03,
+                0x00,
+                0x0C,
+                0x00,
+                0x20,
+                0x00,
+                0x00,
+            ];
+            h.extend_from_slice(&[
+                0x00, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
+            ]);
             h.extend_from_slice(&data);
             h
         };
@@ -750,7 +915,10 @@ mod tests {
         // 编码规则自 snap7 opSetPassword:校验链式 XOR 的自洽性与帧结构
         let pdu = build_password_job(6, "abc");
         assert_eq!(pdu[1], ROSCTR_USERDATA);
-        assert_eq!(&pdu[10..18], &[0x00, 0x01, 0x12, 0x04, 0x11, 0x45, 0x01, 0x00]); // Tg=0x45
+        assert_eq!(
+            &pdu[10..18],
+            &[0x00, 0x01, 0x12, 0x04, 0x11, 0x45, 0x01, 0x00]
+        ); // Tg=0x45
         assert_eq!(&pdu[18..22], &[0xFF, 0x09, 0x00, 0x08]);
         // 手工推 pwd:raw = ['a','b','c',0x20*5]
         let raw = [b'a', b'b', b'c', 0x20, 0x20, 0x20, 0x20, 0x20];
@@ -774,7 +942,10 @@ mod tests {
     /// 奇数字节项(非末项)在写请求里补 1 字节,读响应解析跳过。
     #[test]
     fn odd_byte_padding_roundtrip() {
-        let items = [S7Item::new("DB1.DBB0", 1).unwrap(), S7Item::new("DB1.DBB1", 2).unwrap()];
+        let items = [
+            S7Item::new("DB1.DBB0", 1).unwrap(),
+            S7Item::new("DB1.DBB1", 2).unwrap(),
+        ];
         let data = [vec![0xAAu8], vec![0xBB, 0xCC]];
         let pdu = build_write_request(1, &items, &data).unwrap();
         // 头 10 + 参数(2+24) = 36 之后是数据区;数据区 = 4+1+1 + 4+2 = 12

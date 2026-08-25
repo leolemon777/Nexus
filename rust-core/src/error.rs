@@ -146,18 +146,14 @@ impl From<RtuError> for CoreError {
                     "receivedAddress": received_address
                 })),
             ),
-            RtuError::WriteResponseQuantityMismatch {
-                expected,
-                received,
-            } => (
+            RtuError::WriteResponseQuantityMismatch { expected, received } => (
                 "WRITE_RESPONSE_QUANTITY_MISMATCH",
                 Some(json!({ "expected": expected, "received": received })),
             ),
             // === MBAP / TCP 错误(阶段 1) ===
-            RtuError::MbapFrameTooShort { len } => (
-                "MBAP_FRAME_TOO_SHORT",
-                Some(json!({ "length": len })),
-            ),
+            RtuError::MbapFrameTooShort { len } => {
+                ("MBAP_FRAME_TOO_SHORT", Some(json!({ "length": len })))
+            }
             RtuError::MbapProtocolMismatch { received } => (
                 "MBAP_PROTOCOL_MISMATCH",
                 Some(json!({ "received": received })),
@@ -171,16 +167,14 @@ impl From<RtuError> for CoreError {
                 Some(json!({ "expected": expected, "received": received })),
             ),
             // === ASCII / LRC 错误(阶段 1) ===
-            RtuError::AsciiFrameTooShort { len } => (
-                "ASCII_FRAME_TOO_SHORT",
-                Some(json!({ "length": len })),
-            ),
+            RtuError::AsciiFrameTooShort { len } => {
+                ("ASCII_FRAME_TOO_SHORT", Some(json!({ "length": len })))
+            }
             RtuError::AsciiStartByteMissing => ("ASCII_START_BYTE_MISSING", None),
             RtuError::AsciiEndBytesMissing => ("ASCII_END_BYTES_MISSING", None),
-            RtuError::AsciiHexDecodeFailed { char } => (
-                "ASCII_HEX_DECODE_FAILED",
-                Some(json!({ "char": char })),
-            ),
+            RtuError::AsciiHexDecodeFailed { char } => {
+                ("ASCII_HEX_DECODE_FAILED", Some(json!({ "char": char })))
+            }
             RtuError::LrcMismatch { expected, received } => (
                 "LRC_MISMATCH",
                 Some(json!({ "expected": expected, "received": received })),

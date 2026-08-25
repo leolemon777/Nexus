@@ -15,11 +15,22 @@ use crate::error::CoreError;
 use crate::fins_address::FinsAddress;
 
 pub const FINS_TCP_PORT: u16 = 9600;
+/// 当前软件首轮对 FINS/TCP/UDP 单次读写点数的保守上限。
+///
+/// 这是传输层安全门禁，不等同于某个欧姆龙 CPU 的设备能力；
+/// OMRON-008 的按型号自动分段仍需真实手册和 L2 验证后再开放。
+pub const FINS_MAX_POINTS: u16 = 512;
+/// FINS 应用帧内三字节地址的最大可编码值。
+pub const FINS_MAX_ADDRESS: u32 = 0x00FF_FFFF;
 /// ICF:响应要求=1(bit7) + 0x00
 pub const ICF_RESPONSE_REQUIRED: u8 = 0x80;
 
 fn err(code: &'static str, msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code, message: msg.into(), details: None }
+    CoreError::Modbus {
+        code,
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// FINS 端点节点号(直连以太网惯例:节点号 = IP 末段)。
@@ -36,7 +47,12 @@ pub struct FinsNodes {
 
 impl Default for FinsNodes {
     fn default() -> Self {
-        Self { dna: 0, da1: 0, sna: 0, sa1: 0 }
+        Self {
+            dna: 0,
+            da1: 0,
+            sna: 0,
+            sa1: 0,
+        }
     }
 }
 
@@ -85,13 +101,63 @@ pub fn build_read_frame(nodes: &FinsNodes, sid: u8, addr: &FinsAddress, count: u
 }
 
 /// 完整写请求应用帧。
-pub fn build_write_frame(nodes: &FinsNodes, sid: u8, addr: &FinsAddress, count: u16, data: &[u8]) -> Vec<u8> {
+pub fn build_write_frame(
+    nodes: &FinsNodes,
+    sid: u8,
+    addr: &FinsAddress,
+    count: u16,
+    data: &[u8],
+) -> Vec<u8> {
     build_app_frame(nodes, sid, &build_write_service(addr, count, data))
+}
+
+/// 校验一次 FINS 访问的点数和地址窗口，避免 `u16`/三字节地址回绕。
+///
+/// FINS 的字访问每点占 2 字节，位访问按当前软件层约定每点 1 字节；
+/// 该函数只负责边界，不对不同 CPU 型号的实际区长度做猜测。
+pub fn validate_access_window(addr: &FinsAddress, count: u16) -> Result<(), CoreError> {
+    if count == 0 || count > FINS_MAX_POINTS {
+        return Err(err(
+            "FINS_BATCH_LIMIT",
+            format!(
+                "FINS 单次点数必须是 1..{}（当前软件安全上限）",
+                FINS_MAX_POINTS
+            ),
+        ));
+    }
+    if addr.address > FINS_MAX_ADDRESS {
+        return Err(err(
+            "FINS_ADDRESS_RANGE",
+            format!("FINS 起始地址 0x{:X} 超出三字节地址范围", addr.address),
+        ));
+    }
+    let last = addr
+        .address
+        .checked_add(u32::from(count) - 1)
+        .ok_or_else(|| err("FINS_ADDRESS_RANGE", "FINS 地址窗口计算溢出"))?;
+    if last > FINS_MAX_ADDRESS {
+        return Err(err(
+            "FINS_ADDRESS_RANGE",
+            format!("FINS 地址窗口末端 0x{:X} 超出三字节地址范围", last),
+        ));
+    }
+    Ok(())
+}
+
+/// 返回当前 FINS 读响应/写请求对应的数据字节数。
+pub fn expected_data_bytes(addr: &FinsAddress, count: u16) -> usize {
+    match addr.kind {
+        crate::fins_address::FinsKind::Bit => usize::from(count),
+        crate::fins_address::FinsKind::Word | crate::fins_address::FinsKind::TimerCntWord => {
+            usize::from(count) * 2
+        }
+    }
 }
 
 /// 响应应用帧解析结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FinsResponse {
+    pub sid: u8,
     pub end_code: u16,
     /// 结束码后的数据
     pub data: Vec<u8>,
@@ -99,15 +165,31 @@ pub struct FinsResponse {
 
 /// 解析响应应用帧:校验 ICF/GCT/地址回显,取服务结束码与数据。
 pub fn parse_response_frame(frame: &[u8]) -> Result<FinsResponse, CoreError> {
-    if frame.len() < 12 {
-        return Err(err("FINS_RESPONSE_INVALID", format!("响应帧过短({}B,需 ≥12)", frame.len())));
+    // ICF..SID(10B) + 服务码(2B) + 结束码(2B) 至少 14 字节；
+    // 先做完整边界检查，不能在畸形/恶意短帧上直接索引 [12]/[13]。
+    if frame.len() < 14 {
+        return Err(err(
+            "FINS_RESPONSE_INVALID",
+            format!("响应帧过短({}B,需 ≥14)", frame.len()),
+        ));
     }
     let gct = frame[2];
     // 布局:ICF..SA2(9B) + SID(1) + 服务码(2) + 结束码(2) + 数据
+    let sid = frame[9];
+    if frame[10..12] != [0x01, 0x01] && frame[10..12] != [0x01, 0x02] {
+        return Err(err(
+            "FINS_RESPONSE_INVALID",
+            format!("不支持的响应服务码 0x{:02X}{:02X}", frame[10], frame[11]),
+        ));
+    }
     let end = u16::from_be_bytes([frame[12], frame[13]]);
     let data = frame[14..].to_vec();
     let _ = gct;
-    Ok(FinsResponse { end_code: end, data })
+    Ok(FinsResponse {
+        sid,
+        end_code: end,
+        data,
+    })
 }
 
 /// FINS 结束码 → 人话(常见码)。
@@ -153,7 +235,9 @@ pub fn wrap_tcp(app_frame: &[u8]) -> Vec<u8> {
 /// 从流读一个完整 FINS/TCP 帧(按 magic+length 定界),返回净应用帧。
 pub fn read_tcp_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, CoreError> {
     let mut head = [0u8; 8];
-    reader.read_exact(&mut head).map_err(|e| err("FINS_READ_FAILED", format!("读 FINS/TCP 头失败:{e}")))?;
+    reader
+        .read_exact(&mut head)
+        .map_err(|e| err("FINS_READ_FAILED", format!("读 FINS/TCP 头失败:{e}")))?;
     if &head[..4] != b"FINS" {
         return Err(err("FINS_TCP_INVALID", "不是 FINS/TCP 帧(魔数不符)"));
     }
@@ -163,19 +247,23 @@ pub fn read_tcp_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, CoreError> {
         return Err(err("FINS_TCP_INVALID", format!("帧长不合法:{len}")));
     }
     let mut rest = vec![0u8; len];
-    reader.read_exact(&mut rest).map_err(|e| err("FINS_READ_FAILED", format!("读 FINS/TCP 体失败:{e}")))?;
+    reader
+        .read_exact(&mut rest)
+        .map_err(|e| err("FINS_READ_FAILED", format!("读 FINS/TCP 体失败:{e}")))?;
     Ok(rest)
 }
 
 /// 写帧辅助。
 pub fn write_frame<W: Write>(writer: &mut W, frame: &[u8]) -> Result<(), CoreError> {
-    writer.write_all(frame).map_err(|e| err("FINS_WRITE_FAILED", format!("发送 FINS 帧失败:{e}")))
+    writer
+        .write_all(frame)
+        .map_err(|e| err("FINS_WRITE_FAILED", format!("发送 FINS 帧失败:{e}")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fins_address::{area, parse_fins_address, FinsKind};
+    use crate::fins_address::{FinsKind, area, parse_fins_address};
 
     #[test]
     fn read_frame_layout() {
@@ -183,7 +271,10 @@ mod tests {
         let f = build_read_frame(&FinsNodes::default(), 0x01, &addr, 2);
         // 头 10 + 服务 9(码2+flag1+区1+地址3+点数2)
         assert_eq!(f.len(), 19);
-        assert_eq!(&f[..9], &[0x80, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(
+            &f[..9],
+            &[0x80, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        );
         assert_eq!(f[9], 0x01); // SID
         assert_eq!(&f[10..12], &[0x01, 0x01]); // 读服务
         assert_eq!(f[12], 0x01); // word
@@ -205,7 +296,13 @@ mod tests {
     #[test]
     fn write_frame_appends_data() {
         let addr = parse_fins_address("W0").unwrap();
-        let f = build_write_frame(&FinsNodes::default(), 0x02, &addr, 2, &[0x12, 0x34, 0x56, 0x78]);
+        let f = build_write_frame(
+            &FinsNodes::default(),
+            0x02,
+            &addr,
+            2,
+            &[0x12, 0x34, 0x56, 0x78],
+        );
         assert_eq!(&f[10..12], &[0x01, 0x02]);
         assert_eq!(f[13], area::W_WORD);
         assert_eq!(&f[f.len() - 4..], &[0x12, 0x34, 0x56, 0x78]);
@@ -243,13 +340,33 @@ mod tests {
         f.extend_from_slice(&0x0000u16.to_be_bytes());
         f.extend_from_slice(&[0xBE, 0xEF]);
         let r = parse_response_frame(&f).unwrap();
+        assert_eq!(r.sid, 0x01);
         assert_eq!(r.end_code, 0);
         assert_eq!(r.data, vec![0xBE, 0xEF]);
+    }
+
+    #[test]
+    fn short_response_is_rejected_without_index_panic() {
+        assert!(parse_response_frame(&[0u8; 13]).is_err());
     }
 
     #[test]
     fn bit_read_data_layout_note() {
         // 位读:响应数据每位 1 字节(0/1)——从站与解析端约定,见 fins_slave
         let _ = FinsKind::Bit;
+    }
+
+    #[test]
+    fn access_window_has_explicit_software_limit_and_no_address_wrap() {
+        let addr = parse_fins_address("D100").unwrap();
+        assert!(validate_access_window(&addr, FINS_MAX_POINTS).is_ok());
+        assert!(validate_access_window(&addr, FINS_MAX_POINTS + 1).is_err());
+
+        let edge = parse_fins_address("D16777215").unwrap();
+        assert!(validate_access_window(&edge, 1).is_ok());
+        assert!(validate_access_window(&edge, 2).is_err());
+        assert_eq!(expected_data_bytes(&addr, 2), 4);
+        let bit = parse_fins_address("CIO0.00").unwrap();
+        assert_eq!(expected_data_bytes(&bit, 2), 2);
     }
 }

@@ -4,6 +4,8 @@ const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
 const {
   COMMANDS,
+  MAX_PAYLOAD_DEPTH,
+  MAX_PAYLOAD_NODES,
   PROTOCOL_VERSION,
   RustCoreClient,
   RustCoreRemoteError,
@@ -120,8 +122,13 @@ test("spawns the injected binary and completes a fragmented hello handshake", as
   assert.equal(harness.client.state, "ready");
   assert.equal(harness.client.pending.size, 0);
 
-  child.stderr.write("diagnostic only\n");
-  assert.deepEqual(harness.logs, [{ level: "error", message: "[rust-core] diagnostic only" }]);
+  child.stderr.write("password=hunter2 token=secret-token\n");
+  assert.deepEqual(harness.logs, [{
+    level: "error",
+    message: "[rust-core] password=[REDACTED] token=[REDACTED]",
+  }]);
+  assert.ok(!harness.logs[0].message.includes("hunter2"));
+  assert.ok(!harness.logs[0].message.includes("secret-token"));
 });
 
 test("bounds an unterminated stderr line", async () => {
@@ -152,6 +159,50 @@ test("uses unique requestIds and resolves validate_serial_config responses", asy
   child.respond(request, { result: { valid: true, config } }, 4);
   assert.deepEqual(await validationPromise, { valid: true, config });
   assert.equal(harness.client.pending.size, 0);
+});
+
+test("validates sidecar command names and payload structure before stdin is touched", async () => {
+  const harness = createHarness();
+  await startClient(harness);
+
+  await assert.rejects(() => harness.client.request("run_shell", { command: "dir" }), (error) => {
+    assert.equal(error.code, "UNKNOWN_COMMAND");
+    return true;
+  });
+  await assert.rejects(() => harness.client.request(COMMANDS.VALIDATE_SERIAL_CONFIG, null), (error) => {
+    assert.equal(error.code, "INVALID_PAYLOAD");
+    assert.match(error.message, /must be an object/);
+    return true;
+  });
+  await assert.rejects(() => harness.client.request(COMMANDS.VALIDATE_SERIAL_CONFIG, [1, 2]), (error) => {
+    assert.equal(error.code, "INVALID_PAYLOAD");
+    return true;
+  });
+  const protoPayload = JSON.parse('{"config":{"nested":{"__proto__":{"polluted":true}}}}');
+  await assert.rejects(() => harness.client.request(COMMANDS.VALIDATE_SERIAL_CONFIG, protoPayload), (error) => {
+    assert.equal(error.code, "INVALID_PAYLOAD");
+    assert.match(error.message, /unsafe key/);
+    return true;
+  });
+
+  const deepPayload = { config: buildDeep(MAX_PAYLOAD_DEPTH) };
+  await assert.rejects(() => harness.client.request(COMMANDS.VALIDATE_SERIAL_CONFIG, deepPayload), (error) => {
+    assert.equal(error.code, "INVALID_PAYLOAD");
+    assert.match(error.message, new RegExp(`depth ${MAX_PAYLOAD_DEPTH}`));
+    return true;
+  });
+
+  const requestPromise = harness.client.validateSerialConfig({ portName: "COM3" });
+  const request = await harness.children[0].nextRequest();
+  harness.children[0].respond(request, { result: { valid: true } });
+  await requestPromise;
+  assert.equal("polluted" in {}, false);
+
+  function buildDeep(depth) {
+    let value = { leaf: true };
+    for (let index = 0; index < depth; index += 1) value = { value };
+    return value;
+  }
 });
 
 test("sends typed FC03 build and parse requests to the Rust core", async () => {
@@ -253,6 +304,84 @@ test("maps a complete failure envelope to RustCoreRemoteError", async () => {
     return true;
   });
   assert.equal(harness.client.pending.size, 0);
+});
+
+test("removes a poll subscription when start_poll_stream fails", async () => {
+  const harness = createHarness();
+  const child = await startClient(harness);
+  const startPromise = harness.client.startPollStream({
+    streamId: "poll-failed",
+    connectionId: "missing",
+    fc: 3,
+    startAddress: 0,
+    quantity: 1,
+    intervalMs: 1000,
+  }, () => {}, () => {});
+  const request = await child.nextRequest();
+  assert.equal(harness.client.subscriptions.has("poll-failed"), true);
+  child.respond(request, {
+    ok: false,
+    error: { code: "CONNECTION_NOT_FOUND", message: "connection missing" },
+  });
+
+  await assert.rejects(startPromise, (error) => error.code === "CONNECTION_NOT_FOUND");
+  assert.equal(harness.client.subscriptions.has("poll-failed"), false);
+});
+
+test("resolves stream start and stop acknowledgements that also carry streamId", async () => {
+  const harness = createHarness();
+  const child = await startClient(harness);
+  const dataEvents = [];
+  const startPromise = harness.client.startPollStream({
+    streamId: "poll-live",
+    connectionId: "connection",
+    fc: 3,
+    startAddress: 100,
+    quantity: 2,
+    intervalMs: 50,
+  }, (data) => dataEvents.push(data), () => {});
+  const startRequest = await child.nextRequest();
+
+  child.stdout.write(`${JSON.stringify({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: startRequest.requestId,
+    streamId: "poll-live",
+    streamEnd: false,
+    ok: true,
+    result: { streamId: "poll-live", started: true, intervalMs: 50 },
+    error: null,
+  })}\n`);
+  assert.deepEqual(await startPromise, {
+    streamId: "poll-live",
+    started: true,
+    intervalMs: 50,
+  });
+
+  child.stdout.write(`${JSON.stringify({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: null,
+    streamId: "poll-live",
+    streamEnd: false,
+    ok: true,
+    result: { streamId: "poll-live", registers: [0x1234, 0xabcd] },
+    error: null,
+  })}\n`);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(dataEvents, [{ streamId: "poll-live", registers: [0x1234, 0xabcd] }]);
+
+  const stopPromise = harness.client.stopPollStream({ streamId: "poll-live" });
+  const stopRequest = await child.nextRequest();
+  child.stdout.write(`${JSON.stringify({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: stopRequest.requestId,
+    streamId: "poll-live",
+    streamEnd: true,
+    ok: true,
+    result: { streamId: "poll-live", stopped: true },
+    error: null,
+  })}\n`);
+  assert.deepEqual(await stopPromise, { streamId: "poll-live", stopped: true });
+  assert.equal(harness.client.subscriptions.has("poll-live"), false);
 });
 
 test("times out one request, removes it from pending, and ignores its late response", async () => {

@@ -51,35 +51,147 @@ pub fn device_spec(prefix: &str) -> Option<DeviceSpec> {
     use AddressRadix::*;
     let spec = match prefix {
         // 位元件
-        "X" => DeviceSpec { code: 0x9C, radix: Octal, is_bit: true },
-        "Y" => DeviceSpec { code: 0x9D, radix: Octal, is_bit: true },
-        "M" => DeviceSpec { code: 0x90, radix: Decimal, is_bit: true },
-        "L" => DeviceSpec { code: 0x92, radix: Decimal, is_bit: true },
-        "F" => DeviceSpec { code: 0x93, radix: Decimal, is_bit: true },
-        "V" => DeviceSpec { code: 0x94, radix: Decimal, is_bit: true },
-        "B" => DeviceSpec { code: 0xA0, radix: Hex, is_bit: true },
-        "SB" => DeviceSpec { code: 0xA1, radix: Hex, is_bit: true },
-        "DX" => DeviceSpec { code: 0xA2, radix: Octal, is_bit: true },
-        "DY" => DeviceSpec { code: 0xA3, radix: Octal, is_bit: true },
-        "S" => DeviceSpec { code: 0x98, radix: Decimal, is_bit: true },
-        "SM" => DeviceSpec { code: 0x91, radix: Decimal, is_bit: true },
-        "TS" => DeviceSpec { code: 0xC1, radix: Decimal, is_bit: true },
-        "TC" => DeviceSpec { code: 0xC0, radix: Decimal, is_bit: true },
-        "SS" => DeviceSpec { code: 0xC7, radix: Decimal, is_bit: true },
-        "SC" => DeviceSpec { code: 0xC6, radix: Decimal, is_bit: true },
-        "CS" => DeviceSpec { code: 0xC4, radix: Decimal, is_bit: true },
-        "CC" => DeviceSpec { code: 0xC3, radix: Decimal, is_bit: true },
+        "X" => DeviceSpec {
+            code: 0x9C,
+            radix: Octal,
+            is_bit: true,
+        },
+        "Y" => DeviceSpec {
+            code: 0x9D,
+            radix: Octal,
+            is_bit: true,
+        },
+        "M" => DeviceSpec {
+            code: 0x90,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "L" => DeviceSpec {
+            code: 0x92,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "F" => DeviceSpec {
+            code: 0x93,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "V" => DeviceSpec {
+            code: 0x94,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "B" => DeviceSpec {
+            code: 0xA0,
+            radix: Hex,
+            is_bit: true,
+        },
+        "SB" => DeviceSpec {
+            code: 0xA1,
+            radix: Hex,
+            is_bit: true,
+        },
+        "DX" => DeviceSpec {
+            code: 0xA2,
+            radix: Octal,
+            is_bit: true,
+        },
+        "DY" => DeviceSpec {
+            code: 0xA3,
+            radix: Octal,
+            is_bit: true,
+        },
+        "S" => DeviceSpec {
+            code: 0x98,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "SM" => DeviceSpec {
+            code: 0x91,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "TS" => DeviceSpec {
+            code: 0xC1,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "TC" => DeviceSpec {
+            code: 0xC0,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "SS" => DeviceSpec {
+            code: 0xC7,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "SC" => DeviceSpec {
+            code: 0xC6,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "CS" => DeviceSpec {
+            code: 0xC4,
+            radix: Decimal,
+            is_bit: true,
+        },
+        "CC" => DeviceSpec {
+            code: 0xC3,
+            radix: Decimal,
+            is_bit: true,
+        },
         // 字元件
-        "D" => DeviceSpec { code: 0xA8, radix: Decimal, is_bit: false },
-        "W" => DeviceSpec { code: 0xB4, radix: Hex, is_bit: false },
-        "SW" => DeviceSpec { code: 0xB5, radix: Hex, is_bit: false },
-        "SD" => DeviceSpec { code: 0xA9, radix: Decimal, is_bit: false },
-        "R" => DeviceSpec { code: 0xAF, radix: Decimal, is_bit: false },
-        "ZR" => DeviceSpec { code: 0xB0, radix: Hex, is_bit: false },
-        "TN" => DeviceSpec { code: 0xC2, radix: Decimal, is_bit: false },
-        "SN" => DeviceSpec { code: 0xC8, radix: Decimal, is_bit: false },
-        "CN" => DeviceSpec { code: 0xC5, radix: Decimal, is_bit: false },
-        "Z" => DeviceSpec { code: 0xCC, radix: Decimal, is_bit: false },
+        "D" => DeviceSpec {
+            code: 0xA8,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "W" => DeviceSpec {
+            code: 0xB4,
+            radix: Hex,
+            is_bit: false,
+        },
+        "SW" => DeviceSpec {
+            code: 0xB5,
+            radix: Hex,
+            is_bit: false,
+        },
+        "SD" => DeviceSpec {
+            code: 0xA9,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "R" => DeviceSpec {
+            code: 0xAF,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "ZR" => DeviceSpec {
+            code: 0xB0,
+            radix: Hex,
+            is_bit: false,
+        },
+        "TN" => DeviceSpec {
+            code: 0xC2,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "SN" => DeviceSpec {
+            code: 0xC8,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "CN" => DeviceSpec {
+            code: 0xC5,
+            radix: Decimal,
+            is_bit: false,
+        },
+        "Z" => DeviceSpec {
+            code: 0xCC,
+            radix: Decimal,
+            is_bit: false,
+        },
         _ => return None,
     };
     Some(spec)
@@ -121,7 +233,9 @@ pub fn parse_mc_address(input: &str) -> Result<McAddress, CoreError> {
 
     // 头设备号 3 字节上限
     if head > 0xFF_FFFF {
-        return Err(invalid_address(&format!("软元件编号 {head} 超出 3 字节上限(0xFFFFFF)")));
+        return Err(invalid_address(&format!(
+            "软元件编号 {head} 超出 3 字节上限(0xFFFFFF)"
+        )));
     }
 
     Ok(McAddress {
@@ -134,11 +248,17 @@ pub fn parse_mc_address(input: &str) -> Result<McAddress, CoreError> {
 /// 拆分字母前缀与剩余部分。前缀按最长匹配(如 "SB" 优先于 "S")。
 fn split_prefix(s: &str) -> Result<(String, &str), CoreError> {
     // 所有 2 字母代号优先,再 1 字母
-    const TWO_LETTER: [&str; 12] = ["SB", "DX", "DY", "SM", "TS", "TC", "SS", "SC", "CS", "CC", "TN", "SN", ];
+    const TWO_LETTER: [&str; 12] = [
+        "SB", "DX", "DY", "SM", "TS", "TC", "SS", "SC", "CS", "CC", "TN", "SN",
+    ];
     const _THREE: [&str; 2] = ["ZR", "SW"];
     let two_list: Vec<&str> = TWO_LETTER.iter().chain(_THREE.iter()).copied().collect();
 
-    let upper: String = s.chars().take_while(|c| c.is_ascii_alphabetic()).collect::<String>().to_uppercase();
+    let upper: String = s
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_uppercase();
     if upper.len() >= 2 {
         let two = &upper[..2];
         if two_list.contains(&two) {
@@ -151,7 +271,9 @@ fn split_prefix(s: &str) -> Result<(String, &str), CoreError> {
     if upper.is_empty() {
         return Err(invalid_address(&format!("「{s}」缺少软元件代号")));
     }
-    Err(invalid_address(&format!("「{s}」的软元件代号「{upper}」无效")))
+    Err(invalid_address(&format!(
+        "「{s}」的软元件代号「{upper}」无效"
+    )))
 }
 
 /// 按进制解析数字。八进制地址含 8/9 数字时报错(如 X8 非法)。
@@ -181,7 +303,11 @@ fn invalid_address(msg: &str) -> CoreError {
 
 /// 头设备号编码为 3 字节小端(§2.1.2 字段 10)。
 pub fn encode_head_number(head: u32) -> [u8; 3] {
-    [(head & 0xFF) as u8, ((head >> 8) & 0xFF) as u8, ((head >> 16) & 0xFF) as u8]
+    [
+        (head & 0xFF) as u8,
+        ((head >> 8) & 0xFF) as u8,
+        ((head >> 16) & 0xFF) as u8,
+    ]
 }
 
 #[cfg(test)]

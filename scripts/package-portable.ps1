@@ -1,15 +1,29 @@
 param(
-    [string]$Configuration = "release"
+    [string]$Configuration = "release",
+    [string]$PortableFolderName = "Nexus 2.0",
+    [switch]$AllowDirty
 )
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$preflight = Join-Path $projectRoot "scripts\toolchain-preflight.cjs"
+if (Test-Path -LiteralPath $preflight) {
+    & node $preflight
+    if ($LASTEXITCODE -ne 0) {
+        throw "工具链 preflight 失败(exit $LASTEXITCODE)。"
+    }
+}
 $electronDist = Join-Path $projectRoot "node_modules\electron\dist"
 $rustCore = Join-Path $projectRoot "rust-core\target\$Configuration\nexus-rust-core.exe"
 $webDist = Join-Path $projectRoot "dist"
 $portableParent = Join-Path $projectRoot "output\portable"
-$portableRoot = Join-Path $portableParent "Nexus 2.0"
+if ([string]::IsNullOrWhiteSpace($PortableFolderName) -or
+    $PortableFolderName -match '[\\/]' -or
+    $PortableFolderName -in @('.', '..')) {
+    throw "便携包目录名无效：$PortableFolderName"
+}
+$portableRoot = Join-Path $portableParent $PortableFolderName
 $appRoot = Join-Path $portableRoot "resources\app"
 $runtimeBin = Join-Path $portableRoot "resources\bin"
 
@@ -35,6 +49,26 @@ if (Test-Path -LiteralPath $portableRoot) {
     if ($existingRoot -ne $expectedRoot) {
         throw "拒绝清理未确认的输出目录：$existingRoot"
     }
+    $lockedFiles = [System.Collections.Generic.List[string]]::new()
+    foreach ($existingFile in Get-ChildItem -LiteralPath $existingRoot -Recurse -File -Force) {
+        $probe = $null
+        try {
+            $probe = [System.IO.File]::Open(
+                $existingFile.FullName,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                [System.IO.FileShare]::None
+            )
+        } catch {
+            $lockedFiles.Add($existingFile.FullName)
+            if ($lockedFiles.Count -ge 5) { break }
+        } finally {
+            if ($null -ne $probe) { $probe.Dispose() }
+        }
+    }
+    if ($lockedFiles.Count -gt 0) {
+        throw "便携包目录存在被占用文件，未删除任何内容：$($lockedFiles -join '; ')"
+    }
     Remove-Item -LiteralPath $existingRoot -Recurse -Force
 }
 
@@ -45,6 +79,8 @@ Move-Item -LiteralPath (Join-Path $portableRoot "electron.exe") -Destination (Jo
 # 替换 exe 图标(2026-08-17:不再使用 Electron 默认图标)
 $rcedit = Join-Path $projectRoot "node_modulesceditincedit-x64.exe"
 $icon = Join-Path $projectRoot "icon.ico"
+# 上方历史字符串含不可见字符；在使用前以规范路径覆盖，确保便携版写入正式图标。
+$rcedit = Join-Path $projectRoot "node_modules\rcedit\bin\rcedit-x64.exe"
 if ((Test-Path -LiteralPath $rcedit) -and (Test-Path -LiteralPath $icon)) {
   & $rcedit (Join-Path $portableRoot "Nexus 2.0.exe") --set-icon $icon
   if ($LASTEXITCODE -ne 0) { throw "rcedit 设置图标失败(exit $LASTEXITCODE)" }
@@ -54,9 +90,19 @@ if ((Test-Path -LiteralPath $rcedit) -and (Test-Path -LiteralPath $icon)) {
 
 Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination $appRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $appRoot
+if (Test-Path -LiteralPath $icon) {
+  Copy-Item -LiteralPath $icon -Destination (Join-Path $appRoot "icon.ico")
+}
 Copy-Item -LiteralPath (Join-Path $projectRoot "electron") -Destination $appRoot -Recurse
 Copy-Item -LiteralPath $webDist -Destination $appRoot -Recurse
 Copy-Item -LiteralPath $rustCore -Destination (Join-Path $runtimeBin "nexus-rust-core.exe")
+
+$packagedElectron = Join-Path $appRoot "electron"
+Get-ChildItem -LiteralPath $packagedElectron -Recurse -File -Filter "*.test.cjs" | Remove-Item -Force
+$packagedFixtures = Join-Path $packagedElectron "fixtures"
+if (Test-Path -LiteralPath $packagedFixtures) {
+    Remove-Item -LiteralPath $packagedFixtures -Recurse -Force
+}
 
 $sourceNodeModules = Join-Path $projectRoot "node_modules"
 $targetNodeModules = Join-Path $appRoot "node_modules"
@@ -93,11 +139,38 @@ $buildInfo = @(
 ) -join "`r`n"
 Set-Content -LiteralPath (Join-Path $portableRoot "BUILD-INFO.txt") -Value $buildInfo -Encoding utf8NoBOM
 
+$secretScan = Join-Path $projectRoot "scripts\release-secret-scan.cjs"
+& node $secretScan $portableRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "生产包敏感内容扫描失败(exit $LASTEXITCODE)。包目录未压缩，可检查后重试。"
+}
+
+$portableSlug = $PortableFolderName -replace '[^A-Za-z0-9._-]', '-'
+$releaseMetadataRoot = Join-Path $projectRoot "output\release-metadata\$portableSlug"
+$metadataArgs = @(
+    (Join-Path $projectRoot "scripts\generate-release-metadata.cjs")
+    "--package-root", $portableRoot
+    "--metadata-root", $releaseMetadataRoot
+    "--package-type", "portable"
+)
+if ($AllowDirty) { $metadataArgs += "--allow-dirty" }
+& node @metadataArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "发布元数据生成失败(exit $LASTEXITCODE)。包目录未压缩，可检查后重试。"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $releaseMetadataRoot "release-manifest.json")) -or
+    -not (Test-Path -LiteralPath (Join-Path $releaseMetadataRoot "SHA256SUMS.txt"))) {
+    throw "发布元数据不完整：缺少 release-manifest.json 或 SHA256SUMS.txt。"
+}
+
 $size = (Get-ChildItem -LiteralPath $portableRoot -Recurse -File | Measure-Object Length -Sum).Sum
 [pscustomobject]@{
     PortableRoot = $portableRoot
     Executable = Join-Path $portableRoot "Nexus 2.0.exe"
     RustCore = Join-Path $runtimeBin "nexus-rust-core.exe"
+    ReleaseManifest = Join-Path $releaseMetadataRoot "release-manifest.json"
+    Sbom = Join-Path $releaseMetadataRoot "sbom.spdx.json"
+    Checksums = Join-Path $releaseMetadataRoot "SHA256SUMS.txt"
     Bytes = $size
     MiB = [math]::Round($size / 1MB, 2)
 }

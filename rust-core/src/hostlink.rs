@@ -15,7 +15,11 @@
 use crate::error::CoreError;
 
 fn hl_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "HOSTLINK_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "HOSTLINK_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// FCS:对 ASCII 数据区(从 @ 到 FCS 前)逐字节 XOR。
@@ -50,14 +54,28 @@ pub fn build_hostlink_fins(station: u8, fins_frame: &[u8]) -> Vec<u8> {
 /// 返回 FINS 应用帧(二进制)。
 pub fn parse_hostlink_fins(frame: &[u8]) -> Result<Vec<u8>, CoreError> {
     // 剥 CR/LF
-    let f = if frame.last() == Some(&0x0A) { &frame[..frame.len() - 2] } else { frame };
-    let f = if f.last() == Some(&0x0D) { &f[..f.len() - 1] } else { f };
+    let f = if frame.last() == Some(&0x0A) {
+        &frame[..frame.len() - 2]
+    } else {
+        frame
+    };
+    let f = if f.last() == Some(&0x0D) {
+        &f[..f.len() - 1]
+    } else {
+        f
+    };
 
     if f.len() < 8 || f[0] != b'@' {
         return Err(hl_err("不是 HostLink 帧(起始非 @)"));
     }
     if f.last() != Some(&b'*') {
         return Err(hl_err("帧尾非 *"));
+    }
+    let station_text = String::from_utf8_lossy(&f[1..3]);
+    let station = u8::from_str_radix(&station_text, 16)
+        .map_err(|_| hl_err(format!("HostLink FINS 站号「{station_text}」非十六进制")))?;
+    if station > 31 {
+        return Err(hl_err(format!("HostLink FINS 站号 {station} 超出 0..31")));
     }
 
     // @站号(2) + 头代码(2) + FINS数据 + FCS(2) + *
@@ -70,7 +88,9 @@ pub fn parse_hostlink_fins(frame: &[u8]) -> Result<Vec<u8>, CoreError> {
     let expected = u8::from_str_radix(&fcs_str, 16)
         .map_err(|_| hl_err(format!("FCS「{fcs_str}」非十六进制")))?;
     if calc != expected {
-        return Err(hl_err(format!("FCS 校验失败:帧内 0x{expected:02X},计算 0x{calc:02X}")));
+        return Err(hl_err(format!(
+            "FCS 校验失败:帧内 0x{expected:02X},计算 0x{calc:02X}"
+        )));
     }
 
     // 头代码检查(响应也是 FA)
@@ -114,17 +134,45 @@ pub fn build_cmode_read_dm(station: u8, dm_start: u16, word_count: u16) -> Vec<u
 
 /// 解析 C-Mode 读 DM 应答(返回数据字列表)。
 pub fn parse_cmode_read_dm(frame: &[u8]) -> Result<Vec<u16>, CoreError> {
-    let f = if frame.last() == Some(&0x0A) { &frame[..frame.len() - 2] } else { frame };
-    let f = if f.last() == Some(&0x0D) { &f[..f.len() - 1] } else { f };
-    if f.len() < 9 || f[0] != b'@' {
+    let f = if frame.ends_with(&[0x0D, 0x0A]) {
+        &frame[..frame.len() - 2]
+    } else if frame.ends_with(&[0x0A]) || frame.ends_with(&[0x0D]) {
+        &frame[..frame.len() - 1]
+    } else {
+        frame
+    };
+    if f.len() < 10 || f[0] != b'@' {
         return Err(hl_err("不是 C-Mode 应答帧"));
     }
+    let station_text = String::from_utf8_lossy(&f[1..3]);
+    let station = u8::from_str_radix(&station_text, 16)
+        .map_err(|_| hl_err(format!("C-Mode 站号「{station_text}」非十六进制")))?;
+    if station > 31 {
+        return Err(hl_err(format!("C-Mode 站号 {station} 超出 0..31")));
+    }
+    if &f[3..5] != b"RR" {
+        return Err(hl_err("C-Mode 响应头不是 RR"));
+    }
     // @站号(2) + 头代码RR(2) + 结束码(2) + 数据 + FCS(2) + *
-    let end_code = String::from_utf8_lossy(&f[5..7]).to_string();
-    if end_code != "00" {
-        return Err(hl_err(format!("C-Mode 结束码 {end_code}(非 00)")));
+    let end_code_text = String::from_utf8_lossy(&f[5..7]);
+    let end_code = u8::from_str_radix(&end_code_text, 16)
+        .map_err(|_| hl_err(format!("C-Mode 结束码「{end_code_text}」非十六进制")))?;
+    if end_code != 0 {
+        return Err(hl_err(format!("C-Mode 结束码 {end_code:02X}(非 00)")));
     }
     let data_end = f.len() - 3;
+    if f[data_end + 2] != b'*' || data_end < 7 {
+        return Err(hl_err("C-Mode 帧尾不是 FCS+*"));
+    }
+    let fcs_text = String::from_utf8_lossy(&f[data_end..data_end + 2]);
+    let expected = u8::from_str_radix(&fcs_text, 16)
+        .map_err(|_| hl_err(format!("C-Mode FCS「{fcs_text}」非十六进制")))?;
+    let calculated = fcs(&f[..data_end]);
+    if calculated != expected {
+        return Err(hl_err(format!(
+            "C-Mode FCS 校验失败:帧内 0x{expected:02X},计算 0x{calculated:02X}"
+        )));
+    }
     let data_ascii = &f[7..data_end];
     if data_ascii.len() % 4 != 0 {
         return Err(hl_err("数据区长度非 4 的倍数"));
@@ -146,12 +194,16 @@ mod tests {
     #[test]
     fn fins_roundtrip() {
         // FINS 帧:ICF=0x80 RSV=0 GCT=2 DNA=0 DA1=0 DA2=0 SNA=0 SA1=0 SA2=0 SID=1 + 0101(读)+82(DM)+00 00 64(100)+00 02(2字)
-        let fins = vec![0x80, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-                        0x01, 0x01, 0x01, 0x82, 0x00, 0x00, 0x64, 0x00, 0x02];
+        let fins = vec![
+            0x80, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x82,
+            0x00, 0x00, 0x64, 0x00, 0x02,
+        ];
         let frame = build_hostlink_fins(0, &fins);
         assert_eq!(frame[0], b'@');
-        assert_eq!(frame[1], b'0'); assert_eq!(frame[2], b'0'); // 站 00
-        assert_eq!(frame[3], b'F'); assert_eq!(frame[4], b'A'); // FINS 头
+        assert_eq!(frame[1], b'0');
+        assert_eq!(frame[2], b'0'); // 站 00
+        assert_eq!(frame[3], b'F');
+        assert_eq!(frame[4], b'A'); // FINS 头
         // FINS 数据是 ASCII hex(每字节 2 字符)
         assert_eq!(frame.len(), 1 + 2 + 2 + fins.len() * 2 + 2 + 1 + 2); // @+站+FA+FINShex+FCS+*+CRLF
         // 解析回来
@@ -194,12 +246,41 @@ mod tests {
 
     #[test]
     fn corrupted_fcs_rejected() {
-        let fins = vec![0x80, 0x00, 0x02, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0x82, 0, 0, 0, 0, 2];
+        let fins = vec![
+            0x80, 0x00, 0x02, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0x82, 0, 0, 0, 0, 2,
+        ];
         let mut frame = build_hostlink_fins(0, &fins);
         // 篡改 FCS(倒数第 4、3 字节)
         let n = frame.len();
-        frame[n - 4] = b'F'; frame[n - 3] = b'F';
+        frame[n - 4] = b'F';
+        frame[n - 3] = b'F';
         assert!(parse_hostlink_fins(&frame).is_err());
+    }
+
+    #[test]
+    fn cmode_response_validates_fcs_station_and_header() {
+        let mut frame = b"@00RR001234".to_vec();
+        let checksum = fcs(&frame);
+        frame.extend_from_slice(format!("{checksum:02X}").as_bytes());
+        frame.extend_from_slice(b"*\r\n");
+        assert_eq!(parse_cmode_read_dm(&frame).unwrap(), vec![0x1234]);
+
+        let mut bad_fcs = frame.clone();
+        let fcs_index = bad_fcs.len() - 4;
+        bad_fcs[fcs_index] = if bad_fcs[fcs_index] == b'0' {
+            b'1'
+        } else {
+            b'0'
+        };
+        assert!(parse_cmode_read_dm(&bad_fcs).is_err());
+
+        let mut bad_header = frame.clone();
+        bad_header[3] = b'W';
+        assert!(parse_cmode_read_dm(&bad_header).is_err());
+
+        let mut bad_station = frame.clone();
+        bad_station[1..3].copy_from_slice(b"FF");
+        assert!(parse_cmode_read_dm(&bad_station).is_err());
     }
 
     #[test]
@@ -211,5 +292,6 @@ mod tests {
         let mut bad = frame.clone();
         bad[4] = b'B'; // FB 而非 FA
         assert!(parse_hostlink_fins(&bad).is_err());
+        assert!(parse_hostlink_fins(b"@FFFA000000*").is_err());
     }
 }

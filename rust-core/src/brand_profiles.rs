@@ -60,18 +60,24 @@ fn manual_err(what: &str) -> CoreError {
 /// - `Y0-Y177`(八进制) → 线圈 0x0500+(位)
 /// - `X0-X177`(八进制) → 离散输入 0x0500+(位,只读)
 /// - `T/C/S` 段未内置 → 返回 MANUAL 提示
-pub fn parse_brand_address(profile: BrandProfile, input: &str) -> Result<BrandModbusAddress, CoreError> {
+pub fn parse_brand_address(
+    profile: BrandProfile,
+    input: &str,
+) -> Result<BrandModbusAddress, CoreError> {
     let s = input.trim().to_ascii_uppercase();
     if s.is_empty() {
-        return Err(CoreError::Modbus { code: "BRAND_ADDRESS_INVALID", message: "地址为空".into(), details: None });
+        return Err(CoreError::Modbus {
+            code: "BRAND_ADDRESS_INVALID",
+            message: "地址为空".into(),
+            details: None,
+        });
     }
 
-    let (prefix, rest) = split_alpha_prefix(&s)
-        .ok_or_else(|| CoreError::Modbus {
-            code: "BRAND_ADDRESS_INVALID",
-            message: format!("「{input}」不是合法软元件(形如 D100 / M100 / Y17 / X10)"),
-            details: None,
-        })?;
+    let (prefix, rest) = split_alpha_prefix(&s).ok_or_else(|| CoreError::Modbus {
+        code: "BRAND_ADDRESS_INVALID",
+        message: format!("「{input}」不是合法软元件(形如 D100 / M100 / Y17 / X10)"),
+        details: None,
+    })?;
     if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
         return Err(CoreError::Modbus {
             code: "BRAND_ADDRESS_INVALID",
@@ -105,23 +111,47 @@ fn delta_dvp_es(prefix: &str, num: &str, original: &str) -> Result<BrandModbusAd
         }
         "M" => {
             let n: u32 = num.parse().map_err(|_| manual_err("M 解析失败"))?;
-            let base = if n <= 511 { 0x0800u32 } else if n <= 1535 { 0x2400u32 + (n - 512) } else { return Err(manual_err("M1536 以上")) };
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: base as u16, is_bit: true })
+            let base = if n <= 511 {
+                0x0800u32
+            } else if n <= 1535 {
+                0x2400u32 + (n - 512)
+            } else {
+                return Err(manual_err("M1536 以上"));
+            };
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: base as u16,
+                is_bit: true,
+            })
         }
         "Y" => {
             let n = oct(num).ok_or_else(|| manual_err("Y 八进制解析失败"))?;
-            if n > 0o177 { return Err(manual_err("Y177 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: (0x0500 + n) as u16, is_bit: true })
+            if n > 0o177 {
+                return Err(manual_err("Y177 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: (0x0500 + n) as u16,
+                is_bit: true,
+            })
         }
         "X" => {
             let n = oct(num).ok_or_else(|| manual_err("X 八进制解析失败"))?;
-            if n > 0o177 { return Err(manual_err("X177 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::DiscreteInput, modbus_address: (0x0500 + n) as u16, is_bit: true })
+            if n > 0o177 {
+                return Err(manual_err("X177 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::DiscreteInput,
+                modbus_address: (0x0500 + n) as u16,
+                is_bit: true,
+            })
         }
         "T" | "C" | "S" | "HC" => Err(manual_err(&format!("软元件 {prefix}(原「{original}」)"))),
         _ => Err(CoreError::Modbus {
             code: "BRAND_ADDRESS_INVALID",
-            message: format!("台达 ES/EX/SS 不认识的软元件「{original}」(支持 D/M/X/Y;T/C/S 查手册)"),
+            message: format!(
+                "台达 ES/EX/SS 不认识的软元件「{original}」(支持 D/M/X/Y;T/C/S 查手册)"
+            ),
             details: None,
         }),
     }
@@ -138,26 +168,64 @@ fn inovance_h3u(prefix: &str, num: &str, original: &str) -> Result<BrandModbusAd
     match prefix {
         "M" => {
             let n: u32 = num.parse().map_err(|_| manual_err("M 解析失败"))?;
-            let base = if n <= 7679 { n } else if (8000..=8511).contains(&n) { 0x2400 + (n - 8000) } else { return Err(manual_err("M 超范围")) };
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: base as u16, is_bit: true })
+            let base = if n <= 7679 {
+                n
+            } else if (8000..=8511).contains(&n) {
+                0x2400 + (n - 8000)
+            } else {
+                return Err(manual_err("M 超范围"));
+            };
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: base as u16,
+                is_bit: true,
+            })
         }
         "X" => {
             let n = oct(num).ok_or_else(|| manual_err("X 八进制"))?;
-            if n > 0o377 { return Err(manual_err("X377 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::DiscreteInput, modbus_address: n as u16, is_bit: true })
+            if n > 0o377 {
+                return Err(manual_err("X377 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::DiscreteInput,
+                modbus_address: n as u16,
+                is_bit: true,
+            })
         }
         "Y" => {
             let n = oct(num).ok_or_else(|| manual_err("Y 八进制"))?;
-            if n > 0o377 { return Err(manual_err("Y377 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: (0x0500 + n) as u16, is_bit: true })
+            if n > 0o377 {
+                return Err(manual_err("Y377 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: (0x0500 + n) as u16,
+                is_bit: true,
+            })
         }
         "D" => {
             let n: u32 = num.parse().map_err(|_| manual_err("D 解析失败"))?;
-            if n <= 8511 { Ok(BrandModbusAddress { area: BrandArea::HoldingRegister, modbus_address: n as u16, is_bit: false }) }
-            else if (8000..=8511).contains(&n) { Ok(BrandModbusAddress { area: BrandArea::HoldingRegister, modbus_address: (0x4000 + n - 8000) as u16, is_bit: false }) }
-            else { Err(manual_err("D 超范围")) }
+            if n <= 8511 {
+                Ok(BrandModbusAddress {
+                    area: BrandArea::HoldingRegister,
+                    modbus_address: n as u16,
+                    is_bit: false,
+                })
+            } else if (8000..=8511).contains(&n) {
+                Ok(BrandModbusAddress {
+                    area: BrandArea::HoldingRegister,
+                    modbus_address: (0x4000 + n - 8000) as u16,
+                    is_bit: false,
+                })
+            } else {
+                Err(manual_err("D 超范围"))
+            }
         }
-        _ => Err(CoreError::Modbus { code: "BRAND_ADDRESS_INVALID", message: format!("汇川 H3U 不认识「{original}」(支持 M/X/Y/D)"), details: None }),
+        _ => Err(CoreError::Modbus {
+            code: "BRAND_ADDRESS_INVALID",
+            message: format!("汇川 H3U 不认识「{original}」(支持 M/X/Y/D)"),
+            details: None,
+        }),
     }
 }
 
@@ -170,28 +238,58 @@ fn inovance_h5u(prefix: &str, num: &str, original: &str) -> Result<BrandModbusAd
     match prefix {
         "M" => {
             let n: u32 = num.parse().map_err(|_| manual_err("M"))?;
-            if n > 8191 { return Err(manual_err("M8191 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: n as u16, is_bit: true })
+            if n > 8191 {
+                return Err(manual_err("M8191 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: n as u16,
+                is_bit: true,
+            })
         }
         "X" => {
             let n = oct(num).ok_or_else(|| manual_err("X 八进制"))?;
-            Ok(BrandModbusAddress { area: BrandArea::DiscreteInput, modbus_address: n as u16, is_bit: true })
+            Ok(BrandModbusAddress {
+                area: BrandArea::DiscreteInput,
+                modbus_address: n as u16,
+                is_bit: true,
+            })
         }
         "Y" => {
             let n = oct(num).ok_or_else(|| manual_err("Y 八进制"))?;
-            Ok(BrandModbusAddress { area: BrandArea::Coil, modbus_address: n as u16, is_bit: true })
+            Ok(BrandModbusAddress {
+                area: BrandArea::Coil,
+                modbus_address: n as u16,
+                is_bit: true,
+            })
         }
         "D" => {
             let n: u32 = num.parse().map_err(|_| manual_err("D"))?;
-            if n > 8191 { return Err(manual_err("D8191 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::HoldingRegister, modbus_address: n as u16, is_bit: false })
+            if n > 8191 {
+                return Err(manual_err("D8191 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::HoldingRegister,
+                modbus_address: n as u16,
+                is_bit: false,
+            })
         }
         "R" => {
             let n: u32 = num.parse().map_err(|_| manual_err("R"))?;
-            if n > 32767 { return Err(manual_err("R32767 以上")); }
-            Ok(BrandModbusAddress { area: BrandArea::HoldingRegister, modbus_address: (0x4000 + n) as u16, is_bit: false })
+            if n > 32767 {
+                return Err(manual_err("R32767 以上"));
+            }
+            Ok(BrandModbusAddress {
+                area: BrandArea::HoldingRegister,
+                modbus_address: (0x4000 + n) as u16,
+                is_bit: false,
+            })
         }
-        _ => Err(CoreError::Modbus { code: "BRAND_ADDRESS_INVALID", message: format!("汇川 H5U 不认识「{original}」(支持 M/X/Y/D/R)"), details: None }),
+        _ => Err(CoreError::Modbus {
+            code: "BRAND_ADDRESS_INVALID",
+            message: format!("汇川 H5U 不认识「{original}」(支持 M/X/Y/D/R)"),
+            details: None,
+        }),
     }
 }
 
@@ -208,17 +306,48 @@ mod tests {
     fn delta_d_m_x_y_mappings() {
         // D100 → 保持寄存器 0x1064
         let d = parse_brand_address(BrandProfile::DeltaDvpEs, "D100").unwrap();
-        assert_eq!((d.area, d.modbus_address, d.is_bit), (BrandArea::HoldingRegister, 0x1064, false));
+        assert_eq!(
+            (d.area, d.modbus_address, d.is_bit),
+            (BrandArea::HoldingRegister, 0x1064, false)
+        );
         // M0 → 线圈 0x0800;M512 → 0x2400;M1535 → 0x2400+1023=0x27FF
-        assert_eq!(parse_brand_address(BrandProfile::DeltaDvpEs, "M0").unwrap().modbus_address, 0x0800);
-        assert_eq!(parse_brand_address(BrandProfile::DeltaDvpEs, "M512").unwrap().modbus_address, 0x2400);
-        assert_eq!(parse_brand_address(BrandProfile::DeltaDvpEs, "M1535").unwrap().modbus_address, 0x27FF);
+        assert_eq!(
+            parse_brand_address(BrandProfile::DeltaDvpEs, "M0")
+                .unwrap()
+                .modbus_address,
+            0x0800
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::DeltaDvpEs, "M512")
+                .unwrap()
+                .modbus_address,
+            0x2400
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::DeltaDvpEs, "M1535")
+                .unwrap()
+                .modbus_address,
+            0x27FF
+        );
         // Y17(八进制=15) → 线圈 0x050F;X10(8) → 离散输入 0x0508
-        assert_eq!(parse_brand_address(BrandProfile::DeltaDvpEs, "Y17").unwrap().modbus_address, 0x050F);
+        assert_eq!(
+            parse_brand_address(BrandProfile::DeltaDvpEs, "Y17")
+                .unwrap()
+                .modbus_address,
+            0x050F
+        );
         let x = parse_brand_address(BrandProfile::DeltaDvpEs, "X10").unwrap();
-        assert_eq!((x.area, x.modbus_address), (BrandArea::DiscreteInput, 0x0508));
+        assert_eq!(
+            (x.area, x.modbus_address),
+            (BrandArea::DiscreteInput, 0x0508)
+        );
         // Y0 → 0x0500
-        assert_eq!(parse_brand_address(BrandProfile::DeltaDvpEs, "Y0").unwrap().modbus_address, 0x0500);
+        assert_eq!(
+            parse_brand_address(BrandProfile::DeltaDvpEs, "Y0")
+                .unwrap()
+                .modbus_address,
+            0x0500
+        );
     }
 
     #[test]
@@ -226,26 +355,72 @@ mod tests {
         // T/C/S 与超范围段:明确报 MANUAL,不猜
         for addr in ["T0", "C50", "S3", "D2000", "M2000", "Y200"] {
             let e = parse_brand_address(BrandProfile::DeltaDvpEs, addr).unwrap_err();
-            let code = match e { CoreError::Modbus { code, .. } => code, _ => panic!() };
-            assert!(code == "BRAND_MAP_MANUAL" || code == "BRAND_ADDRESS_INVALID", "{addr} → {code}");
+            let code = match e {
+                CoreError::Modbus { code, .. } => code,
+                _ => panic!(),
+            };
+            assert!(
+                code == "BRAND_MAP_MANUAL" || code == "BRAND_ADDRESS_INVALID",
+                "{addr} → {code}"
+            );
         }
     }
 
     #[test]
     fn inovance_h3u_mappings() {
         // M0 → 线圈 0;M8000 → 0x2400;X10(八进制 8) → 离散 8;Y17(15) → 线圈 0x050F
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH3u, "M0").unwrap().modbus_address, 0);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH3u, "M8000").unwrap().modbus_address, 0x2400);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH3u, "X10").unwrap().modbus_address, 8);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH3u, "Y17").unwrap().modbus_address, 0x050F);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH3u, "D100").unwrap().modbus_address, 100);
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH3u, "M0")
+                .unwrap()
+                .modbus_address,
+            0
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH3u, "M8000")
+                .unwrap()
+                .modbus_address,
+            0x2400
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH3u, "X10")
+                .unwrap()
+                .modbus_address,
+            8
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH3u, "Y17")
+                .unwrap()
+                .modbus_address,
+            0x050F
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH3u, "D100")
+                .unwrap()
+                .modbus_address,
+            100
+        );
     }
 
     #[test]
     fn inovance_h5u_mappings() {
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH5u, "M100").unwrap().modbus_address, 100);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH5u, "D200").unwrap().modbus_address, 200);
-        assert_eq!(parse_brand_address(BrandProfile::InovanceH5u, "R1000").unwrap().modbus_address, 0x4000 + 1000);
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH5u, "M100")
+                .unwrap()
+                .modbus_address,
+            100
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH5u, "D200")
+                .unwrap()
+                .modbus_address,
+            200
+        );
+        assert_eq!(
+            parse_brand_address(BrandProfile::InovanceH5u, "R1000")
+                .unwrap()
+                .modbus_address,
+            0x4000 + 1000
+        );
     }
 
     #[test]

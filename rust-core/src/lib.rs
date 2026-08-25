@@ -1,12 +1,27 @@
+pub mod ads;
+pub mod bacnet;
 pub mod brand_profiles;
+pub mod cjt188;
+pub mod delta;
+pub mod dlt645;
+pub mod dnp3;
+pub mod enip;
+pub mod error;
+pub mod fatek;
 pub mod fins_address;
 pub mod fins_frame;
 pub mod fins_slave;
-pub mod hostlink;
-pub mod error;
 pub mod frame_parser;
+pub mod fuji_sph;
 pub mod fx_links;
 pub mod fx_programming;
+pub mod ge_srtp;
+pub mod hostlink;
+pub mod iec104;
+pub mod inovance;
+pub mod keyence;
+pub mod knx;
+pub mod ls_xgt;
 pub mod mc_1e;
 pub mod mc_address;
 pub mod mc_ascii;
@@ -19,20 +34,23 @@ pub mod modbus_pdu;
 pub mod modbus_rtu;
 pub mod modbus_slave;
 pub mod modbus_tcp;
-pub mod protocol;
-pub mod s7_address;
-pub mod s7_cotp;
+pub mod mqtt;
+pub mod panasonic;
 pub mod pn_dcp;
 pub mod ppi_frame;
-pub mod rk512;
-pub mod uss_frame;
 pub mod ppi_slave;
+pub mod protocol;
+pub mod rk512;
+pub mod s7_address;
+pub mod s7_cotp;
 pub mod s7_fetchwrite;
 pub mod s7_pdu;
 pub mod s7_slave;
 pub mod serial_config;
 pub mod session;
+pub mod uss_frame;
 pub mod value_codec;
+pub mod xinjie;
 
 use std::io::{self, BufRead, Write};
 
@@ -71,6 +89,7 @@ pub fn serve_with_session<R: BufRead + Send + 'static, W: Write>(
 
     loop {
         // === 检查到期轮询流并推送(v2 流式协议)===
+        session.due_knx_keepalives();
         let due_streams = session.due_poll_streams();
         for stream_id in due_streams {
             match session.fire_poll(&stream_id) {
@@ -83,7 +102,7 @@ pub fn serve_with_session<R: BufRead + Send + 'static, W: Write>(
                 Err(e) => {
                     let outcome = protocol::stream_error_outcome(&stream_id, &e);
                     let _ = write_outcome(&mut writer, outcome);
-                    session.stop_poll_stream(&stream_id);
+                    let _ = session.stop_poll_stream(&stream_id);
                 }
             }
         }

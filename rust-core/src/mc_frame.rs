@@ -118,7 +118,7 @@ pub fn parse_response_frame(buf: &[u8]) -> Result<McResponse, CoreError> {
                 code: "MC_BAD_SUBHEADER",
                 message: format!("响应副帧头 {other:#06x} 不是 D000/D400"),
                 details: None,
-            })
+            });
         }
     };
 
@@ -133,7 +133,11 @@ pub fn parse_response_frame(buf: &[u8]) -> Result<McResponse, CoreError> {
     if resp_len != 2 + data.len() {
         return Err(CoreError::Modbus {
             code: "MC_LENGTH_MISMATCH",
-            message: format!("响应长度字段 {resp_len} 与实际(2+{}={})不符", data.len(), 2 + data.len()),
+            message: format!(
+                "响应长度字段 {resp_len} 与实际(2+{}={})不符",
+                data.len(),
+                2 + data.len()
+            ),
             details: None,
         });
     }
@@ -206,7 +210,7 @@ pub fn parse_request_frame(buf: &[u8]) -> Result<McRequestFrame, CoreError> {
                 code: "MC_BAD_SUBHEADER",
                 message: format!("请求副帧头 {other:#06x} 不是 5000/5400"),
                 details: None,
-            })
+            });
         }
     };
 
@@ -299,8 +303,10 @@ mod tests {
         );
         assert_eq!(
             frame,
-            [0x50, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x0C, 0x00, 0x10, 0x00,
-             0x01, 0x04, 0x01, 0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00]
+            [
+                0x50, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x0C, 0x00, 0x10, 0x00, 0x01, 0x04, 0x01,
+                0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00
+            ]
         );
     }
 
@@ -319,7 +325,9 @@ mod tests {
     /// 文档 §2.1.4-(3) 写响应:仅结束码,无数据
     #[test]
     fn parse_write_response_no_data() {
-        let resp = [0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00];
+        let resp = [
+            0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00,
+        ];
         let parsed = parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.end_code, 0x0000);
         assert!(parsed.data.is_empty());
@@ -329,8 +337,8 @@ mod tests {
     #[test]
     fn parse_capture_response_d7000() {
         let resp = [
-            0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x0C, 0x00, 0x00, 0x00,
-            0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         let parsed = parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.data.len(), 10); // 5 字 = 10 字节
@@ -342,7 +350,9 @@ mod tests {
     #[test]
     fn error_end_code_is_extracted() {
         // C059:超时
-        let resp = [0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x59, 0xC0];
+        let resp = [
+            0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x59, 0xC0,
+        ];
         let parsed = parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.end_code, 0xC059);
         assert!(end_code_message(0xC059).contains("超时"));
@@ -350,7 +360,9 @@ mod tests {
 
     #[test]
     fn rejects_bad_subheader() {
-        let resp = [0x50, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00];
+        let resp = [
+            0x50, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00,
+        ];
         assert!(parse_response_frame(&resp).is_err());
     }
 
@@ -362,7 +374,9 @@ mod tests {
     #[test]
     fn length_field_mismatch_detected() {
         // 长度字段说 2 但带了数据 → 报错(防粘包错位)
-        let resp = [0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00, 0x34];
+        let resp = [
+            0xD0, 0x00, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00, 0x34,
+        ];
         assert!(parse_response_frame(&resp).is_err());
     }
 
@@ -385,7 +399,10 @@ mod tests {
         assert_eq!(len, 0x0C);
 
         // 构造 4E 响应并解析
-        let mut resp = vec![0xD4, 0x00, 0x34, 0x12, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x04, 0x00, 0x00, 0x00, 0x34, 0x12];
+        let mut resp = vec![
+            0xD4, 0x00, 0x34, 0x12, 0x00, 0xFF, 0xFF, 0x03, 0x00, 0x04, 0x00, 0x00, 0x00, 0x34,
+            0x12,
+        ];
         let parsed = parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.sequence, 0x1234);
         assert_eq!(parsed.end_code, 0x0000);

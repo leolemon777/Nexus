@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { randomUUID } = require("node:crypto");
+const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const { RustCoreClient } = require("./rust-core-client.cjs");
 const { recoverRustCoreClient } = require("./rust-core-lifecycle.cjs");
 const { SerialService } = require("./serial-service.cjs");
@@ -10,6 +11,21 @@ const { DataExportService } = require("./data-export-service.cjs");
 const { SlaveSerialBridge } = require("./slave-serial-bridge.cjs");
 const { RealtimePushService } = require("./realtime-push-service.cjs");
 const { createFxSerialService } = require("./fx-serial-service.cjs");
+const { createPpiSerialService } = require("./ppi-serial-service.cjs");
+const { createUssSerialService } = require("./uss-serial-service.cjs");
+const { createRk512SerialService } = require("./rk512-serial-service.cjs");
+const { createOmronHostLinkSerialService } = require("./omron-hostlink-serial-service.cjs");
+const { createPanasonicSerialService } = require("./panasonic-serial-service.cjs");
+const { createDlt645SerialService } = require("./dlt645-serial-service.cjs");
+const { createDeltaModbusService } = require("./delta-modbus-service.cjs");
+const { createModbusScanService } = require("./modbus-scan-service.cjs");
+const { createPingService } = require("./ping-service.cjs");
+const { ProjectFileService } = require("./project-file-service.cjs");
+const { Gx3AnalysisService } = require("./gx3-analysis-service.cjs");
+const { redactLogText } = require("./log-redaction-service.cjs");
+const { DiagnosticsService } = require("./diagnostics-service.cjs");
+const { WriteAuditService } = require("./write-audit-service.cjs");
+const { WorkspaceRecoveryService } = require("./workspace-recovery-service.cjs");
 const {
   readHoldingRegistersOnce,
   readInputRegistersOnce,
@@ -52,6 +68,14 @@ const serialDebugService = new SerialDebugService();
 const dataExportService = new DataExportService();
 const slaveSerialBridge = new SlaveSerialBridge();
 const realtimePushService = new RealtimePushService();
+const modbusScanService = createModbusScanService({ serialService, readHoldingRegistersOnce });
+const pingService = createPingService();
+const projectFileService = new ProjectFileService();
+const diagnosticsService = new DiagnosticsService({ app });
+let writeAuditService = null;
+let workspaceRecoveryService = null;
+let gx3AnalysisService = null;
+let currentProjectPath = null;
 pollScheduler.onError((pollId, error) => {
   mainWindow?.webContents.send("nexus:poll_error", { pollId, ...error });
 });
@@ -119,12 +143,92 @@ async function ensureRustCore() {
   }
 }
 
+function getWorkspaceRecoveryService() {
+  if (!workspaceRecoveryService) {
+    workspaceRecoveryService = new WorkspaceRecoveryService({
+      filePath: path.join(app.getPath("userData"), "workspace-recovery.json"),
+    });
+  }
+  return workspaceRecoveryService;
+}
+
+function getGx3AnalysisService() {
+  if (!gx3AnalysisService) {
+    gx3AnalysisService = new Gx3AnalysisService({
+      workRoot: path.join(app.getPath("temp"), "NexusGX3"),
+      cliPath: process.env.NEXUS_GX3_CLI_PATH || undefined,
+    });
+  }
+  return gx3AnalysisService;
+}
+
+const ppiSerial = createPpiSerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const ussSerial = createUssSerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const rk512Serial = createRk512SerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const omronHostLinkSerial = createOmronHostLinkSerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const panasonicSerial = createPanasonicSerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const dlt645Serial = createDlt645SerialService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  transact: ({ request, timeoutMs, framing }) => serialService.transact({ request, timeoutMs, framing }),
+  getSerialStatus: () => serialService.getStatus(),
+});
+const deltaModbus = createDeltaModbusService({
+  request: async (command, payload) => {
+    const core = await ensureRustCore();
+    return core.request(command, payload);
+  },
+  readers: {
+    readHoldingRegisters: (args) => readHoldingRegistersOnce({ rustCore, serialService, ensureRustCore }, args),
+    readInputRegisters: (args) => readInputRegistersOnce({ rustCore, serialService, ensureRustCore }, args),
+    readCoils: (args) => readCoilsOnce({ rustCore, serialService, ensureRustCore }, args),
+    readDiscreteInputs: (args) => readDiscreteInputsOnce({ rustCore, serialService, ensureRustCore }, args),
+  },
+});
+
 async function startRustCoreIfPresent() {
   if (!fs.existsSync(rustCoreBinaryPath)) return;
   try {
     await ensureRustCore();
   } catch (error) {
-    console.error(`[rust-core] startup failed: ${error.message}`);
+    console.error(`[rust-core] startup failed: ${redactLogText(error.message)}`);
   }
 }
 
@@ -149,6 +253,109 @@ async function waitForRendererUiReady(window, timeoutMs = 5000) {
 }
 
 function registerDesktopCommands() {
+  ipcMain.handle("nexus:project_save", async (_event, args) => {
+    let targetPath = currentProjectPath;
+    if (!targetPath) {
+      const choice = await dialog.showSaveDialog(mainWindow, {
+        title: "保存 Nexus 项目",
+        defaultPath: projectFileService.defaultFilename(args?.document?.projectName),
+        filters: [{ name: "Nexus 项目", extensions: ["json"] }],
+      });
+      if (choice.canceled || !choice.filePath) return { canceled: true };
+      targetPath = projectFileService.ensureExtension(choice.filePath);
+    }
+    const result = projectFileService.save(targetPath, args?.document);
+    currentProjectPath = result.path;
+    getWorkspaceRecoveryService().recordSaved({
+      path: result.path,
+      projectName: result.document.projectName,
+    });
+    return { canceled: false, ...result };
+  });
+  ipcMain.handle("nexus:project_save_as", async (_event, args) => {
+    const choice = await dialog.showSaveDialog(mainWindow, {
+      title: "Nexus 项目另存为",
+      defaultPath: projectFileService.defaultFilename(args?.document?.projectName),
+      filters: [{ name: "Nexus 项目", extensions: ["json"] }],
+    });
+    if (choice.canceled || !choice.filePath) return { canceled: true };
+    const result = projectFileService.save(projectFileService.ensureExtension(choice.filePath), args?.document);
+    currentProjectPath = result.path;
+    getWorkspaceRecoveryService().recordSaved({
+      path: result.path,
+      projectName: result.document.projectName,
+    });
+    return { canceled: false, ...result };
+  });
+  ipcMain.handle("nexus:project_export_sanitized", async (_event, args) => {
+    const choice = await dialog.showSaveDialog(mainWindow, {
+      title: "导出脱敏 Nexus 项目",
+      defaultPath: projectFileService.defaultSanitizedFilename(),
+      filters: [{ name: "Nexus 项目", extensions: ["json"] }],
+    });
+    if (choice.canceled || !choice.filePath) return { canceled: true };
+    const targetPath = projectFileService.ensureExtension(choice.filePath);
+    const result = projectFileService.exportSanitized(targetPath, args?.document);
+    return { canceled: false, sanitized: true, ...result };
+  });
+  ipcMain.handle("nexus:project_open", async () => {
+    const choice = await dialog.showOpenDialog(mainWindow, {
+      title: "打开 Nexus 项目",
+      properties: ["openFile"],
+      filters: [{ name: "Nexus 项目", extensions: ["json"] }],
+    });
+    if (choice.canceled || choice.filePaths.length !== 1) return { canceled: true };
+    const result = projectFileService.load(choice.filePaths[0]);
+    currentProjectPath = result.path;
+    const recovery = getWorkspaceRecoveryService();
+    recovery.recordSaved({
+      path: result.path,
+      projectName: result.document.projectName,
+    });
+    recovery.markRestored();
+    return { canceled: false, ...result };
+  });
+  ipcMain.handle("nexus:project_restore_last", () => {
+    const recovery = getWorkspaceRecoveryService();
+    const pending = recovery.pending();
+    if (!pending) return { canceled: true, reason: "no-pending-project" };
+    try {
+      const result = projectFileService.load(pending.path);
+      currentProjectPath = result.path;
+      recovery.recordSaved({
+        path: result.path,
+        projectName: result.document.projectName,
+      });
+      recovery.markRestored();
+      return { canceled: false, restored: true, ...result };
+    } catch (error) {
+      recovery.clear();
+      return {
+        canceled: true,
+        reason: "restore-failed",
+        error: { code: error.code ?? "WORKSPACE_RESTORE_FAILED", message: error.message },
+      };
+    }
+  });
+  ipcMain.handle("nexus:project_new", () => {
+    currentProjectPath = null;
+    getWorkspaceRecoveryService().clear();
+    return { ok: true };
+  });
+  ipcMain.handle("nexus:gx3_status", () => getGx3AnalysisService().checkAvailability());
+  ipcMain.handle("nexus:gx3_select_project", async () => {
+    const choice = await dialog.showOpenDialog(mainWindow, {
+      title: "选择 GX Works3 项目（只读解析）",
+      properties: ["openFile"],
+      filters: [{ name: "GX Works3 项目", extensions: ["gx3"] }],
+    });
+    if (choice.canceled || choice.filePaths.length !== 1) return { canceled: true };
+    return { canceled: false, path: choice.filePaths[0] };
+  });
+  ipcMain.handle("nexus:gx3_analyze_project", (_event, args) =>
+    getGx3AnalysisService().analyzeProject(args?.sourcePath));
+  ipcMain.handle("nexus:gx3_query_device", (_event, args) =>
+    getGx3AnalysisService().queryDevice(args));
   ipcMain.handle("nexus:list_serial_ports", () => serialService.listPorts());
   // 本机接口体检:网卡信息(纯 Node,不经 Rust)
   ipcMain.handle("nexus:list_network_interfaces", () => {
@@ -198,6 +405,10 @@ function registerDesktopCommands() {
       };
     });
     return { ok: true, devices };
+  });
+  // 网络连通性 Ping(系统 ping 封装,中英文输出结构化;连接排障第一步)
+  ipcMain.handle("nexus:ping_host", async (_event, args) => {
+    return pingService.ping(args?.host, { count: args?.count, timeoutMs: args?.timeoutMs });
   });
   // 网卡 IP 在线修改(netsh;需管理员权限,失败时透传 netsh 错误)
   ipcMain.handle("nexus:set_interface_ip", async (_event, args) => {
@@ -371,7 +582,7 @@ function registerDesktopCommands() {
     if (isTcp) {
       // TCP/UDP 路径:用 Rust 侧 start_poll_stream(Rust 推送,消除 IPC 往返)
       const core = await ensureRustCore();
-      const streamId = `poll-${Date.now()}`;
+      const streamId = `poll-${randomUUID()}`;
       await core.startPollStream(
         {
           streamId,
@@ -438,6 +649,16 @@ function registerDesktopCommands() {
   ipcMain.handle("nexus:scan_serial_stations", async (_event, args) => {
     return scanSerialStations({ rustCore, serialService, ensureRustCore }, args);
   });
+  // 一键扫描(站号 × 波特率 × 奇偶校验);进度经 nexus:scan_progress 推送
+  ipcMain.handle("nexus:scan_all", async (_event, args) => {
+    return modbusScanService.scanAll({ rustCore, serialService, ensureRustCore }, args, (progress) => {
+      mainWindow?.webContents.send("nexus:scan_progress", progress);
+    });
+  });
+  ipcMain.handle("nexus:scan_all_cancel", () => {
+    modbusScanService.requestCancel();
+    return { ok: true };
+  });
   // 三菱 MC 协议:直接透传到 Rust core(JSONL 命令名与 IPC 名一一对应)
   for (const mcCmd of [
     "mc_parse_address",
@@ -487,9 +708,36 @@ function registerDesktopCommands() {
       return core.request(mcCmd, args ?? {});
     });
   }
-  // 西门子 S7comm:直接透传到 Rust core(JSONL 命令名与 IPC 名一一对应)
+  // 西门子 S7comm、欧姆龙 HostLink 编解码:直接透传到 Rust core(JSONL 命令名与 IPC 名一一对应)
   for (const s7Cmd of [
     "brand_parse_address",
+    "delta_parse_address",
+    "inovance_parse_address",
+    "xinjie_parse_address",
+    "fatek_parse_address",
+    "open_fatek_connection",
+    "fatek_read_words",
+    "fatek_read_discrete",
+    "fatek_pack_command",
+    "fatek_build_read_discrete",
+    "fatek_build_write_discrete",
+    "fatek_build_read_words",
+    "fatek_build_write_words",
+    "fatek_parse_response",
+    "open_fuji_sph_connection",
+    "fuji_sph_read",
+    "fuji_sph_parse_address",
+    "fuji_sph_build_read",
+    "fuji_sph_build_write",
+    "fuji_sph_parse_response",
+    "open_ge_srtp_connection",
+    "ge_srtp_read",
+    "ge_srtp_parse_address",
+    "ge_srtp_build_handshake",
+    "ge_srtp_parse_handshake",
+    "ge_srtp_build_read",
+    "ge_srtp_build_write",
+    "ge_srtp_parse_response",
     "fins_parse_address",
     "open_fins_tcp",
     "open_fins_udp",
@@ -499,6 +747,10 @@ function registerDesktopCommands() {
     "stop_fins_slave",
     "fins_slave_set",
     "fins_slave_get",
+    "hostlink_build_fins",
+    "hostlink_parse_fins",
+    "hostlink_build_cmode_read",
+    "hostlink_parse_cmode_read",
     "s7_parse_address",
     "open_s7_connection",
     "s7_read",
@@ -525,6 +777,119 @@ function registerDesktopCommands() {
   "rk512_build_read",
   "rk512_build_write",
   "rk512_parse_response",
+  "open_enip_connection",
+  "enip_read_tag",
+  "enip_build_register_session",
+  "enip_build_unregister_session",
+  "enip_build_read_tag",
+  "enip_parse_frame",
+  "enip_parse_cip_response",
+  "open_ads_connection",
+  "ads_read",
+  "ads_read_device_info",
+  "ads_read_state",
+  "ads_build_read",
+  "ads_build_write",
+  "ads_build_readwrite",
+  "ads_build_read_device_info",
+  "ads_build_read_state",
+  "ads_parse_frame",
+  "ads_parse_response",
+  "open_mqtt_connection",
+  "mqtt_subscribe",
+  "mqtt_read_publish",
+  "mqtt_ping",
+  "mqtt_build_connect",
+  "mqtt_parse_connack",
+  "mqtt_build_subscribe",
+  "mqtt_parse_suback",
+  "mqtt_parse_publish",
+  "mqtt_build_pingreq",
+  "mqtt_parse_pingresp",
+  "mqtt_build_disconnect",
+  "open_iec104_connection",
+  "iec104_general_interrogation",
+  "iec104_test_frame",
+  "iec104_build_i_frame",
+  "iec104_build_s_frame",
+  "iec104_build_u_frame",
+  "iec104_parse_apdu",
+  "iec104_build_general_interrogation",
+  "iec104_parse_asdu",
+  "open_dnp3_connection",
+  "dnp3_integrity_poll",
+  "dnp3_class_scan",
+  "dnp3_read",
+  "dnp3_build_link_frame",
+  "dnp3_parse_link_frame",
+  "dnp3_build_class_scan",
+  "dnp3_build_read_request",
+  "dnp3_parse_application_response",
+  "dnp3_build_confirm",
+  "dlt645_parse_address",
+  "dlt645_parse_data_id",
+  "dlt645_build_read_request",
+  "dlt645_parse_frame",
+  "dlt645_parse_read_response",
+  "cjt188_parse_meter_type",
+  "cjt188_parse_address",
+  "cjt188_parse_data_id",
+  "cjt188_build_read_request",
+  "cjt188_parse_frame",
+  "cjt188_parse_read_response",
+  "bacnet_ip_build_whois",
+  "bacnet_ip_build_iam",
+  "bacnet_ip_parse_frame",
+  "bacnet_ip_build_read_property_request",
+  "bacnet_ip_parse_read_property_request",
+  "bacnet_ip_parse_read_property_ack",
+  "open_bacnet_ip_connection",
+  "bacnet_ip_whois",
+  "bacnet_ip_read_property_live",
+  "knx_parse_group_address",
+  "knx_build_connect_request",
+  "knx_parse_connect_response",
+  "knx_build_group_read_request",
+  "knx_parse_tunneling_request",
+  "knx_parse_group_value_response",
+  "knx_parse_tunneling_ack",
+  "knx_build_tunneling_ack",
+  "open_knx_connection",
+  "knx_group_read",
+  "knx_disconnect",
+  "knx_connection_state",
+  "knx_start_keepalive",
+  "knx_stop_keepalive",
+  "knx_keepalive_status",
+  "open_keyence_connection",
+  "keyence_read_words",
+  "keyence_read_bits",
+  "keyence_parse_address",
+  "keyence_build_connect",
+  "keyence_build_read_words",
+  "keyence_build_read_bits",
+  "keyence_build_write_words",
+  "keyence_build_write_bit",
+  "keyence_parse_connect",
+  "keyence_parse_words",
+  "keyence_parse_bits",
+  "keyence_parse_write",
+  "open_ls_xgt_connection",
+  "ls_xgt_read",
+  "ls_xgt_read_continuous",
+  "ls_xgt_parse_address",
+  "ls_xgt_build_read",
+  "ls_xgt_build_continuous_read",
+  "ls_xgt_build_write",
+  "ls_xgt_build_continuous_write",
+  "ls_xgt_parse_response",
+  "panasonic_parse_data_address",
+  "panasonic_parse_contact_address",
+  "panasonic_build_read",
+  "panasonic_build_write",
+  "panasonic_build_read_contact",
+  "panasonic_build_write_contact",
+  "panasonic_parse_response",
   ]) {
     ipcMain.handle(`nexus:${s7Cmd}`, async (_event, args) => {
       const core = await ensureRustCore();
@@ -554,25 +919,27 @@ function registerDesktopCommands() {
   // s7-webapi-service.cjs 的 fetch 自带 per-request 超时/AbortSignal,自签证书由 PLC 侧引导用户信任
   const { createS7WebApiService } = require("./s7-webapi-service.cjs");
   const s7WebApi = createS7WebApiService();
-  ipcMain.handle("nexus:export_diagnostics", async () => {
-    const os = require("node:os"); const fs = require("node:fs"); const path = require("node:path");
-    const { app } = require("electron");
-    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const lines = [
-      "Nexus 2.0 诊断报告", "时间: " + new Date().toLocaleString(), "版本: " + app.getVersion(),
-      "系统: " + os.type() + " " + os.arch() + " " + os.release(), "主机: " + os.hostname(),
-      "内存: " + Math.round(os.freemem()/1048576) + "MB 可用 / " + Math.round(os.totalmem()/1048576) + "MB 总计",
-      "运行: " + Math.round(process.uptime()) + "秒", "",
-      "=== Rust Core ===", rustCore ? "运行中" : "未启动",
-      rustCoreLastError ? "错误: " + JSON.stringify(rustCoreLastError) : "无错误", "",
-      "=== 串口 ===", JSON.stringify(serialService.getStatus(), null, 2),
-    ];
-    const desktop = path.join(os.homedir(), "Desktop");
-    const fname = "Nexus诊断_" + ts + ".txt";
+  ipcMain.handle("nexus:export_diagnostics", async (_event, args) => {
     try {
-      fs.writeFileSync(path.join(desktop, fname), lines.join("\n"), "utf-8");
-      return { ok: true, path: path.join(desktop, fname) };
-    } catch (e) { return { ok: false, message: e.message }; }
+      const serialPorts = await serialService.listPorts().catch(() => []);
+      return diagnosticsService.export({
+        backendStatus: backendStatus(),
+        serialStatus: serialService.getStatus(),
+        serialPorts,
+        recentFrames: args?.recentFrames ?? serialDebugService.getLog(),
+        rustCoreLastError,
+      });
+    } catch (error) {
+      return { ok: false, message: error.message, code: error.code ?? "DIAGNOSTICS_EXPORT_FAILED" };
+    }
+  });
+  ipcMain.handle("nexus:record_write_audit", (_event, args) => {
+    if (!writeAuditService) {
+      writeAuditService = new WriteAuditService({
+        directory: path.join(app.getPath("userData"), "logs"),
+      });
+    }
+    return writeAuditService.append(args);
   });
 
   ipcMain.handle("nexus:s7web_connect", (_e, args) => s7WebApi.connect(args || {}));
@@ -623,6 +990,61 @@ function registerDesktopCommands() {
     } catch (error) {
       return { ok: false, error: { code: "MC_C24_SERIAL_ERROR", message: error.message } };
     }
+  });
+  // 西门子 PPI 原生 COM 只读：串口页负责打开 COM，本事务执行 PPI 双拍。
+  ipcMain.handle("nexus:ppi_serial_read", async (_event, args) => {
+    try {
+      return await ppiSerial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "PPI_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:uss_serial_read", async (_event, args) => {
+    try {
+      return await ussSerial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "USS_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:rk512_serial_read", async (_event, args) => {
+    try {
+      return await rk512Serial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "RK512_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:omron_hostlink_serial_read", async (_event, args) => {
+    try {
+      return args?.mode === "fins"
+        ? await omronHostLinkSerial.readFins(args ?? {})
+        : await omronHostLinkSerial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "OMRON_HOSTLINK_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:panasonic_serial_read", async (_event, args) => {
+    try {
+      return args?.mode === "contact"
+        ? await panasonicSerial.readContact(args ?? {})
+        : await panasonicSerial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "PANASONIC_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:dlt645_serial_read", async (_event, args) => {
+    try {
+      return await dlt645Serial.read(args ?? {});
+    } catch (error) {
+      return { ok: false, error: { code: error.code ?? "DLT645_SERIAL_ERROR", message: error.message, details: error.details } };
+    }
+  });
+  ipcMain.handle("nexus:delta_modbus_plan", async (_event, args) => {
+    try { return await deltaModbus.planRange(args ?? {}); }
+    catch (error) { return { ok: false, error: { code: error.code ?? "DELTA_PLAN_ERROR", message: error.message, details: error.details } }; }
+  });
+  ipcMain.handle("nexus:delta_modbus_read", async (_event, args) => {
+    try { return await deltaModbus.read(args ?? {}); }
+    catch (error) { return { ok: false, error: { code: error.code ?? "DELTA_MODBUS_ERROR", message: error.message, details: error.details } }; }
   });
   // 指令列表执行(顺序执行多条指令)
   ipcMain.handle("nexus:execute_commands", async (_event, args) => {
@@ -841,9 +1263,9 @@ async function scanSerialStations(ctx, args) {
       });
       // ok=true 正常响应; ok=false 但收到了异常帧也算在线(从站拒绝但存在)
       if (result.ok) {
-        found.push({ stationId: unitId, baudRate: serialService.getStatus()?.config?.baudRate, format: "RTU", firstResponse: "FC03 OK", functionCode: 3, status: "在线" });
+        found.push({ stationId: unitId, baudRate: serialService.getStatus()?.config?.baudRate, format: "RTU", firstResponse: "FC03 OK", firstResponseMs: result.elapsedMs ?? null, functionCode: 3, status: "在线" });
       } else if (result.error?.code === "MODBUS_EXCEPTION" || result.exceptionCode != null) {
-        found.push({ stationId: unitId, baudRate: serialService.getStatus()?.config?.baudRate, format: "RTU", firstResponse: `异常码 ${result.exceptionCode}`, functionCode: 3, status: "在线(异常响应)" });
+        found.push({ stationId: unitId, baudRate: serialService.getStatus()?.config?.baudRate, format: "RTU", firstResponse: `异常码 ${result.exceptionCode}`, firstResponseMs: result.elapsedMs ?? null, functionCode: 3, status: "在线(异常响应)" });
       }
     } catch {
       // 超时或 CRC 错误 → 该站号无响应,跳过
@@ -886,6 +1308,11 @@ async function executeCommandList(ctx, args) {
 }
 
 async function createWindow() {
+  const iconPath = [
+    path.join(projectRoot, "icon.ico"),
+    path.join(projectRoot, "public", "icon.ico"),
+    path.join(projectRoot, "dist", "icon.ico"),
+  ].find((candidate) => fs.existsSync(candidate));
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -895,6 +1322,7 @@ async function createWindow() {
     autoHideMenuBar: true,
     backgroundColor: "#eef1f4",
     title: "Nexus 2.0 · 串口实验室",
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

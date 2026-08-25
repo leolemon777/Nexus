@@ -12,13 +12,13 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
 use crate::error::CoreError;
-use crate::s7_address::{area, S7Kind};
+use crate::s7_address::{S7Kind, area};
 use crate::s7_cotp::{
-    frame_to_pdu, read_tpkt_frame, unwrap_tpkt, wrap_dt, write_frame, COTP_CC, DEFAULT_SRC_REF,
+    COTP_CC, DEFAULT_SRC_REF, frame_to_pdu, read_tpkt_frame, unwrap_tpkt, wrap_dt, write_frame,
 };
 use crate::s7_pdu::{
-    parse_ack, parse_setup_response, ROSCTR_ACK_DATA, ROSCTR_USERDATA, FUN_READ, FUN_SETUP,
-    FUN_WRITE, MAX_ITEMS, S7Item,
+    FUN_READ, FUN_SETUP, FUN_WRITE, MAX_ITEMS, ROSCTR_ACK_DATA, ROSCTR_USERDATA, S7Item, parse_ack,
+    parse_setup_response,
 };
 
 /// 每区容量(字节)。
@@ -73,7 +73,13 @@ impl S7SlaveMemory {
     }
 
     /// 读 n 字节。越界返回 None(→ Item RC 0x05)。
-    pub fn read_area_bytes(&mut self, area_code: u8, db: u16, start: u32, n: usize) -> Option<Vec<u8>> {
+    pub fn read_area_bytes(
+        &mut self,
+        area_code: u8,
+        db: u16,
+        start: u32,
+        n: usize,
+    ) -> Option<Vec<u8>> {
         let buf = self.area_slice(area_code, db)?;
         let start = start as usize;
         if start + n > buf.len() {
@@ -82,7 +88,13 @@ impl S7SlaveMemory {
         Some(buf[start..start + n].to_vec())
     }
 
-    pub fn write_area_bytes(&mut self, area_code: u8, db: u16, start: u32, data: &[u8]) -> Option<()> {
+    pub fn write_area_bytes(
+        &mut self,
+        area_code: u8,
+        db: u16,
+        start: u32,
+        data: &[u8],
+    ) -> Option<()> {
         let buf = self.area_slice(area_code, db)?;
         let start = start as usize;
         if start + data.len() > buf.len() {
@@ -94,7 +106,11 @@ impl S7SlaveMemory {
 
     /// Timer/Counter:读 count 个 16 位值(Address=编号)。
     pub fn read_tc(&self, area_code: u8, index: u32, count: u16) -> Option<Vec<u8>> {
-        let buf = if area_code == area::TIMER { &self.timers } else { &self.counters };
+        let buf = if area_code == area::TIMER {
+            &self.timers
+        } else {
+            &self.counters
+        };
         let start = index as usize * 2;
         let len = count as usize * 2;
         if start + len > buf.len() {
@@ -104,7 +120,11 @@ impl S7SlaveMemory {
     }
 
     pub fn write_tc(&mut self, area_code: u8, index: u32, data: &[u8]) -> Option<()> {
-        let buf = if area_code == area::TIMER { &mut self.timers } else { &mut self.counters };
+        let buf = if area_code == area::TIMER {
+            &mut self.timers
+        } else {
+            &mut self.counters
+        };
         let start = index as usize * 2;
         if start + data.len() > buf.len() {
             return None;
@@ -146,14 +166,21 @@ pub fn seed_demo(mem: &mut S7SlaveMemory) {
 }
 
 fn s7_err(code: &'static str, msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code, message: msg.into(), details: None }
+    CoreError::Modbus {
+        code,
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// 解析任意 S7ANY 请求项(12 字节)为 S7Item —— 从站侧需要接受
 /// python-snap7/snap7/标准客户端发来的任意合法 TransportSize。
 fn decode_any_item(bytes: &[u8; 12]) -> Result<S7Item, CoreError> {
     if bytes[0] != 0x12 || bytes[1] != 0x0A || bytes[2] != 0x10 {
-        return Err(s7_err("S7_SLAVE_ITEM", "不支持的地址项(非 S7ANY 0x12/0x0A/0x10)"));
+        return Err(s7_err(
+            "S7_SLAVE_ITEM",
+            "不支持的地址项(非 S7ANY 0x12/0x0A/0x10)",
+        ));
     }
     let ts = bytes[3];
     let count = u16::from_be_bytes([bytes[4], bytes[5]]);
@@ -173,12 +200,27 @@ fn decode_any_item(bytes: &[u8; 12]) -> Result<S7Item, CoreError> {
         0x09 => S7Kind::Byte,  // DATE/OCTET?请求侧少见
         0x1C => S7Kind::Counter,
         0x1D => S7Kind::Timer,
-        _ => return Err(s7_err("S7_SLAVE_ITEM", format!("不支持请求侧 TS=0x{ts:02X}"))),
+        _ => {
+            return Err(s7_err(
+                "S7_SLAVE_ITEM",
+                format!("不支持请求侧 TS=0x{ts:02X}"),
+            ));
+        }
     };
-    let byte = if matches!(kind, S7Kind::Timer | S7Kind::Counter) { linear } else { linear >> 3 };
+    let byte = if matches!(kind, S7Kind::Timer | S7Kind::Counter) {
+        linear
+    } else {
+        linear >> 3
+    };
     let bit = (linear & 7) as u8;
     Ok(S7Item {
-        addr: crate::s7_address::S7Address { area: area_code, db, byte, bit, kind },
+        addr: crate::s7_address::S7Address {
+            area: area_code,
+            db,
+            byte,
+            bit,
+            kind,
+        },
         count,
     })
 }
@@ -205,7 +247,13 @@ pub fn handle_s7_request(pdu: &[u8], mem: &Arc<Mutex<S7SlaveMemory>>) -> Vec<u8>
     }
 }
 
-fn ack_header(pdu_ref: u16, param_len: usize, data_len: usize, error: &[u8], param: &[u8]) -> Vec<u8> {
+fn ack_header(
+    pdu_ref: u16,
+    param_len: usize,
+    data_len: usize,
+    error: &[u8],
+    param: &[u8],
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(12 + param_len + data_len);
     out.extend_from_slice(&[0x32, ROSCTR_ACK_DATA]);
     out.extend_from_slice(&0x0000u16.to_be_bytes());
@@ -244,7 +292,9 @@ fn handle_userdata(req: &crate::s7_pdu::S7Ack) -> Vec<u8> {
         0x44 => handle_szl(req),
         0x45 => {
             // 密码:虚拟 CPU 无保护 → 直接接受(数据区 Ret=FF)
-            let param = [0x00u8, 0x01, 0x12, 0x08, 0x12, 0x85, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00];
+            let param = [
+                0x00u8, 0x01, 0x12, 0x08, 0x12, 0x85, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
+            ];
             let data = [0xFFu8, 0x09, 0x00, 0x00];
             let mut out = ack_header(req.pdu_ref, param.len(), data.len(), &[0x00, 0x00], &param);
             out.extend_from_slice(&data);
@@ -263,11 +313,21 @@ fn handle_szl(req: &crate::s7_pdu::S7Ack) -> Vec<u8> {
         0
     };
     if szl_id != 0x0424 {
-        let param = [0x00u8, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00];
-        return ack_header(req.pdu_ref, param.len(), 0, &0x8104u16.to_be_bytes(), &param);
+        let param = [
+            0x00u8, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
+        ];
+        return ack_header(
+            req.pdu_ref,
+            param.len(),
+            0,
+            &0x8104u16.to_be_bytes(),
+            &param,
+        );
     }
     // golden 结构(§6.4 TIA 抓包):param 12B + data = FF 09 00 1C + (04 24 00 00 00 14 00 01 + 20B 记录)
-    let param = [0x00u8, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00];
+    let param = [
+        0x00u8, 0x01, 0x12, 0x08, 0x12, 0x84, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
+    ];
     let mut record = vec![0x51, 0x44, 0xFF, 0x08]; // 记录头 + 状态字节 0x08 = RUN
     record.extend_from_slice(&[0u8; 16]); // 补足 20B 记录
     let mut data = vec![0xFFu8, 0x09, 0x00, 0x1C];
@@ -293,29 +353,59 @@ fn handle_setup(req: &crate::s7_pdu::S7Ack) -> Vec<u8> {
 fn handle_read(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> Vec<u8> {
     let item_count = *req.param.get(1).unwrap_or(&0) as usize;
     if item_count == 0 || item_count > MAX_ITEMS {
-        return ack_header(req.pdu_ref, 2, 0, &0x8700u16.to_be_bytes(), &[FUN_READ, item_count as u8]);
+        return ack_header(
+            req.pdu_ref,
+            2,
+            0,
+            &0x8700u16.to_be_bytes(),
+            &[FUN_READ, item_count as u8],
+        );
     }
     // #12: 超过协商 PDU 上限 → 0x8500(与真机一致,而非静默返回)
-    let total_data: usize = (2..item_count * 12 + 2).step_by(12)
+    let total_data: usize = (2..item_count * 12 + 2)
+        .step_by(12)
         .map(|off| {
             let ts = req.param.get(off + 3).copied().unwrap_or(0x02);
             let cnt = u16::from_be_bytes([
                 req.param.get(off + 4).copied().unwrap_or(0),
                 req.param.get(off + 5).copied().unwrap_or(0),
             ]);
-            match ts { 0x01 => ((cnt as usize) + 7) / 8, _ => cnt as usize * 2 }
+            match ts {
+                crate::s7_address::transport::BIT => ((cnt as usize) + 7) / 8,
+                crate::s7_address::transport::WORD
+                | crate::s7_address::transport::COUNTER
+                | crate::s7_address::transport::TIMER => cnt as usize * 2,
+                crate::s7_address::transport::DWORD | crate::s7_address::transport::REAL => {
+                    cnt as usize * 4
+                }
+                // 本项目按 snap7 read_area 语义把普通 DB/M/I/Q 请求统一编码为 BYTE，
+                // 此时 count 已经是字节数，不能再乘 2。
+                _ => cnt as usize,
+            }
         })
         .sum();
     let est_response = 12 + 2 + item_count * (4 + 1) + total_data;
     if est_response > SLAVE_PDU_LIMIT as usize {
-        return ack_header(req.pdu_ref, 2, 0, &0x8500u16.to_be_bytes(), &[FUN_READ, item_count as u8]);
+        return ack_header(
+            req.pdu_ref,
+            2,
+            0,
+            &0x8500u16.to_be_bytes(),
+            &[FUN_READ, item_count as u8],
+        );
     }
     let mut data_sec: Vec<u8> = Vec::new();
     let mut memory = mem.lock().unwrap_or_else(|e| e.into_inner());
     for i in 0..item_count {
         let off = 2 + i * 12;
         if off + 12 > req.param.len() {
-            return ack_header(req.pdu_ref, 2, 0, &0x8700u16.to_be_bytes(), &[FUN_READ, item_count as u8]);
+            return ack_header(
+                req.pdu_ref,
+                2,
+                0,
+                &0x8700u16.to_be_bytes(),
+                &[FUN_READ, item_count as u8],
+            );
         }
         let mut raw = [0u8; 12];
         raw.copy_from_slice(&req.param[off..off + 12]);
@@ -336,7 +426,8 @@ fn handle_read(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> V
                 let mut ok = true;
                 for b in 0..item.count as usize {
                     let abs = item.addr.byte as usize * 8 + item.addr.bit as usize + b;
-                    match memory.read_area_bytes(item.addr.area, item.addr.db, (abs / 8) as u32, 1) {
+                    match memory.read_area_bytes(item.addr.area, item.addr.db, (abs / 8) as u32, 1)
+                    {
                         Some(v) if v[0] >> (abs % 8) & 1 == 1 => packed[b / 8] |= 1 << (b % 8),
                         Some(_) => {}
                         None => {
@@ -347,9 +438,12 @@ fn handle_read(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> V
                 }
                 ok.then_some(packed)
             }
-            _ => {
-                memory.read_area_bytes(item.addr.area, item.addr.db, item.addr.byte, item.data_bytes())
-            }
+            _ => memory.read_area_bytes(
+                item.addr.area,
+                item.addr.db,
+                item.addr.byte,
+                item.data_bytes(),
+            ),
         };
         match read_result {
             Some(data) => {
@@ -375,7 +469,13 @@ fn handle_read(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> V
         }
     }
     // Item 级错误通过 RC 传递,头级 Error Code 保持 0(与真机一致)
-    let mut out = ack_header(req.pdu_ref, 2, data_sec.len(), &[0x00, 0x00], &[FUN_READ, item_count as u8]);
+    let mut out = ack_header(
+        req.pdu_ref,
+        2,
+        data_sec.len(),
+        &[0x00, 0x00],
+        &[FUN_READ, item_count as u8],
+    );
     out.extend_from_slice(&data_sec);
     out
 }
@@ -393,21 +493,39 @@ fn push_read_item(data_sec: &mut Vec<u8>, rc: u8, data: &[u8], pad: bool) {
 fn handle_write(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> Vec<u8> {
     let item_count = *req.param.get(1).unwrap_or(&0) as usize;
     if item_count == 0 || item_count > MAX_ITEMS {
-        return ack_header(req.pdu_ref, 2, 0, &0x8700u16.to_be_bytes(), &[FUN_WRITE, item_count as u8]);
+        return ack_header(
+            req.pdu_ref,
+            2,
+            0,
+            &0x8700u16.to_be_bytes(),
+            &[FUN_WRITE, item_count as u8],
+        );
     }
     // 先解码全部地址项
     let mut items = Vec::with_capacity(item_count);
     for i in 0..item_count {
         let off = 2 + i * 12;
         if off + 12 > req.param.len() {
-            return ack_header(req.pdu_ref, 2, 0, &0x8700u16.to_be_bytes(), &[FUN_WRITE, item_count as u8]);
+            return ack_header(
+                req.pdu_ref,
+                2,
+                0,
+                &0x8700u16.to_be_bytes(),
+                &[FUN_WRITE, item_count as u8],
+            );
         }
         let mut raw = [0u8; 12];
         raw.copy_from_slice(&req.param[off..off + 12]);
         match decode_any_item(&raw) {
             Ok(it) => items.push(it),
             Err(_) => {
-                return ack_header(req.pdu_ref, 2, 1, &0xD209u16.to_be_bytes(), &[FUN_WRITE, item_count as u8])
+                return ack_header(
+                    req.pdu_ref,
+                    2,
+                    1,
+                    &0xD209u16.to_be_bytes(),
+                    &[FUN_WRITE, item_count as u8],
+                );
             }
         }
     }
@@ -438,14 +556,17 @@ fn handle_write(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> 
         }
 
         let written = match item.addr.kind {
-            S7Kind::Timer | S7Kind::Counter => memory.write_tc(item.addr.area, item.addr.byte, data),
+            S7Kind::Timer | S7Kind::Counter => {
+                memory.write_tc(item.addr.area, item.addr.byte, data)
+            }
             S7Kind::Bit => {
                 // S7 位写语义:只写指定位(读-改-写);data 每字节 = 1 个位的值。
                 // 逐位处理(位串通常很小),避免缓存字节的借用复杂度。
                 let mut ok = true;
                 for b in 0..item.count as usize {
                     let abs = item.addr.byte as usize * 8 + item.addr.bit as usize + b;
-                    match memory.read_area_bytes(item.addr.area, item.addr.db, (abs / 8) as u32, 1) {
+                    match memory.read_area_bytes(item.addr.area, item.addr.db, (abs / 8) as u32, 1)
+                    {
                         Some(mut v) => {
                             let mask = 1u8 << (abs % 8);
                             if data.get(b).copied().unwrap_or(0) != 0 {
@@ -454,7 +575,12 @@ fn handle_write(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> 
                                 v[0] &= !mask;
                             }
                             if memory
-                                .write_area_bytes(item.addr.area, item.addr.db, (abs / 8) as u32, &v)
+                                .write_area_bytes(
+                                    item.addr.area,
+                                    item.addr.db,
+                                    (abs / 8) as u32,
+                                    &v,
+                                )
                                 .is_none()
                             {
                                 ok = false;
@@ -473,7 +599,13 @@ fn handle_write(req: &crate::s7_pdu::S7Ack, mem: &Arc<Mutex<S7SlaveMemory>>) -> 
         };
         rcs.push(if written.is_some() { 0xFF } else { 0x05 });
     }
-    let mut out = ack_header(req.pdu_ref, 2, rcs.len(), &[0x00, 0x00], &[FUN_WRITE, item_count as u8]);
+    let mut out = ack_header(
+        req.pdu_ref,
+        2,
+        rcs.len(),
+        &[0x00, 0x00],
+        &[FUN_WRITE, item_count as u8],
+    );
     out.extend_from_slice(&rcs);
     out
 }
@@ -497,14 +629,18 @@ pub fn handle_s7_client(
         Err(_) => return,
     };
     if cotp.len() < 7 || (cotp[1] & 0xF0) != COTP_CC && (cotp[1] & 0xF0) != 0xE0 {
-        let _ = stream.write_all(&[0x03, 0x00, 0x0B, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let _ = stream.write_all(&[
+            0x03, 0x00, 0x0B, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
         return;
     }
     // CC:回显 CR 参数(TPDU size/TSAP),SrcRef=DEFAULT_SRC_REF
     let li = cotp[0] as usize;
     if cotp.len() < 7 || li < 6 {
         // LI < 6 意味着无参数区(畸形/扫描器探针)——直接返回,不 panic
-        let _ = stream.write_all(&[0x03, 0x00, 0x0B, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let _ = stream.write_all(&[
+            0x03, 0x00, 0x0B, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
         return;
     }
     let params = &cotp[7..(li + 1).min(cotp.len())];
@@ -542,11 +678,10 @@ pub fn handle_s7_client(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::s7_cotp::{build_cr, parse_cc, ConnectionType};
+    use crate::s7_cotp::{build_cr, parse_cc};
     use crate::s7_pdu::build_setup_request;
 
     #[test]
@@ -563,12 +698,21 @@ mod tests {
     fn read_db_seed_roundtrip() {
         let mut mem = S7SlaveMemory::new();
         seed_demo(&mut mem);
-        assert_eq!(mem.read_area_bytes(area::DB, 1, 0, 4).unwrap(), vec![0x12, 0x34, 0x56, 0x78]);
-        assert_eq!(mem.read_area_bytes(area::MARKERS, 0, 0, 2).unwrap(), vec![0x12, 0x34]);
+        assert_eq!(
+            mem.read_area_bytes(area::DB, 1, 0, 4).unwrap(),
+            vec![0x12, 0x34, 0x56, 0x78]
+        );
+        assert_eq!(
+            mem.read_area_bytes(area::MARKERS, 0, 0, 2).unwrap(),
+            vec![0x12, 0x34]
+        );
         assert_eq!(mem.read_tc(area::TIMER, 0, 1).unwrap(), vec![0x25, 0x10]);
         assert_eq!(mem.read_tc(area::COUNTER, 0, 1).unwrap(), vec![0x00, 0x05]);
         // 越界
-        assert!(mem.read_area_bytes(area::DB, 1, (AREA_SIZE - 2) as u32, 4).is_none());
+        assert!(
+            mem.read_area_bytes(area::DB, 1, (AREA_SIZE - 2) as u32, 4)
+                .is_none()
+        );
     }
 
     #[test]
@@ -596,8 +740,17 @@ mod tests {
         let req = crate::s7_pdu::build_write_request(0x0001, &items, &data).unwrap();
         let resp = handle_s7_request(&req, &mem);
         let ack = parse_ack(&resp).unwrap();
-        assert_eq!(crate::s7_pdu::parse_write_response(&ack).unwrap(), vec![0xFF]);
-        assert_eq!(mem.lock().unwrap_or_else(|e| e.into_inner()).read_area_bytes(area::MARKERS, 0, 20, 2).unwrap(), vec![0xAB, 0xCD]);
+        assert_eq!(
+            crate::s7_pdu::parse_write_response(&ack).unwrap(),
+            vec![0xFF]
+        );
+        assert_eq!(
+            mem.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .read_area_bytes(area::MARKERS, 0, 20, 2)
+                .unwrap(),
+            vec![0xAB, 0xCD]
+        );
     }
 
     #[test]
@@ -608,7 +761,8 @@ mod tests {
             seed_demo(&mut m);
             m
         }));
-        let mut req = crate::s7_pdu::build_read_request(1, &[S7Item::new("DB1.DBB0", 4).unwrap()]).unwrap();
+        let mut req =
+            crate::s7_pdu::build_read_request(1, &[S7Item::new("DB1.DBB0", 4).unwrap()]).unwrap();
         req[12 + 3] = 0x04; // TS BYTE→WORD(item 自 offset 12 起)
         req[12 + 4..12 + 6].copy_from_slice(&2u16.to_be_bytes()); // count=2 word 元素
         let resp = handle_s7_request(&req, &mem);
@@ -640,7 +794,11 @@ mod tests {
 
     fn parse_write_response_checked(resp: &[u8]) -> bool {
         let ack = parse_ack(resp).unwrap();
-        *crate::s7_pdu::parse_write_response(&ack).unwrap().first().unwrap() == 0xFF
+        *crate::s7_pdu::parse_write_response(&ack)
+            .unwrap()
+            .first()
+            .unwrap()
+            == 0xFF
     }
 
     #[test]
@@ -678,12 +836,16 @@ mod tests {
     #[test]
     fn decode_any_item_maps_all_request_transport_sizes() {
         // 12 0A 10 06 00 01 00 02 84 00 00 00 → DWORD, DB2, offset 0
-        let raw = [0x12, 0x0A, 0x10, 0x06, 0x00, 0x01, 0x00, 0x02, 0x84, 0x00, 0x00, 0x00];
+        let raw = [
+            0x12, 0x0A, 0x10, 0x06, 0x00, 0x01, 0x00, 0x02, 0x84, 0x00, 0x00, 0x00,
+        ];
         let item = decode_any_item(&raw).unwrap();
         assert_eq!(item.addr.db, 2);
         assert_eq!(item.addr.kind, S7Kind::Dword);
         // Timer:12 0A 10 1D 00 01 00 00 1D 00 00 05
-        let t = [0x12, 0x0A, 0x10, 0x1D, 0x00, 0x01, 0x00, 0x00, 0x1D, 0x00, 0x00, 0x05];
+        let t = [
+            0x12, 0x0A, 0x10, 0x1D, 0x00, 0x01, 0x00, 0x00, 0x1D, 0x00, 0x00, 0x05,
+        ];
         assert_eq!(decode_any_item(&t).unwrap().addr.byte, 5);
     }
 

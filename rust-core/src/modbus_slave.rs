@@ -5,12 +5,11 @@
 //!
 //! 架构:`SlaveServer` 持 `TcpListener`,每客户端一线程,共享内存区(`Arc<Mutex<SlaveMemory>>`)。
 
-use std::sync::{Arc, Mutex};
-use std::net::TcpListener;
 use std::io::Read;
+use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 
 use crate::modbus_tcp;
-use crate::modbus_pdu as pdu;
 
 /// 4 个内存区,每个 65536 项。用 Box 避免栈溢出(约 640KB)。
 pub struct SlaveMemory {
@@ -179,11 +178,10 @@ fn handle_client(
                     continue;
                 }
                 // 解析 MBAP 头
-                let (_header, request_pdu) =
-                    match modbus_tcp::parse_mbap_frame(&buf[..n]) {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
+                let (_header, request_pdu) = match modbus_tcp::parse_mbap_frame(&buf[..n]) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
                 let unit_id = buf[6]; // MBAP 的 unit_id
                 // 站号过滤
                 if !allowed.is_empty() && !allowed.contains(&unit_id) {
@@ -404,7 +402,9 @@ fn handle_mask_write_register(data: &[u8], memory: &Arc<Mutex<SlaveMemory>>) -> 
         // FC22 规范公式:Result = (Current AND And_Mask) OR (Or_Mask AND (NOT And_Mask))
         mem.holding_registers[idx] = (current & and_mask) | (or_mask & !and_mask);
     }
-    Some(vec![0x16, data[0], data[1], data[2], data[3], data[4], data[5]])
+    Some(vec![
+        0x16, data[0], data[1], data[2], data[3], data[4], data[5],
+    ])
 }
 
 fn handle_read_write_multiple(data: &[u8], memory: &Arc<Mutex<SlaveMemory>>) -> Option<Vec<u8>> {
@@ -465,11 +465,7 @@ fn handle_read_device_id(data: &[u8]) -> Option<Vec<u8>> {
     let vendor = b"Nexus-Rust";
     let product = b"Virtual Slave";
     let version = b"1.0.0";
-    let objects: Vec<(u8, &[u8])> = vec![
-        (0x00, vendor),
-        (0x01, product),
-        (0x02, version),
-    ];
+    let objects: Vec<(u8, &[u8])> = vec![(0x00, vendor), (0x01, product), (0x02, version)];
     let count = objects.len() as u8;
     let mut response = vec![0x2B, 0x0E, read_code, 0x02, 0x00, 0x00, count];
     for (id, val) in &objects {
@@ -519,10 +515,10 @@ mod tests {
         let mem = std::sync::Arc::new(std::sync::Mutex::new(SlaveMemory::new()));
         let mut pdu = vec![0x17u8];
         pdu.extend_from_slice(&65535u16.to_be_bytes()); // read addr
-        pdu.extend_from_slice(&125u16.to_be_bytes());   // read qty
-        pdu.extend_from_slice(&0u16.to_be_bytes());     // write addr
-        pdu.extend_from_slice(&1u16.to_be_bytes());     // write qty
-        pdu.push(2);                                     // byte count
+        pdu.extend_from_slice(&125u16.to_be_bytes()); // read qty
+        pdu.extend_from_slice(&0u16.to_be_bytes()); // write addr
+        pdu.extend_from_slice(&1u16.to_be_bytes()); // write qty
+        pdu.push(2); // byte count
         pdu.extend_from_slice(&0x1234u16.to_be_bytes());
         let resp = handle_request(&pdu, &mem).unwrap();
         assert_eq!(resp[0], 0x97);
@@ -583,7 +579,12 @@ mod tests {
         let response = handle_request(&request, &mem).unwrap();
         assert_eq!(response, vec![0x06, 0x00, 0x05, 0x99, 0x99]);
         // 验证写入了
-        assert_eq!(mem.lock().unwrap_or_else(|e| e.into_inner()).holding_registers[5], 0x9999);
+        assert_eq!(
+            mem.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .holding_registers[5],
+            0x9999
+        );
     }
 
     #[test]

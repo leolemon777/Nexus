@@ -286,11 +286,7 @@ pub fn build_fx_links_write_bits_random(
 }
 
 /// TT 回送测试:PLC 原样返回测试数据(布局按 JY992D82001:字符数(2)+测试字符)。
-pub fn build_fx_links_test(
-    station: u8,
-    test_data: &str,
-    delay: u8,
-) -> Result<Vec<u8>, CoreError> {
+pub fn build_fx_links_test(station: u8, test_data: &str, delay: u8) -> Result<Vec<u8>, CoreError> {
     let count = test_data.len();
     if count == 0 || count > 0xFF {
         return Err(err(
@@ -367,7 +363,7 @@ fn parse_stx(bytes: &[u8]) -> Result<FxLinksResponse, CoreError> {
             return Err(err(
                 "FX_LINKS_ETX_MISSING",
                 "STX 响应缺少 ETX(03H) 终止符".into(),
-            ))
+            ));
         }
     };
     if etx < 2 {
@@ -382,12 +378,8 @@ fn parse_stx(bytes: &[u8]) -> Result<FxLinksResponse, CoreError> {
             "ETX 后缺少 2 字符和校验".into(),
         ));
     }
-    let received = parse_two_hex(bytes[etx + 1], bytes[etx + 2]).ok_or_else(|| {
-        err(
-            "FX_LINKS_SUM_MALFORMED",
-            "和校验字符不是 ASCII hex".into(),
-        )
-    })?;
+    let received = parse_two_hex(bytes[etx + 1], bytes[etx + 2])
+        .ok_or_else(|| err("FX_LINKS_SUM_MALFORMED", "和校验字符不是 ASCII hex".into()))?;
     // 和校验覆盖:站号(或数据)首字符 ~ ETX,即 STX 之后全部载荷
     let expected = fx_links_checksum(&bytes[1..=etx]);
     if received != expected {
@@ -399,7 +391,10 @@ fn parse_stx(bytes: &[u8]) -> Result<FxLinksResponse, CoreError> {
     // 站号+PC号前缀:STX 后紧跟 [站号(2 hex)] "FF" 时拆出
     if etx >= 5 && &bytes[3..5] == b"FF" {
         let station = parse_two_hex(bytes[1], bytes[2]).ok_or_else(|| {
-            err("FX_LINKS_STATION_MALFORMED", "站号字符不是 ASCII hex".into())
+            err(
+                "FX_LINKS_STATION_MALFORMED",
+                "站号字符不是 ASCII hex".into(),
+            )
         })?;
         Ok(FxLinksResponse::ReadData {
             station: Some(station),
@@ -432,7 +427,10 @@ fn parse_nak(bytes: &[u8]) -> Result<FxLinksResponse, CoreError> {
     }
     let (station, rest): (Option<u8>, &[u8]) = if hexes.len() >= 2 {
         let station = parse_two_hex(hexes[0], hexes[1]).ok_or_else(|| {
-            err("FX_LINKS_STATION_MALFORMED", "站号字符不是 ASCII hex".into())
+            err(
+                "FX_LINKS_STATION_MALFORMED",
+                "站号字符不是 ASCII hex".into(),
+            )
         })?;
         (Some(station), &hexes[2..])
     } else {
@@ -445,17 +443,19 @@ fn parse_nak(bytes: &[u8]) -> Result<FxLinksResponse, CoreError> {
     };
     let error_code = match rest {
         [single] => hex_digit_value(*single).unwrap_or(0),
-        [high, low] => parse_two_hex(*high, *low).ok_or_else(|| {
-            err("FX_LINKS_NAK_MALFORMED", "错误码字符不是 ASCII hex".into())
-        })?,
+        [high, low] => parse_two_hex(*high, *low)
+            .ok_or_else(|| err("FX_LINKS_NAK_MALFORMED", "错误码字符不是 ASCII hex".into()))?,
         _ => {
             return Err(err(
                 "FX_LINKS_NAK_MALFORMED",
                 "NAK 帧站号/错误码字段长度不符".into(),
-            ))
+            ));
         }
     };
-    Ok(FxLinksResponse::Nak { station, error_code })
+    Ok(FxLinksResponse::Nak {
+        station,
+        error_code,
+    })
 }
 
 /// NAK 错误码 → 人类可读(码值来源 JY992D82001 第 5 章)。
@@ -512,8 +512,8 @@ mod tests {
         assert_eq!(
             frame,
             vec![
-                0x05, 0x30, 0x30, 0x46, 0x46, 0x42, 0x52, 0x30, 0x4D, 0x30, 0x30, 0x36, 0x34,
-                0x30, 0x38, 0x03, 0x33, 0x32, 0x0D, 0x0A,
+                0x05, 0x30, 0x30, 0x46, 0x46, 0x42, 0x52, 0x30, 0x4D, 0x30, 0x30, 0x36, 0x34, 0x30,
+                0x38, 0x03, 0x33, 0x32, 0x0D, 0x0A,
             ]
         );
         // 布局再核对:站号/PC号/命令/延时/软元件字段/点数
@@ -614,11 +614,7 @@ mod tests {
             0x02, 0x30, 0x30, 0x46, 0x46, 0x31, 0x32, 0x33, 0x34, 0x03, 0x42, 0x39, 0x0D, 0x0A,
         ];
         match parse_fx_links_response(&resp).unwrap() {
-            FxLinksResponse::ReadData {
-                station,
-                pc,
-                data,
-            } => {
+            FxLinksResponse::ReadData { station, pc, data } => {
                 assert_eq!(station, Some(0));
                 assert_eq!(pc, Some(0xFF));
                 assert_eq!(data, b"1234");
@@ -632,11 +628,7 @@ mod tests {
     fn parse_stx_response_without_station() {
         let resp = [0x02, 0x30, 0x31, 0x32, 0x33, 0x03, 0x43, 0x39];
         match parse_fx_links_response(&resp).unwrap() {
-            FxLinksResponse::ReadData {
-                station,
-                pc,
-                data,
-            } => {
+            FxLinksResponse::ReadData { station, pc, data } => {
                 assert_eq!(station, None);
                 assert_eq!(pc, None);
                 assert_eq!(data, b"0123");
@@ -648,7 +640,10 @@ mod tests {
     /// ACK(写成功)与 NAK(文档布局:NAK 站号(2) 错误码(2))
     #[test]
     fn parse_ack_and_nak() {
-        assert_eq!(parse_fx_links_response(&[0x06]).unwrap(), FxLinksResponse::Ack);
+        assert_eq!(
+            parse_fx_links_response(&[0x06]).unwrap(),
+            FxLinksResponse::Ack
+        );
         match parse_fx_links_response(&[0x15, 0x30, 0x30, 0x30, 0x36, 0x0D, 0x0A]).unwrap() {
             FxLinksResponse::Nak {
                 station,
@@ -703,26 +698,44 @@ mod tests {
             "FX_LINKS_RESPONSE_EMPTY"
         );
         assert_eq!(
-            parse_fx_links_response(&[0x41, 0x42]).unwrap_err().body().code,
+            parse_fx_links_response(&[0x41, 0x42])
+                .unwrap_err()
+                .body()
+                .code,
             "FX_LINKS_RESPONSE_PREFIX"
         );
         assert_eq!(
-            build_fx_links_request(16, "WR", 0, "").unwrap_err().body().code,
+            build_fx_links_request(16, "WR", 0, "")
+                .unwrap_err()
+                .body()
+                .code,
             "FX_LINKS_STATION_INVALID"
         );
         assert_eq!(
-            build_fx_links_request(0, "ZZ", 0, "").unwrap_err().body().code,
+            build_fx_links_request(0, "ZZ", 0, "")
+                .unwrap_err()
+                .body()
+                .code,
             "FX_LINKS_CMD_UNKNOWN"
         );
         assert_eq!(
-            build_fx_links_request(0, "wr", 0x10, "").unwrap_err().body().code,
+            build_fx_links_request(0, "wr", 0x10, "")
+                .unwrap_err()
+                .body()
+                .code,
             "FX_LINKS_DELAY_INVALID"
         );
         assert_eq!(
-            build_fx_links_request(0, "WR", 0, "AB\nCD").unwrap_err().body().code,
+            build_fx_links_request(0, "WR", 0, "AB\nCD")
+                .unwrap_err()
+                .body()
+                .code,
             "FX_LINKS_DATA_INVALID"
         );
         // 小写命令自动转大写
-        assert_eq!(&build_fx_links_request(0, "wr", 0, "").unwrap()[5..7], b"WR");
+        assert_eq!(
+            &build_fx_links_request(0, "wr", 0, "").unwrap()[5..7],
+            b"WR"
+        );
     }
 }

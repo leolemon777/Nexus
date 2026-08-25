@@ -91,9 +91,17 @@ impl DataType {
             Self::StringAscii | Self::StringUtf8 => 0, // 变长,由调用者指定
             Self::EnronFloat | Self::EnronFloatLe => 2, // ENRON 32位寄存器 = 2个16位
             _ => match self {
-                Self::Signed64Be | Self::Signed64Le | Self::Signed64BeSwap | Self::Signed64LeSwap
-                | Self::Unsigned64Be | Self::Unsigned64Le | Self::Unsigned64BeSwap
-                | Self::Unsigned64LeSwap | Self::DoubleBe | Self::DoubleLe | Self::DoubleBeSwap
+                Self::Signed64Be
+                | Self::Signed64Le
+                | Self::Signed64BeSwap
+                | Self::Signed64LeSwap
+                | Self::Unsigned64Be
+                | Self::Unsigned64Le
+                | Self::Unsigned64BeSwap
+                | Self::Unsigned64LeSwap
+                | Self::DoubleBe
+                | Self::DoubleLe
+                | Self::DoubleBeSwap
                 | Self::DoubleLeSwap => 4,
                 _ => 2, // 32 位类型
             },
@@ -163,8 +171,12 @@ fn decode_single(regs: &[u16], data_type: DataType) -> DecodedValue {
         DataType::Unsigned16 => DecodedValue::U64(u64::from(regs[0])),
         DataType::Hex16 => DecodedValue::String(format!("0x{:04X}", regs[0])),
         DataType::Binary16 => DecodedValue::String(format!("{:016b}", regs[0])),
-        DataType::Signed32Be => DecodedValue::I64(i64::from(merge_u32(regs, ByteOrder::Abcd) as i32)),
-        DataType::Signed32Le => DecodedValue::I64(i64::from(merge_u32(regs, ByteOrder::Dcba) as i32)),
+        DataType::Signed32Be => {
+            DecodedValue::I64(i64::from(merge_u32(regs, ByteOrder::Abcd) as i32))
+        }
+        DataType::Signed32Le => {
+            DecodedValue::I64(i64::from(merge_u32(regs, ByteOrder::Dcba) as i32))
+        }
         DataType::Signed32BeSwap => {
             DecodedValue::I64(i64::from(merge_u32(regs, ByteOrder::Badc) as i32))
         }
@@ -173,38 +185,34 @@ fn decode_single(regs: &[u16], data_type: DataType) -> DecodedValue {
         }
         DataType::Unsigned32Be => DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Abcd))),
         DataType::Unsigned32Le => DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Dcba))),
-        DataType::Unsigned32BeSwap => DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Badc))),
-        DataType::Unsigned32LeSwap => DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Cdab))),
-        DataType::FloatBe => DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Abcd)))),
-        DataType::FloatLe => DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Dcba)))),
+        DataType::Unsigned32BeSwap => {
+            DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Badc)))
+        }
+        DataType::Unsigned32LeSwap => {
+            DecodedValue::U64(u64::from(merge_u32(regs, ByteOrder::Cdab)))
+        }
+        DataType::FloatBe => {
+            DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Abcd))))
+        }
+        DataType::FloatLe => {
+            DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Dcba))))
+        }
         DataType::FloatBeSwap => {
             DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Badc))))
         }
         DataType::FloatLeSwap => {
             DecodedValue::F64(f64::from(f32_from_bits(merge_u32(regs, ByteOrder::Cdab))))
         }
-        DataType::Signed64Be => {
-            DecodedValue::I64(merge_u64(regs, ByteOrder::Abcd) as i64)
-        }
-        DataType::Signed64Le => {
-            DecodedValue::I64(merge_u64(regs, ByteOrder::Dcba) as i64)
-        }
-        DataType::Signed64BeSwap => {
-            DecodedValue::I64(merge_u64(regs, ByteOrder::Badc) as i64)
-        }
-        DataType::Signed64LeSwap => {
-            DecodedValue::I64(merge_u64(regs, ByteOrder::Cdab) as i64)
-        }
+        DataType::Signed64Be => DecodedValue::I64(merge_u64(regs, ByteOrder::Abcd) as i64),
+        DataType::Signed64Le => DecodedValue::I64(merge_u64(regs, ByteOrder::Dcba) as i64),
+        DataType::Signed64BeSwap => DecodedValue::I64(merge_u64(regs, ByteOrder::Badc) as i64),
+        DataType::Signed64LeSwap => DecodedValue::I64(merge_u64(regs, ByteOrder::Cdab) as i64),
         DataType::Unsigned64Be => DecodedValue::U64(merge_u64(regs, ByteOrder::Abcd)),
         DataType::Unsigned64Le => DecodedValue::U64(merge_u64(regs, ByteOrder::Dcba)),
         DataType::Unsigned64BeSwap => DecodedValue::U64(merge_u64(regs, ByteOrder::Badc)),
         DataType::Unsigned64LeSwap => DecodedValue::U64(merge_u64(regs, ByteOrder::Cdab)),
-        DataType::DoubleBe => {
-            DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Abcd)))
-        }
-        DataType::DoubleLe => {
-            DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Dcba)))
-        }
+        DataType::DoubleBe => DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Abcd))),
+        DataType::DoubleLe => DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Dcba))),
         DataType::DoubleBeSwap => {
             DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Badc)))
         }
@@ -212,11 +220,17 @@ fn decode_single(regs: &[u16], data_type: DataType) -> DecodedValue {
             DecodedValue::F64(f64_from_bits(merge_u64(regs, ByteOrder::Cdab)))
         }
         DataType::StringAscii => {
-            let bytes: Vec<u8> = regs.iter().flat_map(|r| [(*r >> 8) as u8, *r as u8]).collect();
+            let bytes: Vec<u8> = regs
+                .iter()
+                .flat_map(|r| [(*r >> 8) as u8, *r as u8])
+                .collect();
             DecodedValue::String(String::from_utf8_lossy(&strip_trailing_zeros(&bytes)).to_string())
         }
         DataType::StringUtf8 => {
-            let bytes: Vec<u8> = regs.iter().flat_map(|r| [(*r >> 8) as u8, *r as u8]).collect();
+            let bytes: Vec<u8> = regs
+                .iter()
+                .flat_map(|r| [(*r >> 8) as u8, *r as u8])
+                .collect();
             DecodedValue::String(String::from_utf8_lossy(&bytes).to_string())
         }
         // ENRON/DANIEL:32 位寄存器存 IEEE-754 float(大端)
@@ -250,10 +264,18 @@ fn merge_u64(regs: &[u16], order: ByteOrder) -> u64 {
         regs[3].to_be_bytes(),
     ]; // [[A,B],[C,D],[E,F],[G,H]]
     let bytes = match order {
-        ByteOrder::Abcd => [b[0][0], b[0][1], b[1][0], b[1][1], b[2][0], b[2][1], b[3][0], b[3][1]],
-        ByteOrder::Dcba => [b[3][1], b[3][0], b[2][1], b[2][0], b[1][1], b[1][0], b[0][1], b[0][0]],
-        ByteOrder::Badc => [b[0][1], b[0][0], b[1][1], b[1][0], b[2][1], b[2][0], b[3][1], b[3][0]],
-        ByteOrder::Cdab => [b[1][0], b[1][1], b[0][0], b[0][1], b[3][0], b[3][1], b[2][0], b[2][1]],
+        ByteOrder::Abcd => [
+            b[0][0], b[0][1], b[1][0], b[1][1], b[2][0], b[2][1], b[3][0], b[3][1],
+        ],
+        ByteOrder::Dcba => [
+            b[3][1], b[3][0], b[2][1], b[2][0], b[1][1], b[1][0], b[0][1], b[0][0],
+        ],
+        ByteOrder::Badc => [
+            b[0][1], b[0][0], b[1][1], b[1][0], b[2][1], b[2][0], b[3][1], b[3][0],
+        ],
+        ByteOrder::Cdab => [
+            b[1][0], b[1][1], b[0][0], b[0][1], b[3][0], b[3][1], b[2][0], b[2][1],
+        ],
     };
     u64::from_be_bytes(bytes)
 }

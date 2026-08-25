@@ -3,16 +3,12 @@
 //! 内存:CIO/W/H/A 各 32768 字(线性字空间),DM 32768 字,TIM/CNT 8192 字。
 //! 位访问按「字偏移×16+位」线性换算;位读响应每位 1 字节(0/1),位写数据同理。
 
-use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
 
 use crate::error::CoreError;
-use crate::fins_address::area;
-use crate::fins_frame::{
-    build_tcp_handshake, parse_response_frame, read_tcp_frame, wrap_tcp, write_frame, FinsNodes,
-};
+use crate::fins_address::{FinsAddress, FinsKind, area};
+use crate::fins_frame::{FinsNodes, read_tcp_frame, validate_access_window, wrap_tcp, write_frame};
 
 const WORDS: usize = 32768;
 const TC_WORDS: usize = 8192;
@@ -91,7 +87,7 @@ pub fn handle_fins_request(app: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> Vec<u8> 
 }
 
 fn error_response(req: &[u8], code: u16) -> Vec<u8> {
-    let mut resp = Vec::with_capacity(13);
+    let mut resp = Vec::with_capacity(14);
     let head_len = req.len().min(10);
     resp.extend_from_slice(&req[..head_len]);
     if head_len == 10 {
@@ -100,6 +96,12 @@ fn error_response(req: &[u8], code: u16) -> Vec<u8> {
         resp.resize(10, 0);
         resp[0] = 0xC0;
     }
+    let service = if req.len() >= 12 {
+        &req[10..12]
+    } else {
+        &[0x01, 0x01]
+    };
+    resp.extend_from_slice(service);
     resp.extend_from_slice(&code.to_be_bytes());
     resp
 }
@@ -115,10 +117,43 @@ fn parse_params(tail: &[u8]) -> Option<(u8, u32, u16)> {
     Some((area_code, address, count))
 }
 
+fn validate_request(
+    word_bit: u8,
+    area_code: u8,
+    address: u32,
+    count: u16,
+) -> Result<FinsAddress, u16> {
+    let kind = match word_bit {
+        0x00 => FinsKind::Bit,
+        0x01 => FinsKind::Word,
+        _ => return Err(0x0004),
+    };
+    let addr = FinsAddress {
+        area_code,
+        address,
+        kind,
+    };
+    validate_access_window(&addr, count).map_err(|error| match error {
+        CoreError::Modbus {
+            code: "FINS_BATCH_LIMIT",
+            ..
+        } => 0x0004u16,
+        CoreError::Modbus {
+            code: "FINS_ADDRESS_RANGE",
+            ..
+        } => 0x0203u16,
+        _ => 0x0004u16,
+    })?;
+    Ok(addr)
+}
+
 fn handle_read(word_bit: u8, tail: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> (u16, Vec<u8>) {
     let Some((area_code, address, count)) = parse_params(tail) else {
         return (0x0004, Vec::new());
     };
+    if let Err(code) = validate_request(word_bit, area_code, address, count) {
+        return (code, Vec::new());
+    }
     let mut m = mem.lock().unwrap_or_else(|e| e.into_inner());
     let Some(bank) = m.bank_mut(area_code) else {
         return (0x0201, Vec::new()); // 区代码错误
@@ -155,6 +190,9 @@ fn handle_write(word_bit: u8, tail: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> (u16
     let Some((area_code, address, count)) = parse_params(tail) else {
         return (0x0004, Vec::new());
     };
+    if let Err(code) = validate_request(word_bit, area_code, address, count) {
+        return (code, Vec::new());
+    }
     let data = &tail[6..];
     let mut m = mem.lock().unwrap_or_else(|e| e.into_inner());
     let Some(bank) = m.bank_mut(area_code) else {
@@ -162,7 +200,7 @@ fn handle_write(word_bit: u8, tail: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> (u16
     };
     let n = count as usize;
     if word_bit == 0x00 {
-        if data.len() < n {
+        if data.len() != n {
             return (0x0004, Vec::new());
         }
         let word_addr = (address / 16) as usize;
@@ -181,7 +219,7 @@ fn handle_write(word_bit: u8, tail: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> (u16
         }
         (0x0000, Vec::new())
     } else {
-        if data.len() < n * 2 {
+        if data.len() != n * 2 {
             return (0x0004, Vec::new());
         }
         let start = address as usize;
@@ -198,7 +236,11 @@ fn handle_write(word_bit: u8, tail: &[u8], mem: &Arc<Mutex<FinsMemory>>) -> (u16
 // ============ TCP 服务 ============
 
 // TCP 主循环:accept + 每连接处理循环(read_tcp_frame → handle → wrap 回写)
-pub fn fins_tcp_accept_loop(listener: TcpListener, memory: Arc<Mutex<FinsMemory>>, running: Arc<Mutex<bool>>) {
+pub fn fins_tcp_accept_loop(
+    listener: TcpListener,
+    memory: Arc<Mutex<FinsMemory>>,
+    running: Arc<Mutex<bool>>,
+) {
     let _ = listener.set_nonblocking(true);
     while *running.lock().unwrap_or_else(|e| e.into_inner()) {
         match listener.accept() {
@@ -215,7 +257,11 @@ pub fn fins_tcp_accept_loop(listener: TcpListener, memory: Arc<Mutex<FinsMemory>
     }
 }
 
-fn fins_serve_tcp(mut stream: TcpStream, memory: Arc<Mutex<FinsMemory>>, running: Arc<Mutex<bool>>) {
+fn fins_serve_tcp(
+    mut stream: TcpStream,
+    memory: Arc<Mutex<FinsMemory>>,
+    running: Arc<Mutex<bool>>,
+) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(200)));
     // 握手
@@ -224,7 +270,11 @@ fn fins_serve_tcp(mut stream: TcpStream, memory: Arc<Mutex<FinsMemory>>, running
         Ok(f) => f,
         Err(_) => return,
     };
-    let client_node = if first.len() >= 10 { u16::from_be_bytes([first[8], first[9]]) } else { 0 };
+    let client_node = if first.len() >= 10 {
+        u16::from_be_bytes([first[8], first[9]])
+    } else {
+        0
+    };
     let mut hs = Vec::with_capacity(20);
     hs.extend_from_slice(b"FINS");
     // length = cmd(4)+err(4)+server_node(2)+client_node(2) = 12
@@ -267,15 +317,24 @@ pub fn fins_udp_loop(socket: UdpSocket, memory: Arc<Mutex<FinsMemory>>, running:
                 let resp = handle_fins_request(&buf[..n], &memory);
                 let _ = socket.send_to(&resp, peer);
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
-                || e.kind() == std::io::ErrorKind::TimedOut => continue,
+            Err(ref e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue;
+            }
             Err(_) => break,
         }
     }
 }
 
 /// 直读内存(测试/JSONL 从站 set/get)。
-pub fn memory_read(mem: &FinsMemory, area_code: u8, word_addr: usize, count: usize) -> Option<Vec<u16>> {
+pub fn memory_read(
+    mem: &FinsMemory,
+    area_code: u8,
+    word_addr: usize,
+    count: usize,
+) -> Option<Vec<u16>> {
     let bank = match area_code {
         area::CIO_WORD => &mem.cio,
         area::W_WORD => &mem.w,
@@ -291,7 +350,12 @@ pub fn memory_read(mem: &FinsMemory, area_code: u8, word_addr: usize, count: usi
     Some(bank[word_addr..word_addr + count].to_vec())
 }
 
-pub fn memory_write(mem: &mut FinsMemory, area_code: u8, word_addr: usize, values: &[u16]) -> Option<()> {
+pub fn memory_write(
+    mem: &mut FinsMemory,
+    area_code: u8,
+    word_addr: usize,
+    values: &[u16],
+) -> Option<()> {
     let bank = match area_code {
         area::CIO_WORD => &mut mem.cio,
         area::W_WORD => &mut mem.w,
@@ -317,7 +381,7 @@ pub fn default_nodes() -> FinsNodes {
 mod tests {
     use super::*;
     use crate::fins_address::parse_fins_address;
-    use crate::fins_frame::{build_read_frame, build_write_frame};
+    use crate::fins_frame::{build_read_frame, build_write_frame, parse_response_frame};
 
     fn mem_seeded() -> Arc<Mutex<FinsMemory>> {
         let mut m = FinsMemory::new();
@@ -344,7 +408,10 @@ mod tests {
         let resp = handle_fins_request(&req, &mem);
         assert_eq!(parse_response_frame(&resp).unwrap().end_code, 0);
         let rd = handle_fins_request(&build_read_frame(&default_nodes(), 3, &addr, 2), &mem);
-        assert_eq!(parse_response_frame(&rd).unwrap().data, vec![0xCA, 0xFE, 0xBA, 0xBE]);
+        assert_eq!(
+            parse_response_frame(&rd).unwrap().data,
+            vec![0xCA, 0xFE, 0xBA, 0xBE]
+        );
     }
 
     #[test]
@@ -355,7 +422,10 @@ mod tests {
         let rd = handle_fins_request(&build_read_frame(&default_nodes(), 1, &addr, 4), &mem);
         assert_eq!(parse_response_frame(&rd).unwrap().data, vec![1, 1, 1, 1]); // 0xBEEF 低4位
         // 写 CIO0.00=0(清 bit0) → 0xBEEF & ~0x1 = 0xBEEE
-        let wr = handle_fins_request(&build_write_frame(&default_nodes(), 2, &addr, 1, &[0]), &mem);
+        let wr = handle_fins_request(
+            &build_write_frame(&default_nodes(), 2, &addr, 1, &[0]),
+            &mem,
+        );
         assert_eq!(parse_response_frame(&wr).unwrap().end_code, 0);
         assert_eq!(mem.lock().unwrap().cio[0], 0xBEEE);
     }
@@ -384,5 +454,43 @@ mod tests {
         req[13] = 0x99; // 区代码改坏
         let rd = handle_fins_request(&req, &mem);
         assert_eq!(parse_response_frame(&rd).unwrap().end_code, 0x0201);
+    }
+
+    #[test]
+    fn virtual_slave_rejects_unsafe_batch_and_malformed_write_tail() {
+        let mem = mem_seeded();
+        let addr = parse_fins_address("D100").unwrap();
+        let oversized = handle_fins_request(
+            &build_read_frame(
+                &default_nodes(),
+                1,
+                &addr,
+                crate::fins_frame::FINS_MAX_POINTS + 1,
+            ),
+            &mem,
+        );
+        assert_eq!(parse_response_frame(&oversized).unwrap().end_code, 0x0004);
+
+        let mut bad_flag = build_read_frame(&default_nodes(), 2, &addr, 1);
+        bad_flag[12] = 0x02;
+        assert_eq!(
+            parse_response_frame(&handle_fins_request(&bad_flag, &mem))
+                .unwrap()
+                .end_code,
+            0x0004
+        );
+
+        let extra_data = build_write_frame(&default_nodes(), 3, &addr, 1, &[0x12, 0x34, 0x56]);
+        assert_eq!(
+            parse_response_frame(&handle_fins_request(&extra_data, &mem))
+                .unwrap()
+                .end_code,
+            0x0004
+        );
+
+        let short = handle_fins_request(&[0u8; 10], &mem);
+        let parsed = parse_response_frame(&short).unwrap();
+        assert_eq!(parsed.end_code, 0x0004);
+        assert_eq!(parsed.sid, 0);
     }
 }

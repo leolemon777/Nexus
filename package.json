@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "description": "Electron desktop shell with a Rust protocol core for industrial serial and Modbus tooling.",
+  "engines": {
+    "node": "26.1.0",
+    "npm": "11.13.0"
+  },
   "productName": "Nexus 2.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -12,14 +16,31 @@
     "build": "vite build",
     "build:rust-core": "cargo build --manifest-path rust-core/Cargo.toml",
     "package:portable": "pwsh -NoProfile -File scripts/package-portable.ps1",
+    "package:portable:candidate": "pwsh -NoProfile -File scripts/package-portable.ps1 -AllowDirty",
+    "release:metadata": "node scripts/generate-release-metadata.cjs",
+    "release:metadata:candidate": "node scripts/generate-release-metadata.cjs --allow-dirty",
+    "supply:report": "node scripts/supply-chain-report.cjs",
+    "supply:licenses": "node scripts/license-report.cjs",
+    "release:notes": "node scripts/release-notes.cjs archive",
+    "rollback:verify": "node scripts/release-rollback.cjs verify",
+    "evidence:candidate": "node scripts/build-evidence.cjs --plan scripts/build-evidence.candidate.json --output evidence/build/candidate --allow-dirty",
+    "preflight:toolchain": "node scripts/toolchain-preflight.cjs",
     "postinstall": "node scripts/ensure-electron.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "electron": "electron .",
     "start": "npm run build && electron .",
     "smoke:electron": "node scripts/smoke-electron.mjs",
     "smoke:portable": "node scripts/smoke-portable.mjs",
-    "test:electron": "node --test electron/*.test.cjs",
+    "rehearse:desktop": "node scripts/rehearse-desktop.cjs all",
+    "rehearse:hardware": "node scripts/rehearse-hardware.cjs check",
+    "soak:r0": "node scripts/soak-r0.cjs",
+    "test:electron": "node --test electron/*.test.cjs scripts/generate-release-metadata.test.cjs scripts/release-notes.test.cjs scripts/build-evidence.test.cjs scripts/toolchain-preflight.test.cjs scripts/supply-chain-report.test.cjs scripts/license-report.test.cjs scripts/release-secret-scan.test.cjs",
     "test:rust-core": "cargo test --manifest-path rust-core/Cargo.toml",
+    "test:rust-jsonl": "pwsh -NoProfile -File scripts/test-rust-jsonl.ps1",
+    "test:bacnet-bacstack": "node --test scripts/bacnet-bacstack-integration.test.cjs",
+    "test:knx-stack": "node --test scripts/knx-independent-stack-integration.test.cjs",
+    "test:soak-harness": "node --test scripts/soak-r0.test.cjs",
+    "audit": "npm audit --audit-level=moderate",
     "fmt:rust-core": "cargo fmt --manifest-path rust-core/Cargo.toml --all -- --check",
     "tauri": "tauri"
   },
@@ -29,8 +50,18 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.0",
+    "aedes": "^1.1.1",
+    "bacstack": "^0.0.1-beta.14",
     "electron": "43.1.0",
+    "knx": "^2.5.4",
+    "mqtt": "^5.15.2",
+    "rcedit": "^5.0.2",
     "vite": "^7.1.0"
+  },
+  "overrides": {
+    "knx": {
+      "binary-parser": "^2.3.0"
+    }
   },
   "build": {
     "appId": "com.nexus2.app",

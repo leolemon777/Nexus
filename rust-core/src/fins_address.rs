@@ -49,7 +49,11 @@ pub struct FinsAddress {
 }
 
 fn invalid(msg: &str) -> CoreError {
-    CoreError::Modbus { code: "FINS_ADDRESS_INVALID", message: msg.to_string(), details: None }
+    CoreError::Modbus {
+        code: "FINS_ADDRESS_INVALID",
+        message: msg.to_string(),
+        details: None,
+    }
 }
 
 fn manual(what: &str) -> CoreError {
@@ -75,13 +79,21 @@ pub fn parse_fins_address(input: &str) -> Result<FinsAddress, CoreError> {
     // TIM/CNT 当前值:T0 / C5(无小数位)
     if let Some(rest) = s.strip_prefix('T') {
         if let Some(n) = parse_dec(rest) {
-            return Ok(FinsAddress { area_code: area::TIMER_CNT_WORD, address: n, kind: FinsKind::TimerCntWord });
+            return Ok(FinsAddress {
+                area_code: area::TIMER_CNT_WORD,
+                address: n,
+                kind: FinsKind::TimerCntWord,
+            });
         }
     }
     if let Some(rest) = s.strip_prefix('C') {
         // C5 = 计数器当前值(不是 CS 触点)
         if let Some(n) = parse_dec(rest) {
-            return Ok(FinsAddress { area_code: area::TIMER_CNT_WORD, address: n, kind: FinsKind::TimerCntWord });
+            return Ok(FinsAddress {
+                area_code: area::TIMER_CNT_WORD,
+                address: n,
+                kind: FinsKind::TimerCntWord,
+            });
         }
     }
     if s.starts_with("TS") || s.starts_with("CS") || s.starts_with("CF") || s.starts_with("E") {
@@ -114,14 +126,36 @@ pub fn parse_fins_address(input: &str) -> Result<FinsAddress, CoreError> {
 
     match (prefix, bit_str) {
         // 纯字访问
-        ("D", None) => Ok(FinsAddress { area_code: area::DM_WORD, address: word, kind: FinsKind::Word }),
-        ("CIO", None) => Ok(FinsAddress { area_code: area::CIO_WORD, address: word, kind: FinsKind::Word }),
-        ("W", None) => Ok(FinsAddress { area_code: area::W_WORD, address: word, kind: FinsKind::Word }),
-        ("H", None) => Ok(FinsAddress { area_code: area::H_WORD, address: word, kind: FinsKind::Word }),
-        ("A", None) => Ok(FinsAddress { area_code: area::A_WORD, address: word, kind: FinsKind::Word }),
+        ("D", None) => Ok(FinsAddress {
+            area_code: area::DM_WORD,
+            address: word,
+            kind: FinsKind::Word,
+        }),
+        ("CIO", None) => Ok(FinsAddress {
+            area_code: area::CIO_WORD,
+            address: word,
+            kind: FinsKind::Word,
+        }),
+        ("W", None) => Ok(FinsAddress {
+            area_code: area::W_WORD,
+            address: word,
+            kind: FinsKind::Word,
+        }),
+        ("H", None) => Ok(FinsAddress {
+            area_code: area::H_WORD,
+            address: word,
+            kind: FinsKind::Word,
+        }),
+        ("A", None) => Ok(FinsAddress {
+            area_code: area::A_WORD,
+            address: word,
+            kind: FinsKind::Word,
+        }),
         // 位访问:字×16+位
         (_, Some(b)) if matches!(prefix, "D" | "CIO" | "W" | "H" | "A") => {
-            let bit: u32 = b.parse().map_err(|_| invalid(&format!("「{input}」位偏移「{b}」不合法")))?;
+            let bit: u32 = b
+                .parse()
+                .map_err(|_| invalid(&format!("「{input}」位偏移「{b}」不合法")))?;
             if bit > 15 {
                 return Err(invalid(&format!("「{input}」位偏移应为 00-15")));
             }
@@ -133,7 +167,11 @@ pub fn parse_fins_address(input: &str) -> Result<FinsAddress, CoreError> {
                 "A" => area::A_BIT,
                 _ => unreachable!(),
             };
-            Ok(FinsAddress { area_code: code, address: word * 16 + bit, kind: FinsKind::Bit })
+            Ok(FinsAddress {
+                area_code: code,
+                address: word * 16 + bit,
+                kind: FinsKind::Bit,
+            })
         }
         _ => unreachable!("前缀已限定"),
     }
@@ -142,7 +180,11 @@ pub fn parse_fins_address(input: &str) -> Result<FinsAddress, CoreError> {
 impl FinsAddress {
     /// FINS 帧内 3 字节地址(大端)。
     pub fn encode(&self) -> [u8; 3] {
-        [(self.address >> 16) as u8, (self.address >> 8) as u8, self.address as u8]
+        [
+            (self.address >> 16) as u8,
+            (self.address >> 8) as u8,
+            self.address as u8,
+        ]
     }
 
     /// 0101/0102 的 word/bit 标志:0x00 位 / 0x01 字(TIM/CNT 0x80 固定按字)。
@@ -168,7 +210,10 @@ mod tests {
     #[test]
     fn word_addresses() {
         let d = parse_fins_address("D100").unwrap();
-        assert_eq!((d.area_code, d.address, d.kind), (area::DM_WORD, 100, FinsKind::Word));
+        assert_eq!(
+            (d.area_code, d.address, d.kind),
+            (area::DM_WORD, 100, FinsKind::Word)
+        );
         let cio = parse_fins_address("CIO50").unwrap();
         assert_eq!((cio.area_code, cio.address), (area::CIO_WORD, 50));
         let w = parse_fins_address("W0").unwrap();
@@ -183,8 +228,14 @@ mod tests {
     fn bit_addresses_linear_encoding() {
         // D100.15 → DM_BIT, 100×16+15 = 1615
         let d = parse_fins_address("D100.15").unwrap();
-        assert_eq!((d.area_code, d.address, d.kind), (area::DM_BIT, 1615, FinsKind::Bit));
-        assert_eq!(d.encode(), [(1615 >> 16) as u8, (1615 >> 8) as u8, (1615 & 0xFF) as u8]);
+        assert_eq!(
+            (d.area_code, d.address, d.kind),
+            (area::DM_BIT, 1615, FinsKind::Bit)
+        );
+        assert_eq!(
+            d.encode(),
+            [(1615 >> 16) as u8, (1615 >> 8) as u8, (1615 & 0xFF) as u8]
+        );
         // CIO10.00 → 160
         let cio = parse_fins_address("CIO10.00").unwrap();
         assert_eq!((cio.area_code, cio.address), (area::CIO_BIT, 160));
@@ -195,7 +246,10 @@ mod tests {
     #[test]
     fn timer_counter_current_values() {
         let t = parse_fins_address("T0").unwrap();
-        assert_eq!((t.area_code, t.kind), (area::TIMER_CNT_WORD, FinsKind::TimerCntWord));
+        assert_eq!(
+            (t.area_code, t.kind),
+            (area::TIMER_CNT_WORD, FinsKind::TimerCntWord)
+        );
         let c = parse_fins_address("C5").unwrap();
         assert_eq!(c.area_code, area::TIMER_CNT_WORD);
         assert_eq!(c.word_bit_flag(), 0x01);
@@ -221,7 +275,13 @@ mod tests {
 
     #[test]
     fn case_insensitive() {
-        assert_eq!(parse_fins_address(" d100 ").unwrap(), parse_fins_address("D100").unwrap());
-        assert_eq!(parse_fins_address("cio10.00").unwrap().area_code, area::CIO_BIT);
+        assert_eq!(
+            parse_fins_address(" d100 ").unwrap(),
+            parse_fins_address("D100").unwrap()
+        );
+        assert_eq!(
+            parse_fins_address("cio10.00").unwrap().area_code,
+            area::CIO_BIT
+        );
     }
 }

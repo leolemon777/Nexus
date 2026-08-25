@@ -18,7 +18,11 @@ pub const OPC_WRITE_REQ: u8 = 0x03;
 pub const OPC_WRITE_RESP: u8 = 0x04;
 
 fn fw_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "S7_FW_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "S7_FW_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 /// ORG 区码 ↔ 名称
@@ -59,20 +63,48 @@ pub fn parse_response(buf: &[u8]) -> Result<(u8, u8, Vec<u8>), CoreError> {
     if buf.len() < 16 || &buf[..3] != b"S5\x10" {
         return Err(fw_err("不是 Fetch/Write 响应(S5 头不符)"));
     }
+    if buf[4] != 0x03 || buf[6] != 0x03 || buf[7] != 0x08 || buf[14] != 0xFF || buf[15] != 0x02 {
+        return Err(fw_err("Fetch/Write 响应固定头字段不匹配"));
+    }
     let opc = buf[5];
+    if opc != OPC_FETCH_RESP && opc != OPC_WRITE_RESP {
+        return Err(fw_err(format!("未知 Fetch/Write 响应 OPC 0x{opc:02X}")));
+    }
     let err = buf[8];
+    let declared_length = u16::from_be_bytes([buf[12], buf[13]]) as usize;
     let data = buf[16..].to_vec();
+    if err == 0 {
+        match opc {
+            OPC_FETCH_RESP if buf.len() != 16 + declared_length => {
+                return Err(fw_err(format!(
+                    "Fetch 成功响应长度 {}，头部声明 {}",
+                    data.len(),
+                    declared_length
+                )));
+            }
+            OPC_WRITE_RESP if buf.len() != 16 => {
+                return Err(fw_err(format!("Write 成功响应不应带数据({}B)", data.len())));
+            }
+            _ => {}
+        }
+    } else if buf.len() != 16 {
+        return Err(fw_err(format!("错误响应不应带额外数据({}B)", data.len())));
+    }
     Ok((opc, err, data))
 }
 
 /// 按 length 字段读取完整帧(头 16B 定长,响应长度 = 16 + 请求数据量,由调用方按需读)。
 pub fn read_fw_response<R: Read>(reader: &mut R, expect_data: usize) -> Result<Vec<u8>, CoreError> {
     let mut head = [0u8; 16];
-    reader.read_exact(&mut head).map_err(|e| fw_err(format!("读 Fetch/Write 头失败:{e}")))?;
+    reader
+        .read_exact(&mut head)
+        .map_err(|e| fw_err(format!("读 Fetch/Write 头失败:{e}")))?;
     let mut frame = head.to_vec();
     if expect_data > 0 {
         let mut rest = vec![0u8; expect_data];
-        reader.read_exact(&mut rest).map_err(|e| fw_err(format!("读数据失败:{e}")))?;
+        reader
+            .read_exact(&mut rest)
+            .map_err(|e| fw_err(format!("读数据失败:{e}")))?;
         frame.extend_from_slice(&rest);
     }
     Ok(frame)
@@ -100,7 +132,11 @@ impl FwMemory {
     }
     fn bank(&mut self, org: u8, db: u8) -> Option<&mut Vec<u8>> {
         match org {
-            0x01 => Some(self.dbs.entry(db as u16).or_insert_with(|| vec![0; 64 * 1024])),
+            0x01 => Some(
+                self.dbs
+                    .entry(db as u16)
+                    .or_insert_with(|| vec![0; 64 * 1024]),
+            ),
             0x02 => Some(&mut self.m),
             0x03 => Some(&mut self.i),
             0x04 => Some(&mut self.q),
@@ -121,6 +157,14 @@ pub fn handle_fw_request(frame: &[u8], mem: &Arc<Mutex<FwMemory>>) -> Result<Vec
     if frame.len() < 16 || &frame[..3] != b"S5\x10" {
         return Err(fw_err("S5 头不符"));
     }
+    if frame[4] != 0x03
+        || frame[6] != 0x03
+        || frame[7] != 0x08
+        || frame[14] != 0xFF
+        || frame[15] != 0x02
+    {
+        return Err(fw_err("Fetch/Write 请求固定头字段不匹配"));
+    }
     let opc = frame[5];
     let org = frame[8];
     let db = frame[9];
@@ -130,38 +174,78 @@ pub fn handle_fw_request(frame: &[u8], mem: &Arc<Mutex<FwMemory>>) -> Result<Vec
     match opc {
         OPC_FETCH_REQ => {
             let Some(bank) = m.bank(org, db) else {
-                return Ok(fw_error_response(org, db, address as u16, length as u16, 0x03));
+                return Ok(fw_error_response(
+                    OPC_FETCH_RESP,
+                    org,
+                    db,
+                    address as u16,
+                    length as u16,
+                    0x03,
+                ));
             };
             if address + length > bank.len() {
-                return Ok(fw_error_response(org, db, address as u16, length as u16, 0x05));
+                return Ok(fw_error_response(
+                    OPC_FETCH_RESP,
+                    org,
+                    db,
+                    address as u16,
+                    length as u16,
+                    0x05,
+                ));
             }
-            let mut resp = fw_error_response(org, db, address as u16, length as u16, 0x00);
-            resp[5] = OPC_FETCH_RESP;
+            let mut resp =
+                fw_error_response(OPC_FETCH_RESP, org, db, address as u16, length as u16, 0x00);
             resp.extend_from_slice(&bank[address..address + length]);
             Ok(resp)
         }
         OPC_WRITE_REQ => {
             let data = &frame[16..];
-            if data.len() < length {
-                return Err(fw_err("写数据不足"));
+            if data.len() != length {
+                return Err(fw_err(format!(
+                    "写数据长度 {} 与头部声明 {} 不一致",
+                    data.len(),
+                    length
+                )));
             }
             let Some(bank) = m.bank(org, db) else {
-                return Ok(fw_error_response(org, db, address as u16, length as u16, 0x03));
+                return Ok(fw_error_response(
+                    OPC_WRITE_RESP,
+                    org,
+                    db,
+                    address as u16,
+                    length as u16,
+                    0x03,
+                ));
             };
             if address + length > bank.len() {
-                return Ok(fw_error_response(org, db, address as u16, length as u16, 0x05));
+                return Ok(fw_error_response(
+                    OPC_WRITE_RESP,
+                    org,
+                    db,
+                    address as u16,
+                    length as u16,
+                    0x05,
+                ));
             }
             bank[address..address + length].copy_from_slice(&data[..length]);
-            let mut resp = fw_error_response(org, db, address as u16, length as u16, 0x00);
-            resp[5] = OPC_WRITE_RESP;
+            let resp =
+                fw_error_response(OPC_WRITE_RESP, org, db, address as u16, length as u16, 0x00);
             Ok(resp)
         }
         _ => Err(fw_err(format!("未知 OPC 0x{opc:02X}"))),
     }
 }
 
-fn fw_error_response(org: u8, db: u8, address: u16, length: u16, error: u8) -> Vec<u8> {
+fn fw_error_response(
+    response_opc: u8,
+    org: u8,
+    db: u8,
+    address: u16,
+    length: u16,
+    error: u8,
+) -> Vec<u8> {
     let mut f = build_fetch(org, db, address, length);
+    f[5] = response_opc;
     f[8] = error;
     f
 }
@@ -197,8 +281,7 @@ fn fw_serve(mut stream: TcpStream, mem: Arc<Mutex<FwMemory>>, running: Arc<Mutex
                 pending.extend_from_slice(&chunk[..n]);
                 while pending.len() >= 16 {
                     let is_write = pending[5] == OPC_WRITE_REQ;
-                    let data_len =
-                        u16::from_be_bytes([pending[12], pending[13]]) as usize;
+                    let data_len = u16::from_be_bytes([pending[12], pending[13]]) as usize;
                     let total = if is_write { 16 + data_len } else { 16 };
                     if pending.len() < total {
                         break;
@@ -218,7 +301,7 @@ fn fw_serve(mut stream: TcpStream, mem: Arc<Mutex<FwMemory>>, running: Arc<Mutex
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
-                continue
+                continue;
             }
             Err(_) => break,
         }
@@ -234,7 +317,10 @@ mod tests {
         // golden(grok 调研,读 DB1 起 2 字节):53 35 10 01 03 05 03 08 01 01 00 00 00 02 FF 02
         assert_eq!(
             build_fetch(0x01, 1, 0, 2),
-            vec![0x53, 0x35, 0x10, 0x01, 0x03, 0x05, 0x03, 0x08, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0xFF, 0x02]
+            vec![
+                0x53, 0x35, 0x10, 0x01, 0x03, 0x05, 0x03, 0x08, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02,
+                0xFF, 0x02
+            ]
         );
     }
 
@@ -274,5 +360,52 @@ mod tests {
         let req = build_fetch(0x02, 0, 60000, 40000);
         let resp = handle_fw_request(&req, &mem).unwrap();
         assert_eq!(parse_response(&resp).unwrap().1, 0x05);
+    }
+
+    #[test]
+    fn response_rejects_wrong_fixed_header_and_opcode() {
+        let mut response = build_fetch(0x01, 1, 0, 1);
+        response[5] = 0x99;
+        assert!(parse_response(&response).is_err());
+        let mut response = build_fetch(0x01, 1, 0, 1);
+        response[7] ^= 0x01;
+        assert!(parse_response(&response).is_err());
+    }
+
+    #[test]
+    fn write_request_rejects_trailing_or_missing_data() {
+        let mem = Arc::new(Mutex::new(FwMemory::new()));
+        let mut frame = build_write(0x02, 0, 1, &[0xCA]);
+        frame.push(0xFE);
+        assert!(handle_fw_request(&frame, &mem).is_err());
+        let mut frame = build_write(0x02, 0, 1, &[0xCA]);
+        frame.truncate(16);
+        assert!(handle_fw_request(&frame, &mem).is_err());
+    }
+
+    #[test]
+    fn successful_response_length_matches_declared_payload() {
+        let mut fetch = build_fetch(0x01, 1, 0, 2);
+        fetch[5] = OPC_FETCH_RESP;
+        fetch[8] = 0;
+        fetch.extend_from_slice(&[0xAA, 0xBB]);
+        assert_eq!(
+            parse_response(&fetch).unwrap(),
+            (OPC_FETCH_RESP, 0, vec![0xAA, 0xBB])
+        );
+
+        let mut short = fetch.clone();
+        short.pop();
+        assert!(parse_response(&short).is_err());
+
+        let mut write = build_fetch(0x02, 0, 50, 2);
+        write[5] = OPC_WRITE_RESP;
+        write[8] = 0;
+        assert_eq!(
+            parse_response(&write).unwrap(),
+            (OPC_WRITE_RESP, 0, Vec::new())
+        );
+        write.push(0xFE);
+        assert!(parse_response(&write).is_err());
     }
 }

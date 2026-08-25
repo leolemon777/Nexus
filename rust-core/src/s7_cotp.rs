@@ -164,7 +164,11 @@ pub fn parse_cc(cotp: &[u8]) -> Result<CcInfo, CoreError> {
         }
         off += 2 + plen;
     }
-    Ok(CcInfo { dst_ref, src_ref, tpdu_size })
+    Ok(CcInfo {
+        dst_ref,
+        src_ref,
+        tpdu_size,
+    })
 }
 
 /// COTP DT 固定头(S7 数据阶段每帧 3 字节)。
@@ -185,11 +189,20 @@ pub fn wrap_dt(s7_pdu: &[u8]) -> Vec<u8> {
 ///
 /// 返回**完整帧**(含 4 字节 TPKT 头),便于报文面板原样展示。
 pub fn read_tpkt_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, CoreError> {
-    let err = |code: &'static str, msg: String| CoreError::Modbus { code, message: msg, details: None };
+    let err = |code: &'static str, msg: String| CoreError::Modbus {
+        code,
+        message: msg,
+        details: None,
+    };
     let mut head = [0u8; 4];
-    reader.read_exact(&mut head).map_err(|e| err("S7_READ_FAILED", format!("读取 TPKT 头失败:{e}")))?;
+    reader
+        .read_exact(&mut head)
+        .map_err(|e| err("S7_READ_FAILED", format!("读取 TPKT 头失败:{e}")))?;
     if head[0] != TPKT_VERSION {
-        return Err(err("S7_TPKT_INVALID", format!("TPKT 版本应为 0x03,实际 0x{:02X}", head[0])));
+        return Err(err(
+            "S7_TPKT_INVALID",
+            format!("TPKT 版本应为 0x03,实际 0x{:02X}", head[0]),
+        ));
     }
     let total = u16::from_be_bytes([head[2], head[3]]) as usize;
     if total < 7 || total > 8192 + 12 {
@@ -218,7 +231,10 @@ pub fn unwrap_tpkt(frame: &[u8]) -> Result<&[u8], CoreError> {
     }
     let total = u16::from_be_bytes([frame[2], frame[3]]) as usize;
     if total != frame.len() {
-        return Err(err(format!("TPKT 长度字段 {total} 与实际帧长 {} 不符", frame.len())));
+        return Err(err(format!(
+            "TPKT 长度字段 {total} 与实际帧长 {} 不符",
+            frame.len()
+        )));
     }
     Ok(&frame[4..])
 }
@@ -231,7 +247,10 @@ pub fn unwrap_dt(cotp: &[u8]) -> Result<&[u8], CoreError> {
         details: None,
     };
     if cotp.len() < 3 || cotp[0] != 0x02 || (cotp[1] & 0xF0) != COTP_DT {
-        return Err(err(format!("期望 COTP DT(02 F0 80),实际 {:02X?}", &cotp[..cotp.len().min(3)])));
+        return Err(err(format!(
+            "期望 COTP DT(02 F0 80),实际 {:02X?}",
+            &cotp[..cotp.len().min(3)]
+        )));
     }
     if cotp[2] & 0x80 == 0 {
         return Err(err("COTP DT 缺少 EOT 标记(多片 TSDU 不支持)".to_string()));
@@ -246,13 +265,11 @@ pub fn frame_to_pdu(frame: &[u8]) -> Result<&[u8], CoreError> {
 
 /// 写帧辅助(带失败包装)。
 pub fn write_frame<W: Write>(writer: &mut W, frame: &[u8]) -> Result<(), CoreError> {
-    writer
-        .write_all(frame)
-        .map_err(|e| CoreError::Modbus {
-            code: "S7_WRITE_FAILED",
-            message: format!("发送 S7 帧失败:{e}"),
-            details: None,
-        })
+    writer.write_all(frame).map_err(|e| CoreError::Modbus {
+        code: "S7_WRITE_FAILED",
+        message: format!("发送 S7 帧失败:{e}"),
+        details: None,
+    })
 }
 
 #[cfg(test)]
@@ -297,8 +314,24 @@ mod tests {
     fn parses_cc_with_snap7_layout() {
         // deep-dive §2.3 推导的典型 CC:DST-REF=CR 的 SRC-REF
         let cc_cotp = [
-            0x11u8, COTP_CC, 0x01, 0x00, 0x00, 0x07, 0x00, PARAM_TPDU_SIZE, 0x01, 0x0A,
-            PARAM_CALLING_TSAP, 0x02, 0x01, 0x02, PARAM_CALLED_TSAP, 0x02, 0x01, 0x00,
+            0x11u8,
+            COTP_CC,
+            0x01,
+            0x00,
+            0x00,
+            0x07,
+            0x00,
+            PARAM_TPDU_SIZE,
+            0x01,
+            0x0A,
+            PARAM_CALLING_TSAP,
+            0x02,
+            0x01,
+            0x02,
+            PARAM_CALLED_TSAP,
+            0x02,
+            0x01,
+            0x00,
         ];
         let info = parse_cc(&cc_cotp).unwrap();
         assert_eq!(info.dst_ref, 0x0100);
@@ -309,8 +342,25 @@ mod tests {
     fn parses_cc_with_python_snap7_param_order_and_raw_size() {
         // python-snap7 顺序 C1/C2/C0 + 2 字节原始 TPDU size
         let cc_cotp = [
-            0x12u8, COTP_CC, 0x00, 0x01, 0x0D, 0x00, 0x00, PARAM_CALLING_TSAP, 0x02, 0x03, 0x01,
-            PARAM_CALLED_TSAP, 0x02, 0x01, 0x02, PARAM_TPDU_SIZE, 0x02, 0x04, 0x00,
+            0x12u8,
+            COTP_CC,
+            0x00,
+            0x01,
+            0x0D,
+            0x00,
+            0x00,
+            PARAM_CALLING_TSAP,
+            0x02,
+            0x03,
+            0x01,
+            PARAM_CALLED_TSAP,
+            0x02,
+            0x01,
+            0x02,
+            PARAM_TPDU_SIZE,
+            0x02,
+            0x04,
+            0x00,
         ];
         let info = parse_cc(&cc_cotp).unwrap();
         assert_eq!(info.tpdu_size, Some(1024));
@@ -320,8 +370,20 @@ mod tests {
     #[test]
     fn cc_tolerates_unknown_params() {
         let cc_cotp = [
-            0x0Du8, COTP_CC, 0x01, 0x00, 0x00, 0x01, 0x00, 0xC6, 0x02, 0x00, 0x01, PARAM_TPDU_SIZE,
-            0x01, 0x0A,
+            0x0Du8,
+            COTP_CC,
+            0x01,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0xC6,
+            0x02,
+            0x00,
+            0x01,
+            PARAM_TPDU_SIZE,
+            0x01,
+            0x0A,
         ];
         let info = parse_cc(&cc_cotp).unwrap();
         assert_eq!(info.tpdu_size, Some(1024));

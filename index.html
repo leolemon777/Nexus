@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#111111" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23111111'/%3E%3Cpath d='M18 46V18h7l14 18V18h7v28h-7L25 28v18z' fill='white'/%3E%3C/svg%3E" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:1420 ws://localhost:1420; object-src 'none'; base-uri 'none'" />
+    <link rel="icon" type="image/png" href="./icon.png" />
     <title>Nexus — 工控通讯调试工具</title>
   </head>
   <body>
@@ -13,10 +14,18 @@
       <!-- ═══ TopBar 48px ═══ -->
       <header class="topbar">
         <div class="topbar-left">
-          <div class="logo-badge">N</div>
+          <div class="logo-badge"><img src="./icon.png" width="26" height="26" alt="" /></div>
           <div class="logo-text"><strong>NEXUS</strong><span>工控通讯库</span></div>
         </div>
         <div class="topbar-right">
+          <div class="project-toolbar" aria-label="项目文件">
+            <span class="project-name" id="project-name" title="当前项目">未命名项目</span>
+            <button class="btn-ghost btn-sm" id="project-new" type="button">新建</button>
+            <button class="btn-ghost btn-sm" id="project-open" type="button">打开</button>
+            <button class="btn-ghost btn-sm" id="project-save" type="button">保存</button>
+            <button class="btn-ghost btn-sm" id="project-save-as" type="button">另存为</button>
+            <button class="btn-ghost btn-sm" id="project-export-sanitized" type="button" title="导出用于问题复现的脱敏项目，不改变当前项目">脱敏导出</button>
+          </div>
           <button class="btn-ghost btn-sm" id="toggle-packet-panel" type="button" title="显示 / 隐藏右侧报文面板">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10.5 2.5v11"/></svg>
             报文面板
@@ -46,6 +55,10 @@
               <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4"/><path d="M10 10l3.2 3.2"/></svg></span>
               <span class="nav-text"><span class="nav-label">报文解析</span><span class="nav-sub">Parser</span></span>
             </button>
+            <button class="nav-item" data-view="gx3" title="本地只读解析 GX Works3 .gx3 项目；不会连接或写入 PLC">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h6l3 3v8H3z"/><path d="M9 2.5v3h3M5 8h5M5 10.5h5"/></svg></span>
+              <span class="nav-text"><span class="nav-label">GX3 项目解析</span><span class="nav-sub">GX Works3</span></span>
+            </button>
             <div class="nav-group-title">Modbus</div>
             <button class="nav-item is-active" data-view="master" title="Modbus 主站:网线(TCP/UDP)或 232/485 线(RTU/ASCII)。进入后在页内选择具体传输方式">
               <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9.5V3M5 6l3-3 3 3M3 12.5h10"/></svg></span>
@@ -68,6 +81,81 @@
               <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2.2 1.6"/></svg></span>
               <span class="nav-text"><span class="nav-label">欧姆龙</span><span class="nav-sub">Omron</span></span>
             </button>
+            <button class="nav-item" data-view="allen-bradley" title="Allen-Bradley EtherNet/IP/CIP 显式消息：先做只读编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"/><circle cx="12" cy="11.5" r="1.5"/></svg></span>
+              <span class="nav-text"><span class="nav-label">罗克韦尔</span><span class="nav-sub">Allen-Bradley</span></span>
+            </button>
+            <button class="nav-item" data-view="beckhoff" title="Beckhoff ADS/AMS over TCP：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h6M5 11h3"/><circle cx="11.5" cy="11" r="1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">倍福</span><span class="nav-sub">Beckhoff</span></span>
+            </button>
+            <button class="nav-item" data-view="keyence" title="Keyence KV Host Link ASCII：TCP 只读会话和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5h10v9H3zM5 6h6M5 8.5h4M5 11h2"/><path d="M11 11h1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">基恩士</span><span class="nav-sub">Keyence</span></span>
+            </button>
+            <button class="nav-item" data-view="ls-electric" title="LS Electric XGT FEnet：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11v8h-11zM5 6.5h6M5 9.5h3"/><path d="M11 9.5h1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">乐星</span><span class="nav-sub">LS Electric</span></span>
+            </button>
+            <button class="nav-item" data-view="delta" title="Delta DVP/AS：标准 Modbus 传输上的厂商地址 profile">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3zM5 6h6M5 8.5h4M5 11h2"/></svg></span>
+              <span class="nav-text"><span class="nav-label">台达</span><span class="nav-sub">Delta</span></span>
+            </button>
+            <button class="nav-item" data-view="inovance" title="汇川 H3U/H5U：标准 Modbus 传输上的厂商地址 profile">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><circle cx="11.5" cy="11" r="1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">汇川</span><span class="nav-sub">H3U / H5U Modbus</span></span>
+            </button>
+            <button class="nav-item" data-view="xinje" title="信捷 XC/XD：标准 Modbus 传输上的 D 寄存器 profile">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><path d="M11 11h1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">信捷</span><span class="nav-sub">XC / XD Modbus</span></span>
+            </button>
+            <button class="nav-item" data-view="fatek" title="FATEK FBs 原生 ASCII：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><circle cx="11.5" cy="11" r="1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">永宏</span><span class="nav-sub">FATEK</span></span>
+            </button>
+            <button class="nav-item" data-view="fuji" title="Fuji MICREX-SX SPH Loader Command：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><path d="M11 6v5"/></svg></span>
+              <span class="nav-text"><span class="nav-label">富士</span><span class="nav-sub">Fuji SPH</span></span>
+            </button>
+            <button class="nav-item" data-view="ge" title="GE Series 90 / PACSystems SRTP：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><circle cx="11.5" cy="6" r="1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">通用电气</span><span class="nav-sub">GE SRTP</span></span>
+            </button>
+            <button class="nav-item" data-view="panasonic" title="Panasonic MEWTOCOL-COM：先做离线编解码和黄金帧">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h2"/><path d="M11 11h1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">松下</span><span class="nav-sub">Panasonic</span></span>
+            </button>
+            <div class="nav-group-title">工业上层协议</div>
+            <button class="nav-item" data-view="mqtt" title="MQTT 3.1.1：TCP 只读订阅、PUBLISH 解码和心跳诊断">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h10M3 8h7M3 10.5h4"/><circle cx="12" cy="10.5" r="1.5"/></svg></span>
+              <span class="nav-text"><span class="nav-label">消息订阅</span><span class="nav-sub">MQTT 3.1.1</span></span>
+            </button>
+            <div class="nav-group-title">电力与能源规约</div>
+            <button class="nav-item" data-view="iec104" title="IEC 60870-5-104：TCP 2404 只读主站、总召和遥信遥测">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.8 4.2 8h3L6.8 14.2 11.8 7.3H8.7z"/><circle cx="8" cy="8" r="6.5"/></svg></span>
+              <span class="nav-text"><span class="nav-label">电力远动</span><span class="nav-sub">IEC 60870-5-104</span></span>
+            </button>
+            <button class="nav-item" data-view="dnp3" title="DNP3：TCP 20000 只读 Master、完整性轮询和 Class 0/1/2/3">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.3"/><path d="M5 4.5v7M5 4.5h2.4a3.5 3.5 0 0 1 0 7H5M10.5 5.2v5.6M9.5 6.2l1-1 1 1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">配电自动化</span><span class="nav-sub">DNP3</span></span>
+            </button>
+            <button class="nav-item" data-view="dlt645" title="DL/T 645-2007/1997：RS-485 共享 COM 只读电能表">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.3"/><path d="M8.5 2.8 5.2 8h2.4l-.4 5.2 3.7-6H8.6z"/></svg></span>
+              <span class="nav-text"><span class="nav-label">电能表</span><span class="nav-sub">DL/T 645</span></span>
+            </button>
+            <button class="nav-item" data-view="cjt188" title="CJ/T 188-2004：水/气/热表离线只读编解码">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3.5v9M4 3.5h6.2M4 8h4.6M12.5 6.2v5.6M11.5 7.2l1-1 1 1"/></svg></span>
+              <span class="nav-text"><span class="nav-label">水气热表</span><span class="nav-sub">CJ/T 188</span></span>
+            </button>
+            <div class="nav-group-title">楼宇自控规约</div>
+            <button class="nav-item" data-view="bacnet" title="BACnet/IP：Who-Is/I-Am 离线只读编解码">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8l5.5-5 5.5 5"/><path d="M4.5 8v5.5h7V8"/></svg></span>
+              <span class="nav-text"><span class="nav-label">楼宇自控</span><span class="nav-sub">BACnet/IP</span></span>
+            </button>
+            <button class="nav-item" data-view="knx" title="KNXnet/IP Tunneling v1：Connect/GroupRead/ACK 离线只读编解码">
+              <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13V3h5.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5 13h6"/></svg></span>
+              <span class="nav-text"><span class="nav-label">楼宇总线</span><span class="nav-sub">KNXnet/IP</span></span>
+            </button>
           </nav>
           <div class="sidebar-footer">
             <button class="sidebar-toggle" id="toggle-sidebar" type="button" title="折叠 / 展开侧栏" aria-label="折叠 / 展开侧栏">
@@ -84,6 +172,7 @@
           <!-- ═══ 主站 ═══ -->
           <section class="workspace master-workspace" id="workspace">
             <div class="card transport-card">
+              <div class="card-header"><strong>Modbus 主站通讯方式</strong><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="master" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="transport-selector" role="radiogroup">
                   <label title="RS-232 直连或 RS-485 总线(USB 转 485 亦可)"><input type="radio" name="transport" value="rtu" checked> RTU 串口<span class="wire-hint">(232/485线)</span></label>
@@ -214,7 +303,40 @@
                   <span style="margin-left:auto"></span>
                   <button class="btn-ghost scan-action" id="scan-stations" type="button" disabled title="扫描 1-247 站号">扫描站号</button>
                   <button class="btn-ghost scan-action" id="scan-baud" type="button" disabled title="扫描波特率">扫描波特率</button>
+                  <button class="btn-ghost scan-action" id="scan-all" type="button" disabled title="站号×波特率×校验 一键扫描,命中后可自动连接">一键扫描</button>
                 </div>
+                <details class="form-row secondary-params" id="scan-all-options" style="margin-top:2px">
+                  <summary style="cursor:pointer;color:var(--text-dim,var(--muted,#888));font-size:12px">一键扫描选项(站号范围 / 波特率 / 校验 / 模式)</summary>
+                  <div class="form-row" style="margin-top:6px;flex-wrap:wrap;gap:6px 12px">
+                    <label class="form-label" for="scan-station-start">站号</label>
+                    <input id="scan-station-start" class="input" style="width:52px" type="number" min="1" max="247" value="1" />
+                    <span>~</span>
+                    <input id="scan-station-end" class="input" style="width:52px" type="number" min="1" max="247" value="16" />
+                    <label class="form-label">波特率</label>
+                    <span style="display:flex;gap:8px;align-items:center">
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-baud-opt" value="9600" checked>9600</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-baud-opt" value="19200" checked>19200</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-baud-opt" value="38400" checked>38400</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-baud-opt" value="115200" checked>115200</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-baud-opt" value="4800">4800</label>
+                    </span>
+                    <label class="form-label">校验</label>
+                    <span style="display:flex;gap:8px;align-items:center">
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-parity-opt" value="none" checked>8N1</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-parity-opt" value="even" checked>8E1</label>
+                      <label style="display:flex;gap:3px;align-items:center;font-size:12px"><input type="checkbox" class="scan-parity-opt" value="odd" checked>8O1</label>
+                    </span>
+                    <label class="form-label" for="scan-timeout">超时ms</label>
+                    <input id="scan-timeout" class="input" style="width:62px" type="number" min="50" max="2000" value="200" />
+                    <label class="form-label" for="scan-mode">模式</label>
+                    <select id="scan-mode" class="input" style="width:110px">
+                      <option value="firstHit" selected>首中即停</option>
+                      <option value="full">全矩阵</option>
+                    </select>
+                    <label class="form-label" for="scan-auto-quantity">命中后读</label>
+                    <input id="scan-auto-quantity" class="input" style="width:52px" type="number" min="1" max="125" value="8" title="命中自动连接后读取的保持寄存器数量" />
+                  </div>
+                </details>
                 <div class="data-grid">
                   <table>
                     <thead><tr><th>启用</th><th>名称</th><th>区域</th><th>协议地址</th><th>数据类型</th><th>字节/字序</th><th>倍率</th><th>单位</th><th>当前值</th><th>质量</th><th>更新时间</th></tr></thead>
@@ -296,7 +418,7 @@
           <!-- ═══ 从站 ═══ -->
           <section class="workspace slave-workspace hidden" id="slave-view">
             <div class="card">
-              <div class="card-header"><strong>从站配置</strong><span class="section-state" id="slave-state">未启动</span></div>
+              <div class="card-header"><strong>从站配置</strong><span class="section-state" id="slave-state">未启动</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="slave" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="form-row">
                   <label class="form-label">模式</label><select id="slave-mode" class="input" style="width:230px"><option value="tcp" selected>TCP 监听 (网线)</option><option value="serial">RTU 串口 (232/485线)</option></select>
@@ -328,7 +450,7 @@
           <!-- ═══ 串口调试 ═══ -->
           <section class="workspace debug-workspace hidden" id="debug-view">
             <div class="card">
-              <div class="card-header"><strong>串口调试</strong><span class="field-meta" style="font-size:11px">接线:RS-232 直连 / RS-485 总线 / USB 转 232·485</span><span class="section-state" id="debug-state">原始字节模式</span></div>
+              <div class="card-header"><strong>串口调试</strong><span class="field-meta" style="font-size:11px">接线:RS-232 直连 / RS-485 总线 / USB 转 232·485</span><span class="section-state" id="debug-state">原始字节模式</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="debug" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="form-row">
                   <label><input type="checkbox" id="dbg-allow-rx" checked /> 接收</label>
@@ -380,10 +502,72 @@
             </div>
           </section>
 
+          <!-- ═══ GX Works3 项目只读解析 ═══ -->
+          <section class="workspace gx3-workspace hidden" id="gx3-view">
+            <div class="card">
+              <div class="card-header">
+                <strong>GX Works3 项目解析</strong>
+                <span class="section-state" id="gx3-tool-state">正在检查解析器…</span>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label" for="gx3-project-path">项目</label>
+                  <input id="gx3-project-path" class="input mono" style="flex:1;min-width:320px" type="text" readonly placeholder="请选择 .gx3 文件" />
+                  <button class="btn-ghost" id="gx3-select-project" type="button">选择项目</button>
+                  <button class="btn-primary" id="gx3-analyze-project" type="button" disabled>开始只读解析</button>
+                </div>
+                <p class="field-meta gx3-safety-note">
+                  原始项目不会交给解析器直接处理：Nexus 先复制到私有缓存，再执行 doctor、index-lite、xref、程序映射和可靠性检查。不会连接 PLC，也不会写回 .gx3。解析器作为本机已安装的外部工具调用，未打入 Nexus 发布包。
+                </p>
+                <div class="parser-result" id="gx3-analysis-summary">
+                  <div class="empty-guide">选择一个 GX Works3 项目开始分析</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <strong>中文程序概览</strong>
+                <span class="section-state" id="gx3-analysis-state">尚未分析</span>
+              </div>
+              <div class="card-body">
+                <div class="gx3-human-report" id="gx3-human-report">
+                  <div class="empty-guide">完成解析后，这里会用中文整理程序用途线索、结构、软元件统计和解析风险。</div>
+                </div>
+                <details class="gx3-technical-details" id="gx3-technical-details">
+                  <summary>查看技术原始结果（POU 内部编号、doctor、JSON）</summary>
+                  <pre class="gx3-output" id="gx3-analysis-output">尚无技术原始结果。</pre>
+                </details>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <strong>软元件查询</strong>
+                <span class="section-state">索引 + 写入/读取交叉引用</span>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label" for="gx3-device">软元件</label>
+                  <input id="gx3-device" class="input mono" style="width:180px" type="text" placeholder="例如 SM5628 / M100 / D200" maxlength="64" />
+                  <button class="btn-primary" id="gx3-query-device" type="button" disabled>查询</button>
+                  <span class="field-meta">需要先完成项目解析；仅查询本地索引。</span>
+                </div>
+                <div class="gx3-device-summary" id="gx3-device-summary">
+                  <div class="empty-guide">输入一个软元件地址，查询它的中文说明、写入位置和读取位置。</div>
+                </div>
+                <details class="gx3-technical-details gx3-device-technical" id="gx3-device-technical">
+                  <summary>查看该软元件的索引与交叉引用原文</summary>
+                  <pre class="gx3-output gx3-device-output" id="gx3-device-output">尚未查询软元件。</pre>
+                </details>
+              </div>
+            </div>
+          </section>
+
           <!-- ═══ 三菱 MC ═══ -->
           <section class="workspace melsec-workspace hidden" id="melsec-view">
             <div class="card">
-              <div class="card-header"><strong>MC 连接配置</strong><span class="section-state" id="mc-state">未连接</span></div>
+              <div class="card-header"><strong>MC 连接配置</strong><span class="section-state" id="mc-state">未连接</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="melsec" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="form-row" id="mc-net-row">
                   <label class="form-label">主机</label>
@@ -545,22 +729,39 @@
                 <div class="parser-result" id="if-ip-result" style="max-height:90px"></div>
               </div>
             </div>
+            <div class="card">
+              <div class="card-header"><strong>网络连通性 Ping</strong><span class="section-state" id="if-ping-state">—</span></div>
+              <div class="card-body">
+                <div class="form-row" style="align-items:flex-start">
+                  <label class="form-label" for="if-ping-host">目标</label>
+                  <textarea id="if-ping-host" class="input" rows="3" style="width:min(420px,100%);min-height:64px;resize:vertical" placeholder="一个或多个 IP / 主机名&#10;192.168.1.20, 192.168.1.30&#10;192.168.1.40"></textarea>
+                  <label class="form-label" for="if-ping-count">次数</label>
+                  <select id="if-ping-count" class="input" style="width:70px">
+                    <option>4</option><option>2</option><option>8</option><option>10</option>
+                  </select>
+                  <button class="btn-primary" id="if-ping-run" type="button">Ping</button>
+                </div>
+                <p class="field-meta">可一次填多个地址，用逗号、分号、空格或换行分开；最多 16 个，逐个 Ping。Ctrl+Enter 也可开始。</p>
+                <div class="parser-result" id="if-ping-result" style="max-height:240px"><span class="field-meta">输入一个或多个目标后点击 Ping。</span></div>
+              </div>
+            </div>
           </section>
 
           <!-- ══ 西门子 S7 ══ -->
           <section class="workspace siemens-workspace hidden" id="siemens-view">
             <div class="card">
-              <div class="card-header"><strong>S7 连接配置</strong><span class="section-state" id="s7-state">未连接</span></div>
+              <div class="card-header"><strong>S7 连接配置</strong><span class="section-state" id="s7-state">未连接</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="siemens" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="form-row">
                   <label class="form-label">协议</label>
                   <select id="s7-variant" class="input" style="width:360px">
                     <optgroup label="以太网(可用)">
                       <option value="s7comm">S7comm · S7-300/400/1200/1500 (网线直连/交换机)</option>
-                      <option value="smart">S7comm · S7-200 SMART SR/ST (本体RJ45,CR*s无网口需走PPI)</option>
+                      <option value="smart">S7comm · S7-200 SMART SR/ST (V3需启用Put/Get,CR*s无网口)</option>
                     </optgroup>
-                    <optgroup label="串口/透传(可用)">
-                      <option value="ppi">PPI · S7-200/SMART Port0 DB9 (485·9.6k默认;Freeport/Modbus/USS 同口)</option>
+                    <optgroup label="串口/透传(软件分流)">
+                      <option value="ppi-serial">PPI · 原生 COM 只读双拍(当前串口;站2)</option>
+                      <option value="ppi">PPI · 以太网网关/串口服务器(透明 TCP;站2)</option>
                       <option disabled>MPI · S7-300/400 编程口(需专用电缆,引导用网关)</option>
                     </optgroup>
                     <optgroup label="经典兼容(可用)">
@@ -597,6 +798,10 @@
                   <input id="s7-rack" class="input" style="width:52px" type="number" min="0" max="7" value="0" />
                   <label class="form-label">Slot</label>
                   <input id="s7-slot" class="input" style="width:52px" type="number" min="0" max="31" value="1" />
+                  <span id="s7-serial-station-wrap" class="hidden">
+                    <label class="form-label" id="s7-serial-station-label">PPI 站号</label>
+                    <input id="s7-serial-station" class="input" style="width:52px" type="number" min="0" max="126" value="2" title="串口协议站号" />
+                  </span>
                 </div>
                 <div class="form-row">
                   <div class="form-row hidden" id="s7-advanced-row" style="font-size:12px">
@@ -667,7 +872,7 @@
               <div class="card-body field-meta" style="line-height:1.9">
                 <div>· S7 字节序为<strong>大端</strong>(与三菱 MC 相反),INT/REAL 按大端解码</div>
                 <div>· S7-1200/1500 的 DB 需为<strong>标准(非优化)块</strong>:TIA 中 DB 属性 → 取消勾选「优化的块访问」→ 重新编译下载</div>
-                <div>· S7-200 SMART 的 V 区自动映射 DB1:VB100 = DB1.DBB100、VW100 = DB1.DBW100、V100.3 = DB1.DBX100.3(支持 V 语法直接输入)</div>
+                <div>· S7-200 SMART 的 V 区按 DB1 兼容映射:VB100 = DB1.DBB100、VW100 = DB1.DBW100、V100.3 = DB1.DBX100.3；<strong>V3 的 Put/Get Server 默认关闭</strong>，须在 Micro/WIN SMART V3 通讯设置中启用并下载</div>
                 <div>· 位写为读-改-写,不影响同字节其他位;STRING 类型前 2 字节为最大长度/实际长度头</div>
                 <div>· <strong>Web API</strong>(S7-1500 固件 ≥V2.8):连 HTTPS 443,用 JSON-RPC 符号寻址(可读优化块);选此变体后填 PLC 的 Web 用户名/密码(非 TIA 工程密码)</div>
                 <div>· <strong>Modbus TCP</strong>:S7-1200/1500 固件内置 Modbus server(默认 502),需 TIA 中启用 MB_SERVER 指令;直接切到 Modbus 主站页用网线连接即可</div>
@@ -682,14 +887,17 @@
           <!-- ══ 欧姆龙 FINS ══ -->
           <section class="workspace omron-workspace hidden" id="omron-view">
             <div class="card">
-              <div class="card-header"><strong>FINS 连接配置</strong><span class="section-state" id="om-state">未连接</span></div>
+              <div class="card-header"><strong id="om-connection-title">FINS 连接配置</strong><span class="section-state" id="om-state">未连接</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="omron" aria-haspopup="dialog">通讯设置帮助</button></div>
               <div class="card-body">
                 <div class="form-row">
                   <label class="form-label">传输</label>
                   <select id="om-transport" class="input" style="width:220px">
                     <option value="tcp">FINS/TCP (网线,CJ/CS/CP 系列)</option>
                     <option value="udp">FINS/UDP (网线,无连接)</option>
+                    <option value="hostlink-serial">HostLink C-mode 串口（只读 DM）</option>
+                    <option value="hostlink-fins-serial">HostLink FINS 串口（只读字）</option>
                   </select>
+                  <span id="om-network-fields">
                   <label class="form-label">IP</label>
                   <input id="om-host" class="input" style="width:140px" value="127.0.0.1" />
                   <label class="form-label">端口</label>
@@ -698,6 +906,11 @@
                   <input id="om-dest" class="input" style="width:60px" type="number" value="0" title="PLC FINS 节点号(通常=IP 末段)" />
                   <label class="form-label">本机节点</label>
                   <input id="om-src" class="input" style="width:60px" type="number" value="0" />
+                  </span>
+                  <span id="om-serial-station-wrap" class="hidden">
+                    <label class="form-label">HostLink 站号</label>
+                    <input id="om-serial-station" class="input" style="width:60px" type="number" min="0" max="31" value="0" title="C-mode 站号 0..31" />
+                  </span>
                 </div>
                 <div class="form-row">
                   <button class="btn-primary" id="om-connect" type="button">连接</button>
@@ -715,7 +928,7 @@
                   <label class="form-label">地址</label>
                   <input id="om-address" class="input" style="width:150px" value="D100" placeholder="D100 / CIO0.00 / W0" />
                   <label class="form-label">数量</label>
-                  <input id="om-points" class="input" style="width:60px" type="number" min="1" max="1024" value="2" />
+                  <input id="om-points" class="input" style="width:60px" type="number" min="1" max="512" value="2" title="FINS 网络读写当前软件安全上限 512 点；HostLink FINS/C-mode 首轮上限 100 点" />
                   <button class="btn-primary" id="om-read" type="button" disabled>读取</button>
                   <button class="btn-ghost" id="om-write" type="button" disabled>写入</button>
                   <input id="om-write-values" class="input" style="flex:1;min-width:140px" placeholder="写入值,逗号分隔(如 100,200 或 1,0,1)" />
@@ -726,6 +939,946 @@
                     <tbody id="om-results"><tr class="empty-row"><td colspan="5"><div class="empty-guide">连接后读取软元件<br/><small>虚拟 PLC 预置: D100=0x1234, CIO0=0xBEEF, W10=0x55AA, T0=100</small></div></td></tr></tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Allen-Bradley EtherNet/IP / CIP ══ -->
+          <section class="workspace allen-bradley-workspace hidden" id="allen-bradley-view">
+            <div class="card">
+              <div class="card-header"><strong>Allen-Bradley EtherNet/IP / CIP</strong><span class="section-state">TCP 只读会话 S4a · 未连接设备</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="allen-bradley" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：TCP 44818、RegisterSession、SendRRData/CPF、CIP Read Tag 只读。页面可连接独立 TCP 对端执行读回；写 Tag、ForwardOpen、Connected I/O、RUN/STOP 和真实 PLC L2 不进入 live path。</p>
+                <div class="form-row">
+                  <label class="form-label" for="ab-host">Host</label>
+                  <input id="ab-host" class="input" style="width:170px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="ab-port">TCP Port</label>
+                  <input id="ab-port" class="input" style="width:90px" type="number" min="1" max="65535" value="44818" />
+                  <button class="btn-primary" id="ab-open-connection" type="button">连接</button>
+                  <button class="btn-ghost" id="ab-close-connection" type="button">断开</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ab-session">Session Handle</label>
+                  <input id="ab-session" class="input" style="width:130px" value="0" inputmode="numeric" title="RegisterSession 成功响应返回的句柄；未注册时为 0" />
+                  <label class="form-label" for="ab-context">Sender Context</label>
+                  <input id="ab-context" class="input" style="width:120px" type="number" min="0" max="9007199254740991" value="1" />
+                  <label class="form-label" for="ab-elements">Elements</label>
+                  <input id="ab-elements" class="input" style="width:80px" type="number" min="1" max="65535" value="1" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ab-tag">CIP Tag</label>
+                  <input id="ab-tag" class="input" style="width:320px" value="MyTag" placeholder="MyTag / MyTag[3] / Program:MainProgram.Speed" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="ab-register" type="button">生成 RegisterSession</button>
+                  <button class="btn-ghost" id="ab-unregister" type="button">生成 UnregisterSession</button>
+                  <button class="btn-primary" id="ab-read-tag" type="button">生成 CIP Read Tag</button>
+                  <button class="btn-primary" id="ab-live-read" type="button">TCP 只读 Tag</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>离线报文解析</strong><span style="margin-left:auto" class="field-meta">粘贴 HEX；不会向设备发送</span></div>
+              <div class="card-body">
+                <textarea id="ab-frame-input" class="input" rows="4" style="width:100%;font-family:var(--mono,monospace)" placeholder="65 00 04 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="ab-parse-frame" type="button">解析 ENIP 头</button>
+                  <button class="btn-ghost" id="ab-parse-cip" type="button">解析 CIP 响应</button>
+                  <button class="btn-text" id="ab-clear" type="button">清空</button>
+                </div>
+                <pre id="ab-output" class="parser-result" style="white-space:pre-wrap;max-height:300px;margin-bottom:0">先生成或粘贴报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Beckhoff ADS / AMS ══ -->
+          <section class="workspace beckhoff-workspace hidden" id="beckhoff-view">
+            <div class="card">
+              <div class="card-header"><strong>Beckhoff ADS / AMS over TCP</strong><span class="section-state">TCP 只读会话 S4a · 未连接设备</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="beckhoff" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：TCP 48898、6 字节 AMS/TCP 头、32 字节 AMS 头、AMS endpoint 校验和 ADS Read/ReadDeviceInfo/ReadState 只读。页面可连接独立 TCP 对端；不自动创建 AMS Route，不做 WriteControl、句柄缓存或通知订阅。</p>
+                <div class="form-row">
+                  <label class="form-label" for="ads-host">Host</label>
+                  <input id="ads-host" class="input" style="width:170px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="ads-port">TCP Port</label>
+                  <input id="ads-port" class="input" style="width:90px" type="number" min="1" max="65535" value="48898" />
+                  <button class="btn-primary" id="ads-open-connection" type="button">连接</button>
+                  <button class="btn-ghost" id="ads-close-connection" type="button">断开</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ads-target-netid">目标 NetId</label>
+                  <input id="ads-target-netid" class="input" style="width:170px" value="5.72.144.1.1.1" placeholder="5.72.144.1.1.1" />
+                  <label class="form-label" for="ads-target-port">目标 Port</label>
+                  <input id="ads-target-port" class="input" style="width:80px" type="number" min="1" max="65535" value="851" />
+                  <label class="form-label" for="ads-source-netid">源 NetId</label>
+                  <input id="ads-source-netid" class="input" style="width:170px" value="5.72.144.2.1.1" placeholder="5.72.144.2.1.1" />
+                  <label class="form-label" for="ads-source-port">源 Port</label>
+                  <input id="ads-source-port" class="input" style="width:80px" type="number" min="1" max="65535" value="32905" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ads-invoke">InvokeId</label>
+                  <input id="ads-invoke" class="input" style="width:90px" type="number" min="0" max="4294967295" value="1" />
+                  <label class="form-label" for="ads-group">IndexGroup</label>
+                  <input id="ads-group" class="input" style="width:120px" value="0xF000" />
+                  <label class="form-label" for="ads-offset">IndexOffset</label>
+                  <input id="ads-offset" class="input" style="width:120px" value="0" />
+                  <label class="form-label" for="ads-read-length">Read bytes</label>
+                  <input id="ads-read-length" class="input" style="width:80px" type="number" min="0" max="1048576" value="4" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ads-write-data">Write data HEX</label>
+                  <input id="ads-write-data" class="input" style="width:320px" value="01 02 03 04" placeholder="01 02 03 04" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="ads-build-read" type="button">生成 ADS Read</button>
+                  <button class="btn-ghost" id="ads-build-write" type="button">生成 ADS Write</button>
+                  <button class="btn-ghost" id="ads-build-readwrite" type="button">生成 ReadWrite</button>
+                  <button class="btn-ghost" id="ads-build-info" type="button">生成 ReadDeviceInfo</button>
+                  <button class="btn-ghost" id="ads-build-state" type="button">生成 ReadState</button>
+                  <button class="btn-primary" id="ads-live-read" type="button">TCP 只读 Read</button>
+                  <button class="btn-primary" id="ads-live-info" type="button">TCP ReadDeviceInfo</button>
+                  <button class="btn-primary" id="ads-live-state" type="button">TCP ReadState</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>离线报文解析</strong><span style="margin-left:auto" class="field-meta">粘贴 HEX；不会向设备发送</span></div>
+              <div class="card-body">
+                <textarea id="ads-frame-input" class="input" rows="5" style="width:100%;font-family:var(--mono,monospace)" placeholder="00 00 ... AMS/TCP + AMS + ADS payload"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="ads-parse-frame" type="button">解析 AMS 头</button>
+                  <button class="btn-ghost" id="ads-parse-response" type="button">解析 ADS 响应</button>
+                  <button class="btn-text" id="ads-clear" type="button">清空</button>
+                </div>
+                <pre id="ads-output" class="parser-result" style="white-space:pre-wrap;max-height:340px;margin-bottom:0">先生成或粘贴报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Keyence KV Host Link ══ -->
+          <section class="workspace keyence-workspace hidden" id="keyence-view">
+            <div class="card">
+              <div class="card-header"><strong>Keyence KV Host Link ASCII</strong><span class="section-state">TCP 只读会话 S4a · 未连接设备</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="keyence" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：TCP 8501、CR/CR NN 握手、RDS 字/位读取和 ASCII/CRLF 响应。页面可连接独立 TCP 对端执行只读读回；WRS、ST/RS、MC Compatible、EtherNet/IP 和真实 KV PLC L2 不进入 live path。</p>
+                <div class="form-row">
+                  <label class="form-label" for="keyence-host">Host</label>
+                  <input id="keyence-host" class="input" style="width:150px" value="127.0.0.1" />
+                  <label class="form-label" for="keyence-port">TCP Port</label>
+                  <input id="keyence-port" class="input" style="width:80px" type="number" min="1" max="65535" value="8501" />
+                  <label class="form-label" for="keyence-station">站号</label>
+                  <input id="keyence-station" class="input" style="width:70px" type="number" min="0" max="31" value="0" />
+                  <label class="checkbox-label"><input id="keyence-use-station" type="checkbox" /> 使用 CR NN</label>
+                  <label class="form-label" for="keyence-address">地址</label>
+                  <input id="keyence-address" class="input" style="width:170px" value="DM0" placeholder="DM0 / MR10.1 / W0A" />
+                  <label class="form-label" for="keyence-count">数量</label>
+                  <input id="keyence-count" class="input" style="width:70px" type="number" min="1" max="256" value="2" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="keyence-open-connection" type="button">连接并握手</button>
+                  <button class="btn-ghost" id="keyence-close-connection" type="button">断开</button>
+                  <button class="btn-primary" id="keyence-live-read-words" type="button">TCP 只读字</button>
+                  <button class="btn-ghost" id="keyence-live-read-bits" type="button">TCP 只读位</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="keyence-write-values">字写入值</label>
+                  <input id="keyence-write-values" class="input" style="width:260px" value="1 2" placeholder="1 2 65535" />
+                  <label class="checkbox-label"><input id="keyence-bit-value" type="checkbox" /> 位写入 ON（未勾选=OFF）</label>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="keyence-build-connect" type="button">生成 CR 握手</button>
+                  <button class="btn-ghost" id="keyence-build-read-words" type="button">生成 RDS 字</button>
+                  <button class="btn-ghost" id="keyence-build-read-bits" type="button">生成 RDS 位</button>
+                  <button class="btn-ghost" id="keyence-build-write-words" type="button">生成 WRS 字</button>
+                  <button class="btn-ghost" id="keyence-build-write-bit" type="button">生成 ST/RS 位</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>ASCII 响应解析</strong><span style="margin-left:auto" class="field-meta">必须保留 CRLF；不会向设备发送</span></div>
+              <div class="card-body">
+                <textarea id="keyence-response-input" class="input" rows="3" style="width:100%;font-family:var(--mono,monospace)" placeholder="CC\r\n / 1 2\r\n / 0 1\r\n / OK\r\n / E2\r\n"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="keyence-parse-connect" type="button">解析 CC</button>
+                  <button class="btn-ghost" id="keyence-parse-words" type="button">解析字响应</button>
+                  <button class="btn-ghost" id="keyence-parse-bits" type="button">解析位响应</button>
+                  <button class="btn-ghost" id="keyence-parse-write" type="button">解析 OK/错误</button>
+                  <button class="btn-text" id="keyence-clear" type="button">清空</button>
+                </div>
+                <pre id="keyence-output" class="parser-result" style="white-space:pre-wrap;max-height:300px;margin-bottom:0">先生成或粘贴 ASCII 报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ LS Electric XGT FEnet ══ -->
+          <section class="workspace ls-electric-workspace hidden" id="ls-electric-view">
+            <div class="card">
+              <div class="card-header"><strong>LS Electric XGT FEnet</strong><span class="section-state">TCP 只读会话 S4a · 未连接设备</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="ls-electric" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：TCP 2004、20 字节 XGT FEnet 头、XGK/XGI/XGR CPU 标识、显式 X/B/W/D/L 变量、单变量/连续只读和 InvokeId/响应边界校验。页面可连接独立 TCP 对端；写入、PLC 控制和真实 XGT L2 不进入 live path。</p>
+                <div class="form-row">
+                  <label class="form-label" for="xgt-host">Host</label>
+                  <input id="xgt-host" class="input" style="width:150px" value="127.0.0.1" />
+                  <label class="form-label" for="xgt-port">TCP Port</label>
+                  <input id="xgt-port" class="input" style="width:80px" type="number" min="1" max="65535" value="2004" />
+                  <label class="form-label" for="xgt-company">Company ID</label>
+                  <input id="xgt-company" class="input" style="width:125px" value="LSIS-XGT" />
+                  <label class="form-label" for="xgt-cpu">CPU</label>
+                  <select id="xgt-cpu" class="input" style="width:120px"><option value="160">XGK · A0</option><option value="164">XGI · A4</option><option value="168">XGR · A8</option></select>
+                  <label class="form-label" for="xgt-invoke">InvokeId</label>
+                  <input id="xgt-invoke" class="input" style="width:80px" type="number" min="0" max="65535" value="1" />
+                  <label class="form-label" for="xgt-base">Base</label>
+                  <input id="xgt-base" class="input" style="width:55px" type="number" min="0" max="15" value="0" />
+                  <label class="form-label" for="xgt-slot">Slot</label>
+                  <input id="xgt-slot" class="input" style="width:55px" type="number" min="0" max="15" value="3" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="xgt-open-connection" type="button">连接</button>
+                  <button class="btn-ghost" id="xgt-close-connection" type="button">断开</button>
+                  <button class="btn-primary" id="xgt-live-read" type="button">TCP 只读单变量</button>
+                  <button class="btn-ghost" id="xgt-live-read-continuous" type="button">TCP 只读连续</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="xgt-variable">变量</label>
+                  <input id="xgt-variable" class="input" style="width:180px" value="%DW100" placeholder="%DW100 / %DD100 / %MX10" />
+                  <label class="form-label" for="xgt-data-type">单变量类型</label>
+                  <select id="xgt-data-type" class="input" style="width:100px"><option value="0">X · bit</option><option value="1">B · byte</option><option value="2" selected>W · word</option><option value="3">D · dword</option><option value="4">L · lword</option></select>
+                  <label class="form-label" for="xgt-byte-count">连续字节数</label>
+                  <input id="xgt-byte-count" class="input" style="width:90px" type="number" min="1" max="65535" value="4" />
+                  <label class="form-label" for="xgt-write-data">写入 HEX</label>
+                  <input id="xgt-write-data" class="input" style="width:220px" value="01 02 03 04" placeholder="01 02 03 04" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="xgt-build-read" type="button">生成单变量读</button>
+                  <button class="btn-ghost" id="xgt-build-continuous-read" type="button">生成连续读</button>
+                  <button class="btn-ghost" id="xgt-build-write" type="button">生成单变量写</button>
+                  <button class="btn-ghost" id="xgt-build-continuous-write" type="button">生成连续写</button>
+                  <button class="btn-ghost" id="xgt-parse-address" type="button">解析变量</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>响应解析</strong><span style="margin-left:auto" class="field-meta">粘贴 HEX；不会向设备发送</span></div>
+              <div class="card-body">
+                <textarea id="xgt-frame-input" class="input" rows="5" style="width:100%;font-family:var(--mono,monospace)" placeholder="LSIS-XGT 20 字节头 + XGT application response"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="xgt-parse-response" type="button">解析 XGT 响应</button>
+                  <button class="btn-text" id="xgt-clear" type="button">清空</button>
+                </div>
+                <pre id="xgt-output" class="parser-result" style="white-space:pre-wrap;max-height:340px;margin-bottom:0">先生成或粘贴 XGT 报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Delta DVP/AS Modbus profile ══ -->
+          <section class="workspace delta-workspace hidden" id="delta-view">
+            <div class="card">
+              <div class="card-header"><strong>Delta DVP/AS Modbus 地址 profile</strong><span class="section-state">软件映射 S4 · 共享 Modbus 串口只读</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="delta" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">Delta DVP/AS 使用标准 Modbus RTU/ASCII/TCP 传输。本页把厂商软元件翻译为 Modbus 区域、地址和功能码，并可复用主站页已经打开的 RTU/ASCII 串口执行只读分段读回；不会跨 D4095/D4096 或 M1535/M1536 合并请求，也不会执行任何写入。</p>
+                <div class="form-row">
+                  <label class="form-label" for="delta-series">系列</label>
+                  <select id="delta-series" class="input" style="width:150px"><option value="dvp-modbus" selected>DVP / ES / EX / SS</option><option value="as-modbus">AS300 / DVP-ES3</option></select>
+                  <label class="form-label" for="delta-address">软元件地址</label>
+                  <input id="delta-address" class="input" style="width:180px" value="D100" placeholder="D100 / Y17 / X1.2" />
+                  <button class="btn-primary" id="delta-parse-address" type="button">解析地址</button>
+                  <button class="btn-text" id="delta-clear" type="button">清空</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="delta-quantity">连续数量</label>
+                  <input id="delta-quantity" class="input" style="width:75px" type="number" min="1" max="2000" value="1" />
+                  <label class="form-label" for="delta-unit-id">站号</label>
+                  <input id="delta-unit-id" class="input" style="width:65px" type="number" min="0" max="247" value="1" />
+                  <label class="form-label" for="delta-transport">传输</label>
+                  <select id="delta-transport" class="input" style="width:100px"><option value="rtu" selected>RTU</option><option value="ascii">ASCII</option></select>
+                  <label class="form-label" for="delta-model">型号记录</label>
+                  <input id="delta-model" class="input" style="width:150px" placeholder="例如 DVP-ES2" />
+                  <label class="form-label" for="delta-firmware">固件记录</label>
+                  <input id="delta-firmware" class="input" style="width:120px" placeholder="例如 2.10" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-ghost" id="delta-plan-range" type="button">规划分段</button>
+                  <button class="btn-primary" id="delta-live-read" type="button">共享 COM 只读读回</button>
+                  <span class="field-meta">先在主站页打开相同 RTU/ASCII 串口；此处仅复用已打开句柄。</span>
+                </div>
+                <pre id="delta-output" class="parser-result" style="white-space:pre-wrap;max-height:320px;margin-bottom:0">先选择系列并解析软元件地址。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Inovance H3U/H5U Modbus profile ══ -->
+          <section class="workspace inovance-workspace hidden" id="inovance-view">
+            <div class="card">
+              <div class="card-header"><strong>汇川 H3U/H5U Modbus 地址 profile</strong><span class="section-state">软件映射 S2/S3 · 底层为标准 Modbus</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="inovance" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">H3U/H5U 只复用标准 Modbus RTU/TCP；本页把软元件映射为 Modbus 地址和功能码，不实现 EasyNet 私有帧、Connected CIP、ComputerLink 或 PLC 控制。AM/AC/Easy 没有统一地址表时会明确拒绝，不猜测。</p>
+                <div class="form-row">
+                  <label class="form-label" for="inovance-series">系列</label>
+                  <select id="inovance-series" class="input" style="width:150px"><option value="h3u-modbus" selected>H3U</option><option value="h5u-modbus">H5U</option></select>
+                  <label class="form-label" for="inovance-address">软元件地址</label>
+                  <input id="inovance-address" class="input" style="width:160px" value="D100" placeholder="D100 / M0 / X10 / Y17" />
+                  <label class="form-label" for="inovance-kind">访问类型</label>
+                  <select id="inovance-kind" class="input" style="width:105px"><option value="auto" selected>Auto</option><option value="bit">Bit</option><option value="word">Word</option></select>
+                  <button class="btn-primary" id="inovance-parse-address" type="button">解析地址</button>
+                  <button class="btn-text" id="inovance-clear" type="button">清空</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="inovance-model">型号记录</label>
+                  <input id="inovance-model" class="input" style="width:170px" placeholder="例如 H3U-1616MT" />
+                  <label class="form-label" for="inovance-firmware">固件记录</label>
+                  <input id="inovance-firmware" class="input" style="width:130px" placeholder="人工记录" />
+                  <span class="field-meta">实际 RTU/TCP 连接仍从 Modbus 主站页执行；型号和固件只作为证据记录字段。</span>
+                </div>
+                <pre id="inovance-output" class="parser-result" style="white-space:pre-wrap;max-height:340px;margin-bottom:0">先选择 H3U/H5U 并解析软元件地址。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Xinje XC/XD Modbus profile ══ -->
+          <section class="workspace xinje-workspace hidden" id="xinje-view">
+            <div class="card">
+              <div class="card-header"><strong>信捷 XC/XD Modbus 地址 profile</strong><span class="section-state">软件映射 S2/S3 · 仅 D 区确认</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="xinje" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">本页只确认标准 Modbus RTU/TCP 的 D 数据寄存器（0-based、FC03/FC06）。HD/SD/SM/M/X/Y/C/T/S 等区域因 XC 与 XD/XL 映射差异且缺少型号手册，会明确拒绝，不套用旧偏移。</p>
+                <div class="form-row">
+                  <label class="form-label" for="xinje-series">系列</label>
+                  <select id="xinje-series" class="input" style="width:150px"><option value="xc-modbus" selected>XC</option><option value="xd-modbus">XD / XL</option></select>
+                  <label class="form-label" for="xinje-address">软元件地址</label>
+                  <input id="xinje-address" class="input" style="width:160px" value="D100" placeholder="D100（首轮仅确认）" />
+                  <label class="form-label" for="xinje-kind">访问类型</label>
+                  <select id="xinje-kind" class="input" style="width:105px"><option value="auto" selected>Auto</option><option value="word">Word</option><option value="bit">Bit（拒绝）</option></select>
+                  <button class="btn-primary" id="xinje-parse-address" type="button">解析地址</button>
+                  <button class="btn-text" id="xinje-clear" type="button">清空</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="xinje-model">型号记录</label>
+                  <input id="xinje-model" class="input" style="width:170px" placeholder="例如 XC3-24R-E" />
+                  <label class="form-label" for="xinje-firmware">固件记录</label>
+                  <input id="xinje-firmware" class="input" style="width:130px" placeholder="人工记录" />
+                  <span class="field-meta">实际 RTU/TCP 连接仍从 Modbus 主站页执行；非 D 区需提供型号手册后再扩展。</span>
+                </div>
+                <pre id="xinje-output" class="parser-result" style="white-space:pre-wrap;max-height:340px;margin-bottom:0">先选择 XC/XD 并解析 D 地址。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ FATEK FBs ASCII ══ -->
+          <section class="workspace fatek-workspace hidden" id="fatek-view">
+            <div class="card">
+              <div class="card-header"><strong>FATEK FBs 原生 ASCII</strong><span class="section-state">TCP 只读会话 S4a · 编解码</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="fatek" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">当前支持 STX + 两位十六进制站号 + 40/44/45/46/47 + 加和校验 + ETX，并可在用户显式连接 TCP 5000 后执行 44/46 只读。不会自动写入、不执行 RUN/STOP；真实 FBs/B1 型号、Gateway 和以太网模块 L2 仍待验。</p>
+                <div class="form-row">
+                  <label class="form-label" for="fatek-host">TCP 主机</label>
+                  <input id="fatek-host" class="input" style="width:150px" value="127.0.0.1" placeholder="192.168.0.10" />
+                  <label class="form-label" for="fatek-port">端口</label>
+                  <input id="fatek-port" class="input" style="width:90px" type="number" min="1" max="65535" value="5000" />
+                  <button class="btn-primary" id="fatek-open-connection" type="button">连接（TCP 只读）</button>
+                  <button class="btn-ghost" id="fatek-close-connection" type="button">断开</button>
+                  <button class="btn-primary" id="fatek-live-read" type="button">执行只读</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="fatek-station">站号</label>
+                  <input id="fatek-station" class="input" style="width:70px" type="number" min="1" max="254" value="1" />
+                  <label class="form-label" for="fatek-address">地址</label>
+                  <input id="fatek-address" class="input" style="width:140px" value="R12" placeholder="R12 / D100 / Y0" />
+                  <label class="form-label" for="fatek-kind">类型</label>
+                  <select id="fatek-kind" class="input" style="width:100px"><option value="auto" selected>Auto</option><option value="bit">Bit</option><option value="word">Word</option></select>
+                  <label class="form-label" for="fatek-count">数量</label>
+                  <input id="fatek-count" class="input" style="width:70px" type="number" min="1" max="255" value="3" />
+                  <button class="btn-primary" id="fatek-parse-address" type="button">解析地址</button>
+                  <button class="btn-ghost" id="fatek-build-read" type="button">生成读帧</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="fatek-command">自定义命令</label>
+                  <input id="fatek-command" class="input" style="width:160px" value="40" placeholder="40 / 44..." />
+                  <button class="btn-ghost" id="fatek-pack" type="button">封装命令</button>
+                  <label class="form-label" for="fatek-response-hex">响应 HEX</label>
+                  <input id="fatek-response-hex" class="input" style="width:260px" placeholder="02 30 31 34 36 30 ... 03" />
+                  <button class="btn-ghost" id="fatek-parse-response" type="button">解析响应</button>
+                  <button class="btn-text" id="fatek-clear" type="button">清空</button>
+                </div>
+                <pre id="fatek-output" class="parser-result" style="white-space:pre-wrap;max-height:360px;margin-bottom:0">先解析地址或生成 FATEK ASCII 报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Fuji MICREX-SX SPH ══ -->
+          <section class="workspace fuji-workspace hidden" id="fuji-view">
+            <div class="card">
+              <div class="card-header"><strong>Fuji MICREX-SX SPH Loader Command</strong><span class="section-state">TCP 只读会话 S4a · 编解码</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="fuji" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">当前支持 20 字节 SPH 二进制头、00H 读、01H 写、24 位小端字地址和 1..230 字边界；用户显式点击后建立 TCP 18245 只读会话并读取字数据。不会自动写入、不推断 CPU 状态、不提供位写入；真实 SPH 型号、固件和 Loader L2 仍待验。</p>
+                <div class="form-row">
+                  <label class="form-label" for="fuji-host">TCP 主机</label>
+                  <input id="fuji-host" class="input" style="width:150px" value="127.0.0.1" placeholder="192.168.0.10" />
+                  <label class="form-label" for="fuji-port">端口</label>
+                  <input id="fuji-port" class="input" style="width:90px" type="number" min="1" max="65535" value="18245" />
+                  <button class="btn-primary" id="fuji-open-connection" type="button">连接（TCP 只读）</button>
+                  <button class="btn-ghost" id="fuji-close-connection" type="button">断开</button>
+                  <button class="btn-primary" id="fuji-live-read" type="button">执行只读</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="fuji-connection-id">连接 ID</label>
+                  <input id="fuji-connection-id" class="input" style="width:80px" value="FE" placeholder="FE" />
+                  <label class="form-label" for="fuji-address">地址</label>
+                  <input id="fuji-address" class="input" style="width:170px" value="M1.0" placeholder="M1.0 / M10.0 / I0.0" />
+                  <label class="form-label" for="fuji-words">字数量</label>
+                  <input id="fuji-words" class="input" style="width:80px" type="number" min="1" max="230" value="1" />
+                  <button class="btn-primary" id="fuji-parse-address" type="button">解析地址</button>
+                  <button class="btn-ghost" id="fuji-build-read" type="button">生成 00H 读帧</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="fuji-write-data">写入 HEX</label>
+                  <input id="fuji-write-data" class="input" style="width:240px" value="34 12" placeholder="34 12" />
+                  <button class="btn-ghost" id="fuji-build-write" type="button">生成 01H 写帧</button>
+                  <label class="form-label" for="fuji-expected-bytes">期望数据字节</label>
+                  <input id="fuji-expected-bytes" class="input" style="width:100px" type="number" min="0" value="0" />
+                  <label class="form-label" for="fuji-command">期望命令</label>
+                  <select id="fuji-command" class="input" style="width:90px"><option value="0" selected>00H 读</option><option value="1">01H 写</option></select>
+                  <label class="form-label" for="fuji-response-hex">响应 HEX</label>
+                  <input id="fuji-response-hex" class="input" style="width:300px" placeholder="FB 80 80 00 00 7B FE ..." />
+                  <button class="btn-ghost" id="fuji-parse-response" type="button">解析响应</button>
+                  <button class="btn-text" id="fuji-clear" type="button">清空</button>
+                </div>
+                <pre id="fuji-output" class="parser-result" style="white-space:pre-wrap;max-height:360px;margin-bottom:0">先解析 SPH 地址或生成 Loader Command 报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ GE Series 90 / PACSystems SRTP ══ -->
+          <section class="workspace ge-workspace hidden" id="ge-view">
+            <div class="card">
+              <div class="card-header"><strong>GE Series 90 / PACSystems SRTP</strong><span class="section-state">离线编解码 S2/S3 · TCP 18245 后续</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="ge" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">当前支持离线帧编解码（R/AI/AQ 字区与 I/Q/T/M/SA/SB/SC/S/G 字节/位数据码），以及用户显式点击后建立 TCP 18245 只读会话并读取数据。连接会先完成 56 字节全零会话初始化；不推断 PLC 状态，不提供程序、时钟、订阅或虚拟服务器，真实 GE PLC L2 仍待验证。</p>
+                <div class="form-row">
+                  <label class="form-label" for="ge-host">TCP 主机</label>
+                  <input id="ge-host" class="input" style="width:150px" value="127.0.0.1" placeholder="192.168.0.10" />
+                  <label class="form-label" for="ge-port">端口</label>
+                  <input id="ge-port" class="input" style="width:80px" type="number" min="1" max="65535" value="18245" />
+                  <label class="form-label" for="ge-connection-id">连接 ID</label>
+                  <input id="ge-connection-id" class="input" style="width:110px" value="ge-readonly" />
+                  <button class="btn-primary" id="ge-open-connection" type="button">TCP 只读连接</button>
+                  <button class="btn-ghost" id="ge-close-connection" type="button">断开</button>
+                  <span class="field-meta">会先完成 56B 会话初始化；只读，不执行写入。</span>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ge-transaction-id">事务号</label>
+                  <input id="ge-transaction-id" class="input" style="width:80px" type="number" min="0" max="65535" value="1" />
+                  <label class="form-label" for="ge-address">地址</label>
+                  <input id="ge-address" class="input" style="width:170px" value="R1" placeholder="R1 / %AI10 / M1" />
+                  <label class="form-label" for="ge-element-count">元素数量</label>
+                  <input id="ge-element-count" class="input" style="width:90px" type="number" min="1" max="65535" value="1" />
+                  <label class="checkbox-label"><input id="ge-bit-access" type="checkbox" /> 位访问</label>
+                  <button class="btn-primary" id="ge-parse-address" type="button">解析地址</button>
+                  <button class="btn-ghost" id="ge-build-read" type="button">生成读帧</button>
+                  <button class="btn-primary" id="ge-live-read" type="button">TCP 只读读取</button>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="ge-build-handshake" type="button">生成 56B 会话帧</button>
+                  <label class="form-label" for="ge-handshake-response">会话响应 HEX</label>
+                  <input id="ge-handshake-response" class="input" style="width:300px" placeholder="01 00 00 00 00 00 00 00 0F ..." />
+                  <button class="btn-ghost" id="ge-parse-handshake" type="button">解析会话响应</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="ge-write-data">写入 HEX</label>
+                  <input id="ge-write-data" class="input" style="width:240px" value="34 12" placeholder="34 12" />
+                  <button class="btn-ghost" id="ge-build-write" type="button">生成写帧</button>
+                  <label class="form-label" for="ge-expected-bytes">期望数据字节</label>
+                  <input id="ge-expected-bytes" class="input" style="width:100px" type="number" min="0" max="65535" value="2" />
+                  <label class="form-label" for="ge-response-hex">响应 HEX</label>
+                  <input id="ge-response-hex" class="input" style="width:300px" placeholder="03 00 01 00 ..." />
+                  <button class="btn-ghost" id="ge-parse-response" type="button">解析响应</button>
+                  <button class="btn-text" id="ge-clear" type="button">清空</button>
+                </div>
+                <pre id="ge-output" class="parser-result" style="white-space:pre-wrap;max-height:380px;margin-bottom:0">先解析 GE 地址或生成 SRTP 会话/读写报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ Panasonic MEWTOCOL-COM ══ -->
+          <section class="workspace panasonic-workspace hidden" id="panasonic-view">
+            <div class="card">
+              <div class="card-header"><strong>Panasonic MEWTOCOL-COM</strong><span class="section-state">软件编解码 + 共享 COM 只读 S4 · 不自动开关 COM</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="panasonic" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">新增协议边界：FP 系列 MEWTOCOL-COM ASCII、1..32 站号、RD/WD 数据区、RCS/WCS 单触点、XOR BCC 和 CR。下面的“COM 只读”只复用主站页已经打开的串口，不能替代具体 FP 型号、电气层和现场 L2；WD/WCS 仍不会通过串口发送。</p>
+                <div class="form-row">
+                  <label class="form-label" for="panasonic-port">COM</label>
+                  <input id="panasonic-port" class="input" style="width:90px" value="COM1" placeholder="COM4" />
+                  <label class="form-label" for="panasonic-station">站号</label>
+                  <input id="panasonic-station" class="input" style="width:65px" type="number" min="1" max="32" value="1" />
+                  <label class="form-label" for="panasonic-baud">波特率</label>
+                  <input id="panasonic-baud" class="input" style="width:80px" type="number" value="9600" />
+                  <span class="field-meta">典型 9600 8O1（以 FP 手册为准）</span>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="panasonic-model">FP 型号记录</label>
+                  <input id="panasonic-model" class="input" style="width:150px" placeholder="例如 FP0R-C32" />
+                  <label class="form-label" for="panasonic-device-serial">设备序列号</label>
+                  <input id="panasonic-device-serial" class="input" style="width:150px" placeholder="人工记录" />
+                  <label class="form-label" for="panasonic-timeout">超时(ms)</label>
+                  <input id="panasonic-timeout" class="input" style="width:80px" type="number" min="1" max="600000" value="1500" />
+                  <label class="form-label" for="panasonic-retries">重试</label>
+                  <input id="panasonic-retries" class="input" style="width:55px" type="number" min="0" max="3" value="1" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="panasonic-data-address">数据地址</label>
+                  <input id="panasonic-data-address" class="input" style="width:140px" value="DT100" placeholder="DT100 / LD0 / FL0" />
+                  <label class="form-label" for="panasonic-word-count">字数量</label>
+                  <input id="panasonic-word-count" class="input" style="width:70px" type="number" min="1" max="500" value="1" />
+                  <label class="form-label" for="panasonic-write-data">写入 HEX</label>
+                  <input id="panasonic-write-data" class="input" style="width:220px" value="64 00" placeholder="64 00" />
+                  <label class="form-label" for="panasonic-contact-address">触点地址</label>
+                  <input id="panasonic-contact-address" class="input" style="width:120px" value="X1F" placeholder="X1F / T12" />
+                  <label class="checkbox-label"><input id="panasonic-contact-value" type="checkbox" /> ON</label>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="panasonic-build-read" type="button">生成 RD 读字</button>
+                  <button class="btn-ghost" id="panasonic-build-write" type="button">生成 WD 写字</button>
+                  <button class="btn-ghost" id="panasonic-build-read-contact" type="button">生成 RCS 读点</button>
+                  <button class="btn-ghost" id="panasonic-build-write-contact" type="button">生成 WCS 写点</button>
+                  <button class="btn-ghost" id="panasonic-parse-address" type="button">解析地址</button>
+                  <button class="btn-primary" id="panasonic-live-read" type="button">COM 只读读字</button>
+                  <button class="btn-ghost" id="panasonic-live-read-contact" type="button">COM 只读读点</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>MEWTOCOL 响应解析</strong><span style="margin-left:auto" class="field-meta">保留 CR；页面不会打开 COM</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label" for="panasonic-expected-command">期望命令</label>
+                  <input id="panasonic-expected-command" class="input" style="width:90px" value="RD" placeholder="RD / WD / RCS / WCS" />
+                  <label class="form-label" for="panasonic-expected-header">响应头</label>
+                  <select id="panasonic-expected-header" class="input" style="width:85px"><option value="%" selected>%</option><option value="<">&lt;</option></select>
+                </div>
+                <textarea id="panasonic-response-input" class="input" rows="3" style="width:100%;font-family:var(--mono,monospace)" placeholder="%01$RD640014\r"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="panasonic-parse-response" type="button">解析响应</button>
+                  <button class="btn-text" id="panasonic-clear" type="button">清空</button>
+                </div>
+                <pre id="panasonic-output" class="parser-result" style="white-space:pre-wrap;max-height:300px;margin-bottom:0">先生成或粘贴 MEWTOCOL 报文。</pre>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ MQTT 3.1.1 ══ -->
+          <section class="workspace mqtt-workspace hidden" id="mqtt-view">
+            <div class="card">
+              <div class="card-header"><strong>MQTT 3.1.1 工业上行</strong><span class="section-state">TCP 只读订阅 S4b · Aedes 互操作已验</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="mqtt" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：TCP 1883、CONNECT/CONNACK、SUBSCRIBE/SUBACK、QoS 0 PUBLISH 解码、PINGREQ/PINGRESP、DISCONNECT。页面不发送 PUBLISH、不做命令订阅、不实现 TLS/认证/Sparkplug B。</p>
+                <div class="form-row">
+                  <label class="form-label" for="mqtt-host">Broker</label>
+                  <input id="mqtt-host" class="input" style="width:180px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="mqtt-port">TCP Port</label>
+                  <input id="mqtt-port" class="input" style="width:85px" type="number" min="1" max="65535" value="1883" />
+                  <label class="form-label" for="mqtt-client-id">Client ID</label>
+                  <input id="mqtt-client-id" class="input" style="width:150px" value="nexus-readonly" />
+                  <label class="form-label" for="mqtt-keep-alive">Keep Alive</label>
+                  <input id="mqtt-keep-alive" class="input" style="width:70px" type="number" min="0" max="65535" value="30" />
+                  <label class="checkbox-label"><input id="mqtt-clean-session" type="checkbox" checked /> Clean Session</label>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="mqtt-topic-filter">Topic Filter</label>
+                  <input id="mqtt-topic-filter" class="input" style="width:300px" value="factory/line1/#" placeholder="factory/line1/#" />
+                  <label class="form-label" for="mqtt-qos">QoS</label>
+                  <select id="mqtt-qos" class="input" style="width:75px"><option value="0" selected>0</option><option value="1">1（离线）</option><option value="2">2（离线）</option></select>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="mqtt-open-connection" type="button">连接 Broker</button>
+                  <button class="btn-ghost" id="mqtt-close-connection" type="button">断开</button>
+                  <button class="btn-primary" id="mqtt-subscribe" type="button">只读订阅</button>
+                  <button class="btn-primary" id="mqtt-read-publish" type="button">读取 PUBLISH</button>
+                  <button class="btn-ghost" id="mqtt-ping" type="button">PING</button>
+                </div>
+                <pre id="mqtt-output" class="parser-result" style="white-space:pre-wrap;max-height:360px;margin-bottom:0">先连接 Broker 或生成/解析 MQTT 报文。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>MQTT 离线编解码</strong><span style="margin-left:auto" class="field-meta">只生成/解析；不会向 Broker 发布</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <button class="btn-ghost" id="mqtt-build-connect" type="button">生成 CONNECT</button>
+                  <button class="btn-ghost" id="mqtt-build-subscribe" type="button">生成 SUBSCRIBE</button>
+                  <button class="btn-ghost" id="mqtt-build-pingreq" type="button">生成 PINGREQ</button>
+                  <button class="btn-ghost" id="mqtt-build-disconnect" type="button">生成 DISCONNECT</button>
+                </div>
+                <textarea id="mqtt-frame-input" class="input" rows="4" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴 MQTT HEX，例如 30 0D 00 05 73 74 61 74 65 4F 4B 21 00 01 02"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="mqtt-parse-connack" type="button">解析 CONNACK</button>
+                  <button class="btn-ghost" id="mqtt-parse-suback" type="button">解析 SUBACK</button>
+                  <button class="btn-ghost" id="mqtt-parse-publish" type="button">解析 PUBLISH</button>
+                  <button class="btn-text" id="mqtt-clear" type="button">清空</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ IEC 60870-5-104 ══ -->
+          <section class="workspace iec104-workspace hidden" id="iec104-view">
+            <div class="card">
+              <div class="card-header"><strong>IEC 60870-5-104 只读 Client/Master</strong><span class="section-state">TCP 2404 · 独立脚本 Outstation S4a</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="iec" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：STARTDT/STOPDT/TESTFR、15 位 N(S)/N(R)、站总召/组总召，以及 M_SP_NA_1、M_DP_NA_1、M_ME_NA_1、M_ME_NC_1、M_IT_NA_1 监视数据。遥控、设点、校时、文件传输和站端模式均未开放。</p>
+                <div class="form-row">
+                  <label class="form-label" for="iec104-host">RTU / IED</label>
+                  <input id="iec104-host" class="input" style="width:180px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="iec104-port">TCP Port</label>
+                  <input id="iec104-port" class="input" style="width:85px" type="number" min="1" max="65535" value="2404" />
+                  <label class="form-label" for="iec104-common-address">公共地址 CA</label>
+                  <input id="iec104-common-address" class="input" style="width:85px" type="number" min="0" max="65535" value="1" />
+                  <label class="form-label" for="iec104-originator">发起方 OA</label>
+                  <input id="iec104-originator" class="input" style="width:75px" type="number" min="0" max="255" value="0" />
+                  <label class="form-label" for="iec104-group">总召组</label>
+                  <select id="iec104-group" class="input" style="width:145px">
+                    <option value="0" selected>0 · 站总召 QOI 20</option>
+                    <option value="1">1 · QOI 21</option><option value="2">2 · QOI 22</option><option value="3">3 · QOI 23</option><option value="4">4 · QOI 24</option>
+                    <option value="5">5 · QOI 25</option><option value="6">6 · QOI 26</option><option value="7">7 · QOI 27</option><option value="8">8 · QOI 28</option>
+                    <option value="9">9 · QOI 29</option><option value="10">10 · QOI 30</option><option value="11">11 · QOI 31</option><option value="12">12 · QOI 32</option>
+                    <option value="13">13 · QOI 33</option><option value="14">14 · QOI 34</option><option value="15">15 · QOI 35</option><option value="16">16 · QOI 36</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="iec104-open-connection" type="button">连接并 STARTDT</button>
+                  <button class="btn-ghost" id="iec104-test-frame" type="button">TESTFR</button>
+                  <button class="btn-primary" id="iec104-interrogate" type="button">只读总召</button>
+                  <button class="btn-ghost" id="iec104-close-connection" type="button">STOPDT 并断开</button>
+                </div>
+                <pre id="iec104-output" class="parser-result" style="white-space:pre-wrap;max-height:420px;margin-bottom:0">先连接独立 Outstation/真实站端，或在下方生成/解析 IEC104 报文。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>IEC104 离线帧与 ASDU</strong><span style="margin-left:auto" class="field-meta">只读编解码；不生成遥控/设点/校时 ASDU</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <button class="btn-ghost" id="iec104-build-interrogation" type="button">生成总召 I 帧</button>
+                  <label class="form-label" for="iec104-receive-sequence">S 帧 N(R)</label>
+                  <input id="iec104-receive-sequence" class="input" style="width:85px" type="number" min="0" max="32767" value="1" />
+                  <button class="btn-ghost" id="iec104-build-s-frame" type="button">生成 S 确认</button>
+                  <label class="form-label" for="iec104-u-function">U 功能</label>
+                  <select id="iec104-u-function" class="input" style="width:145px"><option value="STARTDT_ACT">STARTDT_ACT</option><option value="STOPDT_ACT">STOPDT_ACT</option><option value="TESTFR_ACT" selected>TESTFR_ACT</option></select>
+                  <button class="btn-ghost" id="iec104-build-u-frame" type="button">生成 U 帧</button>
+                </div>
+                <textarea id="iec104-frame-input" class="input" rows="5" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴完整 APDU，例如 68 0E 00 00 00 00 64 01 06 00 01 00 00 00 00 14；解析 ASDU 时也可粘贴去掉 68/长度/控制域后的字节"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="iec104-parse-apdu" type="button">解析 APDU</button>
+                  <button class="btn-ghost" id="iec104-parse-asdu" type="button">解析 ASDU</button>
+                  <button class="btn-text" id="iec104-clear" type="button">清空</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ DNP3 ══ -->
+          <section class="workspace dnp3-workspace hidden" id="dnp3-view">
+            <div class="card">
+              <div class="card-header"><strong>DNP3/TCP 只读 Master</strong><span class="section-state">TCP 20000 · 独立脚本 Outstation S4a</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="dnp" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：05 64 链路帧、头/16 字节块 CRC、Transport/Application FIR/FIN 与序号、完整性轮询、Class 0/1/2/3、静态/事件对象、IIN、Quality 和应用 CONFIRM。Select/Operate、校时、Restart、Freeze、文件、Secure Authentication、串口和 Outstation 模式均未开放。</p>
+                <div class="form-row">
+                  <label class="form-label" for="dnp3-host">RTU / IED</label>
+                  <input id="dnp3-host" class="input" style="width:180px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="dnp3-port">TCP Port</label>
+                  <input id="dnp3-port" class="input" style="width:85px" type="number" min="1" max="65535" value="20000" />
+                  <label class="form-label" for="dnp3-master-address">Master Link</label>
+                  <input id="dnp3-master-address" class="input" style="width:85px" type="number" min="0" max="65519" value="1" />
+                  <label class="form-label" for="dnp3-outstation-address">Outstation Link</label>
+                  <input id="dnp3-outstation-address" class="input" style="width:95px" type="number" min="0" max="65519" value="1024" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="dnp3-open-connection" type="button">连接只读 Master</button>
+                  <button class="btn-primary" id="dnp3-integrity-poll" type="button">完整性轮询 0/1/2/3</button>
+                  <label class="form-label" for="dnp3-class">事件/静态 Class</label>
+                  <select id="dnp3-class" class="input" style="width:115px"><option value="0">Class 0</option><option value="1" selected>Class 1</option><option value="2">Class 2</option><option value="3">Class 3</option></select>
+                  <button class="btn-ghost" id="dnp3-class-scan" type="button">只读 Class 扫描</button>
+                  <button class="btn-ghost" id="dnp3-close-connection" type="button">断开</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="dnp3-group">Group</label><input id="dnp3-group" class="input" style="width:72px" type="number" min="1" max="255" value="30" />
+                  <label class="form-label" for="dnp3-variation">Variation</label><input id="dnp3-variation" class="input" style="width:72px" type="number" min="1" max="255" value="5" />
+                  <label class="form-label" for="dnp3-start">Start</label><input id="dnp3-start" class="input" style="width:85px" type="number" min="0" max="65535" value="0" />
+                  <label class="form-label" for="dnp3-stop">Stop</label><input id="dnp3-stop" class="input" style="width:85px" type="number" min="0" max="65535" value="3" />
+                  <button class="btn-ghost" id="dnp3-read-range" type="button">只读对象范围</button>
+                </div>
+                <pre id="dnp3-output" class="parser-result" style="white-space:pre-wrap;max-height:420px;margin-bottom:0">先连接独立 Outstation/真实站端，或在下方生成/解析 DNP3 报文。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>DNP3 离线 READ 与响应解析</strong><span style="margin-left:auto" class="field-meta">只生成 READ/CONFIRM；不生成控制、校时或管理功能码</span></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label" for="dnp3-sequence">Application SEQ</label>
+                  <input id="dnp3-sequence" class="input" style="width:75px" type="number" min="0" max="15" value="0" />
+                  <button class="btn-ghost" id="dnp3-build-integrity" type="button">生成完整性 READ</button>
+                  <button class="btn-ghost" id="dnp3-build-read" type="button">生成范围 READ</button>
+                  <button class="btn-ghost" id="dnp3-build-confirm" type="button">生成应用 CONFIRM</button>
+                </div>
+                <textarea id="dnp3-frame-input" class="input" rows="6" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴完整 DNP3 链路帧（05 64 ...），或应用响应 PDU（例如 C0 81 00 00 ...）"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="dnp3-parse-link" type="button">解析链路帧 + CRC</button>
+                  <button class="btn-ghost" id="dnp3-parse-application" type="button">解析应用响应</button>
+                  <button class="btn-text" id="dnp3-clear" type="button">清空</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ DL/T 645 ══ -->
+          <section class="workspace dlt645-workspace hidden" id="dlt645-view">
+            <div class="card">
+              <div class="card-header"><strong>DL/T 645 电能表只读主站</strong><span class="section-state">RS-485 · 共享 COM · 软件应答器 S4a · 真实表计 L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="dlt" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：2007 与 1997 分开处理，支持严格 BCD 表地址、DI 反序、+33H/-33H、0..4 个 FE 前导、完整算术和以及只读响应校验。页面只复用主站页已经打开的 COM；写数据、校时、改地址、冻结、费率、密码和拉合闸均没有发送入口。</p>
+                <div class="form-row">
+                  <label class="form-label" for="dlt645-version">规约版本</label>
+                  <select id="dlt645-version" class="input" style="width:145px"><option value="2007" selected>DL/T 645-2007</option><option value="1997">DL/T 645-1997（旧版）</option></select>
+                  <label class="form-label" for="dlt645-address">12 位表地址</label>
+                  <input id="dlt645-address" class="input" style="width:150px" value="123456789012" inputmode="numeric" maxlength="12" placeholder="123456789012" />
+                  <label class="form-label" for="dlt645-data-id">数据标识 DI</label>
+                  <input id="dlt645-data-id" class="input" style="width:125px;font-family:var(--mono,monospace)" value="00010000" maxlength="8" placeholder="00010000" />
+                  <label class="form-label" for="dlt645-preamble">FE 前导</label>
+                  <input id="dlt645-preamble" class="input" style="width:55px" type="number" min="0" max="4" value="4" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="dlt645-model">表计型号记录</label>
+                  <input id="dlt645-model" class="input" style="width:150px" placeholder="例如 DTSU666" />
+                  <label class="form-label" for="dlt645-device-serial">资产/序列号</label>
+                  <input id="dlt645-device-serial" class="input" style="width:150px" placeholder="人工记录" />
+                  <label class="form-label" for="dlt645-timeout">超时(ms)</label>
+                  <input id="dlt645-timeout" class="input" style="width:80px" type="number" min="1" max="600000" value="1500" />
+                  <label class="form-label" for="dlt645-retries">重试</label>
+                  <input id="dlt645-retries" class="input" style="width:55px" type="number" min="0" max="3" value="1" />
+                </div>
+                <div class="form-row">
+                  <span class="form-label">2007 常用只读 DI</span>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="00000000">组合有功总电能</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="00010000">正向有功总电能</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="00020000">反向有功总电能</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="04000101">日期/星期</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="04000102">时间</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="2007" data-data-id="04000501">运行状态字 1</button>
+                  <button class="btn-text dlt645-di-preset" type="button" data-version="1997" data-data-id="9010">1997 正向有功总电能</button>
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="dlt645-live-read" type="button">共享 COM 只读</button>
+                  <button class="btn-ghost" id="dlt645-build-read" type="button">生成读请求</button>
+                  <button class="btn-ghost" id="dlt645-parse-address" type="button">检查表地址</button>
+                  <button class="btn-ghost" id="dlt645-parse-data-id" type="button">检查 DI / 线序</button>
+                  <span class="field-meta">默认串口 2400 8E1；实际参数以表计为准。B1/A1 后续帧当前明确失败，不返回残缺值。</span>
+                </div>
+                <pre id="dlt645-output" class="parser-result" style="white-space:pre-wrap;max-height:420px;margin-bottom:0">先选择版本、填写表地址与 DI，再生成只读请求或复用已打开的 COM 读取。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>DL/T 645 离线帧解析</strong><span style="margin-left:auto" class="field-meta">仅解析/验证，不发送任意帧</span></div>
+              <div class="card-body">
+                <textarea id="dlt645-frame-input" class="input" rows="6" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴完整帧，例如 68 12 90 78 56 34 12 68 91 08 ... CS 16；可包含 0..4 个 FE 前导"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="dlt645-parse-frame" type="button">解析帧 / CS / -33H</button>
+                  <button class="btn-ghost" id="dlt645-parse-read-response" type="button">按当前地址和 DI 解析读响应</button>
+                  <button class="btn-text" id="dlt645-clear" type="button">清空</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ CJ/T 188 ══ -->
+          <section class="workspace cjt188-workspace hidden" id="cjt188-view">
+            <div class="card">
+              <div class="card-header"><strong>CJ/T 188-2004 水/气/热表离线编解码</strong><span class="section-state">软件审计 S1-S3 · 真实表计 L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="cjt" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：锁定主流 2004 单 68H 帧型（68 T A0..A6 C L DATA CS 16），CS 为模 256 算术和，数据域不做 +33H，读数据 DATA 为 DI0 DI1 + SER。本页只做离线构帧/解帧；不打开 COM、不发送请求、不做后续帧和阀门/写地址命令。旧 Nexus.Cjt 的双 68H、XOR 校验、+33H 已判定为偏差，不继承。</p>
+                <div class="form-row">
+                  <label class="form-label" for="cjt188-meter-type">表类型 T</label>
+                  <select id="cjt188-meter-type" class="input" style="width:150px"><option value="cold-water" selected>10H 冷水水表</option><option value="hot-water">11H 热水水表</option><option value="heat">20H 热量表</option><option value="gas">30H 燃气表</option></select>
+                  <label class="form-label" for="cjt188-address">14 位表地址</label>
+                  <input id="cjt188-address" class="input" style="width:165px;font-family:var(--mono,monospace)" value="11223344556677" maxlength="14" placeholder="11223344556677" />
+                  <label class="form-label" for="cjt188-data-id">数据标识 DI</label>
+                  <input id="cjt188-data-id" class="input" style="width:90px;font-family:var(--mono,monospace)" value="901F" maxlength="4" placeholder="901F" />
+                  <label class="form-label" for="cjt188-sequence">SER</label>
+                  <input id="cjt188-sequence" class="input" style="width:55px" type="number" min="0" max="255" value="1" />
+                  <label class="form-label" for="cjt188-preamble">FE 前导</label>
+                  <input id="cjt188-preamble" class="input" style="width:55px" type="number" min="0" max="4" value="0" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="cjt188-build-read" type="button">生成读请求（01H）</button>
+                  <button class="btn-ghost" id="cjt188-parse-meter-type" type="button">检查表类型</button>
+                  <button class="btn-ghost" id="cjt188-parse-address" type="button">检查表地址 / 反序</button>
+                  <button class="btn-ghost" id="cjt188-parse-data-id" type="button">检查 DI / SER</button>
+                  <button class="btn-text" id="cjt188-clear" type="button">清空</button>
+                </div>
+                <pre id="cjt188-output" class="parser-result" style="white-space:pre-wrap;max-height:340px;margin-bottom:0">先选择表类型并生成 901F 读请求向量，再解析响应帧；本页不提供 COM 发送入口。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>CJ/T 188 离线帧解析</strong><span style="margin-left:auto" class="field-meta">仅解析/验证，不发送任意帧</span></div>
+              <div class="card-body">
+                <textarea id="cjt188-frame-input" class="input" rows="6" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴完整帧，例如 FE FE FE 68 10 77 66 55 44 33 22 11 81 09 90 1F 01 78 56 34 12 00 FF A1 16"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="cjt188-parse-frame" type="button">解析帧 / CS</button>
+                  <button class="btn-ghost" id="cjt188-parse-read-response" type="button">按当前表类型/地址/DI/SER 解析读响应</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ BACnet/IP ══ -->
+          <section class="workspace bacnet-workspace hidden" id="bacnet-view">
+            <div class="card">
+              <div class="card-header"><strong>BACnet/IP UDP 只读会话</strong><span class="section-state">0AH 定向 Who-Is + ReadProperty · 独立脚本对端 S4a · 真实楼宇设备 L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="bacnet" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">连接一个显式 UDP 对端，只发送 0AH Original-Unicast Who-Is 和 0CH ReadProperty；不使用 0BH 广播、不做 BBMD/FDR，不提供 RPM、写入、COV 或设备管理。当前独立脚本对端通过不代表真实 BACnet 设备 L2 通过。</p>
+                <div class="form-row">
+                  <label class="form-label" for="bacnet-host">对端 IP</label>
+                  <input id="bacnet-host" class="input" style="width:150px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="bacnet-port">UDP 端口</label>
+                  <input id="bacnet-port" class="input" style="width:90px" type="number" min="1" max="65535" value="47808" />
+                  <label class="form-label" for="bacnet-connection-id">连接 ID</label>
+                  <input id="bacnet-connection-id" class="input" style="width:150px" value="bacnet-udp" />
+                  <label class="form-label" for="bacnet-timeout">超时(ms)</label>
+                  <input id="bacnet-timeout" class="input" style="width:85px" type="number" min="100" max="5000" value="1500" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="bacnet-connect" type="button">连接 UDP 对端</button>
+                  <button class="btn-ghost" id="bacnet-whois-live" type="button">定向 Who-Is / 收 I-Am</button>
+                  <button class="btn-ghost" id="bacnet-rp-live" type="button">ReadProperty 读取</button>
+                  <button class="btn-text" id="bacnet-disconnect" type="button">断开</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>BACnet/IP Who-Is / I-Am 离线编解码</strong><span class="section-state">软件审计 S1-S3 · UDP 47808 / 实机 L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="bacnet" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：只生成/解析本地 BACnet/IPv4 帧（BVLC 81H + 0AH/0BH，NPDU 01 00，APDU 10H）。Who-Is 支持 08H，I-Am 支持 00H；本页不打开 UDP、不发送发现或读取请求，也不提供 RPM、写入、COV、BBMD/FDR 或 MS/TP 入口。旧 Nexus.Bacnet 的 BVLC/标签/事务偏差不继承。</p>
+                <div class="form-row">
+                  <span class="form-label">Who-Is 范围</span>
+                  <label class="checkbox-label"><input type="checkbox" id="bacnet-whois-global" checked> 全局（省略 low/high）</label>
+                  <input id="bacnet-whois-low" class="input" style="width:110px" type="number" min="0" max="4194303" value="1000" placeholder="0..4194303" />
+                  <span class="field-meta">..</span>
+                  <input id="bacnet-whois-high" class="input" style="width:110px" type="number" min="0" max="4194303" value="2000" placeholder="0..4194303" />
+                  <label class="checkbox-label"><input type="checkbox" id="bacnet-whois-broadcast" checked> 0BH 广播（否则 0AH 单播）</label>
+                  <button class="btn-primary" id="bacnet-build-whois" type="button">生成 Who-Is</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="bacnet-iam-instance">I-Am Device</label>
+                  <input id="bacnet-iam-instance" class="input" style="width:110px" type="number" min="0" max="4194303" value="1001" />
+                  <label class="form-label" for="bacnet-iam-max-apdu">Max-APDU</label>
+                  <input id="bacnet-iam-max-apdu" class="input" style="width:90px" type="number" min="1" max="4294967295" value="480" />
+                  <label class="form-label" for="bacnet-iam-segmentation">Segmentation</label>
+                  <select id="bacnet-iam-segmentation" class="input" style="width:145px"><option value="both">0 Both</option><option value="transmit">1 Transmit</option><option value="receive">2 Receive</option><option value="none" selected>3 None</option></select>
+                  <label class="form-label" for="bacnet-iam-vendor">Vendor ID</label>
+                  <input id="bacnet-iam-vendor" class="input" style="width:80px" type="number" min="0" max="65535" value="42" />
+                  <label class="checkbox-label"><input type="checkbox" id="bacnet-iam-broadcast"> 0BH 广播</label>
+                  <button class="btn-primary" id="bacnet-build-iam" type="button">生成 I-Am</button>
+                </div>
+                <div class="form-row">
+                  <button class="btn-text" id="bacnet-clear" type="button">清空</button>
+                  <span class="field-meta">示例：全局 Who-Is = 81 0B 00 08 01 00 10 08；I-Am 使用 C4/22/91/21 标签。</span>
+                </div>
+                <pre id="bacnet-output" class="parser-result" style="white-space:pre-wrap;max-height:320px;margin-bottom:0">先生成 Who-Is / I-Am，或粘贴 BACnet/IP UDP 载荷解析；本页不提供 UDP 发送入口。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>BACnet ReadProperty 离线只读编解码</strong><span style="margin-left:auto" class="field-meta">Confirmed Request / ComplexACK · 不发送 UDP</span></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">生成 0CH ReadProperty 请求或解析 30H ComplexACK。请求使用 context [0] Object Identifier、[1] Property Identifier 和可选 [2] Array Index；ACK 的应用值必须在 [3] 3EH/3FH 内。首轮只解释 Unsigned 和 Real，未知应用标签保留原始字节。</p>
+                <div class="form-row">
+                  <label class="form-label" for="bacnet-rp-object-type">Object Type</label>
+                  <select id="bacnet-rp-object-type" class="input" style="width:140px"><option value="0" selected>0 Analog Input</option><option value="1">1 Analog Output</option><option value="2">2 Analog Value</option><option value="3">3 Binary Input</option><option value="4">4 Binary Output</option><option value="5">5 Binary Value</option><option value="8">8 Device</option></select>
+                  <label class="form-label" for="bacnet-rp-object-instance">Instance</label>
+                  <input id="bacnet-rp-object-instance" class="input" style="width:110px" type="number" min="0" max="4194303" value="1001" />
+                  <label class="form-label" for="bacnet-rp-property">Property ID</label>
+                  <input id="bacnet-rp-property" class="input" style="width:95px" type="number" min="0" max="4194303" value="85" />
+                  <label class="form-label" for="bacnet-rp-invoke">Invoke</label>
+                  <input id="bacnet-rp-invoke" class="input" style="width:70px" type="number" min="0" max="255" value="1" />
+                  <label class="checkbox-label"><input type="checkbox" id="bacnet-rp-use-index"> Array Index</label>
+                  <input id="bacnet-rp-index" class="input" style="width:85px" type="number" min="0" max="4194303" value="0" disabled />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="bacnet-rp-build" type="button">生成只读请求</button>
+                  <button class="btn-ghost" id="bacnet-rp-parse-request" type="button">解析请求帧</button>
+                  <button class="btn-ghost" id="bacnet-rp-parse-ack" type="button">按当前请求解析 ACK</button>
+                  <span class="field-meta">示例：AI 1001 / Present Value = 81 0A 00 11 01 04 00 03 01 0C 0C 00 00 03 E9 19 55。</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>BACnet/IP 离线帧解析</strong><span style="margin-left:auto" class="field-meta">仅 BVLC/NPDU/APDU 验证，不发送</span></div>
+              <div class="card-body">
+                <textarea id="bacnet-frame-input" class="input" rows="6" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴 UDP 载荷，例如 81 0B 00 08 01 00 10 08"></textarea>
+                <div class="form-row" style="margin-top:10px">
+                  <button class="btn-ghost" id="bacnet-parse-frame" type="button">解析 BVLC / NPDU / APDU</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ══ KNXnet/IP Tunneling ══ -->
+          <section class="workspace knx-workspace hidden" id="knx-view">
+            <div class="card">
+              <div class="card-header"><strong>KNXnet/IP UDP 只读隧道会话</strong><span class="section-state">Connect + GroupValueRead + Disconnect · 独立脚本网关 S4a · 真实 Interface/Router L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="knx" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">连接显式 UDP 网关并完成非安全 Tunneling v1 握手；读取流程固定为 GroupValueRead → 网关 ACK → GroupValueResponse → 客户端 ACK。无写组值、场景、Routing、Device Management 或 Secure 入口；独立脚本网关通过不代表真实网关 L2 通过。</p>
+                <div class="form-row">
+                  <label class="form-label" for="knx-host">网关 IP</label>
+                  <input id="knx-host" class="input" style="width:150px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="knx-port">UDP 端口</label>
+                  <input id="knx-port" class="input" style="width:90px" type="number" min="1" max="65535" value="3671" />
+                  <label class="form-label" for="knx-connection-id">连接 ID</label>
+                  <input id="knx-connection-id" class="input" style="width:150px" value="knx-udp" />
+                  <label class="form-label" for="knx-timeout">超时(ms)</label>
+                  <input id="knx-timeout" class="input" style="width:85px" type="number" min="100" max="5000" value="1500" />
+                  <label class="form-label" for="knx-keepalive-interval">保活间隔(ms)</label>
+                  <input id="knx-keepalive-interval" class="input" style="width:110px" type="number" min="100" max="600000" value="60000" />
+                </div>
+                <div class="form-row">
+                  <button class="btn-primary" id="knx-connect" type="button">连接 UDP 网关</button>
+                  <button class="btn-ghost" id="knx-state" type="button">Connection State 保活</button>
+                  <button class="btn-ghost" id="knx-start-keepalive" type="button">启动周期保活</button>
+                  <button class="btn-ghost" id="knx-stop-keepalive" type="button">停止周期保活</button>
+                  <button class="btn-text" id="knx-keepalive-status" type="button">查询保活状态</button>
+                  <button class="btn-ghost" id="knx-live-read" type="button">读取组地址</button>
+                  <button class="btn-text" id="knx-disconnect-live" type="button">断开隧道</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>KNXnet/IP Tunneling v1 离线只读编解码</strong><span class="section-state">软件审计 S1-S3 · UDP 3671 / 实机 L2 pending</span><span style="margin-left:auto"></span><button class="btn-text protocol-help-trigger" type="button" data-protocol-help="knx" aria-haspopup="dialog">通讯设置帮助</button></div>
+              <div class="card-body">
+                <p class="field-meta" style="margin-top:0">协议边界：只生成/解析非安全 Tunneling v1 帧。公共头固定 06 10；支持 Connect Request/Response、GroupValueRead 的 L_Data.req、Tunneling ACK 与 GroupValueResponse 的 L_Data.ind。本页不打开 UDP、不发送请求，不提供 Routing、Discovery、Device Management、Secure、写组值或场景控制入口。旧 Nexus.Knx 的 10 00 头和无握手伪隧道不继承。</p>
+                <div class="form-row">
+                  <label class="form-label" for="knx-local-ip">本机 IPv4</label>
+                  <input id="knx-local-ip" class="input" style="width:145px" value="127.0.0.1" placeholder="127.0.0.1" />
+                  <label class="form-label" for="knx-local-port">本机 UDP 口</label>
+                  <input id="knx-local-port" class="input" style="width:95px" type="number" min="1" max="65535" value="50000" />
+                  <button class="btn-primary" id="knx-build-connect" type="button">生成 Connect Request</button>
+                  <button class="btn-ghost" id="knx-parse-connect-response" type="button">解析 Connect Response</button>
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="knx-group">三层组地址</label>
+                  <input id="knx-group" class="input" style="width:110px" value="1/2/3" placeholder="1/2/3" />
+                  <label class="form-label" for="knx-channel">Channel</label>
+                  <input id="knx-channel" class="input" style="width:70px" type="number" min="1" max="255" value="21" />
+                  <label class="form-label" for="knx-sequence">Sequence</label>
+                  <input id="knx-sequence" class="input" style="width:75px" type="number" min="0" max="255" value="0" />
+                  <button class="btn-primary" id="knx-build-read" type="button">生成 GroupValueRead</button>
+                  <button class="btn-ghost" id="knx-parse-request" type="button">解析 Tunneling Request</button>
+                </div>
+                <div class="form-row">
+                  <button class="btn-ghost" id="knx-parse-ack" type="button">解析 Tunneling ACK</button>
+                  <button class="btn-ghost" id="knx-parse-response" type="button">解析 GroupValueResponse</button>
+                  <button class="btn-ghost" id="knx-build-ack" type="button">生成响应 ACK</button>
+                  <button class="btn-text" id="knx-clear" type="button">清空</button>
+                </div>
+                <pre id="knx-output" class="parser-result" style="white-space:pre-wrap;max-height:320px;margin-bottom:0">先生成 Connect/GroupValueRead，或粘贴 KNXnet/IP UDP 载荷解析；本页不提供 UDP 发送入口。</pre>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><strong>KNXnet/IP 离线帧解析</strong><span style="margin-left:auto" class="field-meta">仅公共头/Tunneling/cEMI 校证，不发送</span></div>
+              <div class="card-body">
+                <textarea id="knx-frame-input" class="input" rows="6" style="width:100%;font-family:var(--mono,monospace)" placeholder="粘贴 UDP 载荷，例如 06 10 04 20 00 15 04 15 00 00 11 00 BC E0 00 00 0A 03 01 00 00"></textarea>
               </div>
             </div>
           </section>
@@ -774,6 +1927,55 @@
         <div class="status-notice" id="notice" data-kind="info" role="status" aria-live="polite"><strong id="notice-title">准备就绪</strong><span id="notice-message">请选择协议并配置连接参数。</span></div>
       </footer>
     </div>
+
+    <dialog class="protocol-guide-dialog" id="protocol-guide-dialog" aria-labelledby="protocol-guide-title">
+      <div class="protocol-guide-shell">
+        <header class="protocol-guide-header">
+          <div>
+            <span class="protocol-guide-kicker">通讯设置帮助</span>
+            <h2 id="protocol-guide-title">协议连接参数</h2>
+          </div>
+          <button class="btn-icon protocol-guide-close" id="protocol-guide-close" type="button" aria-label="关闭通讯设置帮助">×</button>
+        </header>
+
+        <div class="protocol-guide-toolbar">
+          <label for="protocol-guide-variant">查看协议/变体</label>
+          <select class="input" id="protocol-guide-variant"></select>
+          <span class="protocol-guide-medium" id="protocol-guide-medium">—</span>
+        </div>
+
+        <div class="protocol-guide-current" id="protocol-guide-current"><strong>当前页面实际参数</strong><span>—</span></div>
+        <p class="protocol-guide-summary" id="protocol-guide-summary"></p>
+
+        <div class="protocol-guide-grid">
+          <section class="protocol-guide-section protocol-guide-parameters">
+            <h3>必须核对的参数</h3>
+            <div class="protocol-guide-table-wrap">
+              <table><thead><tr><th>参数</th><th>建议/要求</th><th>说明</th></tr></thead><tbody id="protocol-guide-parameter-rows"></tbody></table>
+            </div>
+          </section>
+          <section class="protocol-guide-section">
+            <h3>设备侧怎么设置</h3>
+            <ol id="protocol-guide-device-steps"></ol>
+          </section>
+          <section class="protocol-guide-section">
+            <h3>电脑 / Nexus 怎么设置</h3>
+            <ol id="protocol-guide-pc-steps"></ol>
+          </section>
+          <section class="protocol-guide-section">
+            <h3>连接前检查</h3>
+            <ul id="protocol-guide-checks"></ul>
+          </section>
+        </div>
+
+        <section class="protocol-guide-warning">
+          <h3>现场边界</h3>
+          <ul id="protocol-guide-warnings"></ul>
+        </section>
+
+        <footer class="protocol-guide-footer">帮助内容仅用于配置核对，不会自动修改 PLC、仪表、网卡或串口参数。</footer>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

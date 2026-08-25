@@ -48,6 +48,12 @@ class SlaveSerialBridge {
    */
   async start(serialService, rustCoreRequestFn, slaveId = "serial-default") {
     if (this.active) throw new Error("串口从站已在运行");
+    const port = serialService?.current?.port;
+    if (!port || port.isOpen !== true) {
+      const error = new Error("请先打开串口，再启动串口从站");
+      error.code = "SERIAL_NOT_OPEN";
+      throw error;
+    }
     this.serialService = serialService;
     this.rustCoreRequestFn = rustCoreRequestFn;
     this.slaveId = slaveId;
@@ -67,10 +73,7 @@ class SlaveSerialBridge {
       this.frameTimer = setTimeout(() => this._processFrame(), this.frameTimeoutMs);
     };
 
-    const port = this.serialService?.current?.port;
-    if (port) {
-      port.on("data", this.dataListener);
-    }
+    port.on("data", this.dataListener);
   }
 
   /**

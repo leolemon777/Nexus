@@ -1,10 +1,13 @@
 const { spawn } = require("node:child_process");
+const { redactLogText } = require("./log-redaction-service.cjs");
 
 const PROTOCOL_VERSION = 1;
 const MAX_LINE_BYTES = 1024 * 1024;
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 1_000;
 const DEFAULT_MAX_STDERR_BUFFER_BYTES = 64 * 1024;
+const MAX_PAYLOAD_NODES = 20_000;
+const MAX_PAYLOAD_DEPTH = 8;
 
 const COMMANDS = Object.freeze({
   HELLO: "hello",
@@ -158,6 +161,10 @@ const COMMANDS = Object.freeze({
   STOP_FINS_SLAVE: "stop_fins_slave",
   FINS_SLAVE_SET: "fins_slave_set",
   FINS_SLAVE_GET: "fins_slave_get",
+  HOSTLINK_BUILD_FINS: "hostlink_build_fins",
+  HOSTLINK_PARSE_FINS: "hostlink_parse_fins",
+  HOSTLINK_BUILD_CMODE_READ: "hostlink_build_cmode_read",
+  HOSTLINK_PARSE_CMODE_READ: "hostlink_parse_cmode_read",
   // 西门子 S7comm
   S7_PARSE_ADDRESS: "s7_parse_address",
   OPEN_S7_CONNECTION: "open_s7_connection",
@@ -178,6 +185,9 @@ const COMMANDS = Object.freeze({
   OPEN_PPI_TCP: "open_ppi_tcp",
   PPI_READ: "ppi_read",
   PPI_WRITE: "ppi_write",
+  PPI_BUILD_READ: "ppi_build_read",
+  PPI_BUILD_SA_CONFIRM: "ppi_build_sa_confirm",
+  PPI_PARSE_READ_RESPONSE: "ppi_parse_read_response",
   START_PPI_SLAVE: "start_ppi_slave",
   STOP_PPI_SLAVE: "stop_ppi_slave",
   USS_BUILD_REQUEST: "uss_build_request",
@@ -185,9 +195,194 @@ const COMMANDS = Object.freeze({
   RK512_BUILD_READ: "rk512_build_read",
   RK512_BUILD_WRITE: "rk512_build_write",
   RK512_PARSE_RESPONSE: "rk512_parse_response",
+  // Allen-Bradley EtherNet/IP + CIP（首轮 explicit 只读编解码）
+  OPEN_ENIP_CONNECTION: "open_enip_connection",
+  ENIP_READ_TAG: "enip_read_tag",
+  ENIP_BUILD_REGISTER_SESSION: "enip_build_register_session",
+  ENIP_BUILD_UNREGISTER_SESSION: "enip_build_unregister_session",
+  ENIP_BUILD_READ_TAG: "enip_build_read_tag",
+  ENIP_PARSE_FRAME: "enip_parse_frame",
+  ENIP_PARSE_CIP_RESPONSE: "enip_parse_cip_response",
+  // Beckhoff ADS/AMS（TCP 只读会话 + 编解码）
+  OPEN_ADS_CONNECTION: "open_ads_connection",
+  ADS_READ: "ads_read",
+  ADS_READ_DEVICE_INFO: "ads_read_device_info",
+  ADS_READ_STATE: "ads_read_state",
+  ADS_BUILD_READ: "ads_build_read",
+  ADS_BUILD_WRITE: "ads_build_write",
+  ADS_BUILD_READWRITE: "ads_build_readwrite",
+  ADS_BUILD_READ_DEVICE_INFO: "ads_build_read_device_info",
+  ADS_BUILD_READ_STATE: "ads_build_read_state",
+  ADS_PARSE_FRAME: "ads_parse_frame",
+  ADS_PARSE_RESPONSE: "ads_parse_response",
+  // MQTT 3.1.1（TCP 只读订阅 + 编解码）
+  OPEN_MQTT_CONNECTION: "open_mqtt_connection",
+  MQTT_SUBSCRIBE: "mqtt_subscribe",
+  MQTT_READ_PUBLISH: "mqtt_read_publish",
+  MQTT_PING: "mqtt_ping",
+  MQTT_BUILD_CONNECT: "mqtt_build_connect",
+  MQTT_PARSE_CONNACK: "mqtt_parse_connack",
+  MQTT_BUILD_SUBSCRIBE: "mqtt_build_subscribe",
+  MQTT_PARSE_SUBACK: "mqtt_parse_suback",
+  MQTT_PARSE_PUBLISH: "mqtt_parse_publish",
+  MQTT_BUILD_PINGREQ: "mqtt_build_pingreq",
+  MQTT_PARSE_PINGRESP: "mqtt_parse_pingresp",
+  MQTT_BUILD_DISCONNECT: "mqtt_build_disconnect",
+  // IEC 60870-5-104（TCP 只读 Client/Master + 总召）
+  OPEN_IEC104_CONNECTION: "open_iec104_connection",
+  IEC104_GENERAL_INTERROGATION: "iec104_general_interrogation",
+  IEC104_TEST_FRAME: "iec104_test_frame",
+  IEC104_BUILD_I_FRAME: "iec104_build_i_frame",
+  IEC104_BUILD_S_FRAME: "iec104_build_s_frame",
+  IEC104_BUILD_U_FRAME: "iec104_build_u_frame",
+  IEC104_PARSE_APDU: "iec104_parse_apdu",
+  IEC104_BUILD_GENERAL_INTERROGATION: "iec104_build_general_interrogation",
+  IEC104_PARSE_ASDU: "iec104_parse_asdu",
+  // DNP3（TCP 只读 Master + Class 0/1/2/3）
+  OPEN_DNP3_CONNECTION: "open_dnp3_connection",
+  DNP3_INTEGRITY_POLL: "dnp3_integrity_poll",
+  DNP3_CLASS_SCAN: "dnp3_class_scan",
+  DNP3_READ: "dnp3_read",
+  DNP3_BUILD_LINK_FRAME: "dnp3_build_link_frame",
+  DNP3_PARSE_LINK_FRAME: "dnp3_parse_link_frame",
+  DNP3_BUILD_CLASS_SCAN: "dnp3_build_class_scan",
+  DNP3_BUILD_READ_REQUEST: "dnp3_build_read_request",
+  DNP3_PARSE_APPLICATION_RESPONSE: "dnp3_parse_application_response",
+  DNP3_BUILD_CONFIRM: "dnp3_build_confirm",
+  // DL/T 645-1997/2007（RS-485 只读电表编解码）
+  DLT645_PARSE_ADDRESS: "dlt645_parse_address",
+  DLT645_PARSE_DATA_ID: "dlt645_parse_data_id",
+  DLT645_BUILD_READ_REQUEST: "dlt645_build_read_request",
+  DLT645_PARSE_FRAME: "dlt645_parse_frame",
+  DLT645_PARSE_READ_RESPONSE: "dlt645_parse_read_response",
+  // CJ/T 188-2004（水/气/热表离线只读编解码）
+  CJT188_PARSE_METER_TYPE: "cjt188_parse_meter_type",
+  CJT188_PARSE_ADDRESS: "cjt188_parse_address",
+  CJT188_PARSE_DATA_ID: "cjt188_parse_data_id",
+  CJT188_BUILD_READ_REQUEST: "cjt188_build_read_request",
+  CJT188_PARSE_FRAME: "cjt188_parse_frame",
+  CJT188_PARSE_READ_RESPONSE: "cjt188_parse_read_response",
+  // BACnet/IP（Who-Is/I-Am 离线只读编解码）
+  BACNET_IP_BUILD_WHOIS: "bacnet_ip_build_whois",
+  BACNET_IP_BUILD_IAM: "bacnet_ip_build_iam",
+  BACNET_IP_PARSE_FRAME: "bacnet_ip_parse_frame",
+  BACNET_IP_BUILD_READ_PROPERTY_REQUEST: "bacnet_ip_build_read_property_request",
+  BACNET_IP_PARSE_READ_PROPERTY_REQUEST: "bacnet_ip_parse_read_property_request",
+  BACNET_IP_PARSE_READ_PROPERTY_ACK: "bacnet_ip_parse_read_property_ack",
+  OPEN_BACNET_IP_CONNECTION: "open_bacnet_ip_connection",
+  BACNET_IP_WHOIS: "bacnet_ip_whois",
+  BACNET_IP_READ_PROPERTY_LIVE: "bacnet_ip_read_property_live",
+  // KNXnet/IP Tunneling v1（离线只读编解码）
+  KNX_PARSE_GROUP_ADDRESS: "knx_parse_group_address",
+  KNX_BUILD_CONNECT_REQUEST: "knx_build_connect_request",
+  KNX_PARSE_CONNECT_RESPONSE: "knx_parse_connect_response",
+  KNX_BUILD_GROUP_READ_REQUEST: "knx_build_group_read_request",
+  KNX_PARSE_TUNNELING_REQUEST: "knx_parse_tunneling_request",
+  KNX_PARSE_GROUP_VALUE_RESPONSE: "knx_parse_group_value_response",
+  KNX_PARSE_TUNNELING_ACK: "knx_parse_tunneling_ack",
+  KNX_BUILD_TUNNELING_ACK: "knx_build_tunneling_ack",
+  OPEN_KNX_CONNECTION: "open_knx_connection",
+  KNX_GROUP_READ: "knx_group_read",
+  KNX_DISCONNECT: "knx_disconnect",
+  KNX_CONNECTION_STATE: "knx_connection_state",
+  KNX_START_KEEPALIVE: "knx_start_keepalive",
+  KNX_STOP_KEEPALIVE: "knx_stop_keepalive",
+  KNX_KEEPALIVE_STATUS: "knx_keepalive_status",
+  // Keyence KV Host Link ASCII（TCP 只读会话 + 编解码）
+  OPEN_KEYENCE_CONNECTION: "open_keyence_connection",
+  KEYENCE_READ_WORDS: "keyence_read_words",
+  KEYENCE_READ_BITS: "keyence_read_bits",
+  KEYENCE_PARSE_ADDRESS: "keyence_parse_address",
+  KEYENCE_BUILD_CONNECT: "keyence_build_connect",
+  KEYENCE_BUILD_READ_WORDS: "keyence_build_read_words",
+  KEYENCE_BUILD_READ_BITS: "keyence_build_read_bits",
+  KEYENCE_BUILD_WRITE_WORDS: "keyence_build_write_words",
+  KEYENCE_BUILD_WRITE_BIT: "keyence_build_write_bit",
+  KEYENCE_PARSE_CONNECT: "keyence_parse_connect",
+  KEYENCE_PARSE_WORDS: "keyence_parse_words",
+  KEYENCE_PARSE_BITS: "keyence_parse_bits",
+  KEYENCE_PARSE_WRITE: "keyence_parse_write",
+  // Delta DVP/AS Modbus 地址 profile
+  DELTA_PARSE_ADDRESS: "delta_parse_address",
+  // Inovance H3U/H5U Modbus 地址 profile
+  INOVANCE_PARSE_ADDRESS: "inovance_parse_address",
+  // Xinje XC/XD Modbus 地址 profile（首轮仅确认 D）
+  XINJIE_PARSE_ADDRESS: "xinjie_parse_address",
+  // FATEK FBs native ASCII first-round codec
+  OPEN_FATEK_CONNECTION: "open_fatek_connection",
+  FATEK_READ_WORDS: "fatek_read_words",
+  FATEK_READ_DISCRETE: "fatek_read_discrete",
+  FATEK_PARSE_ADDRESS: "fatek_parse_address",
+  FATEK_PACK_COMMAND: "fatek_pack_command",
+  FATEK_BUILD_READ_DISCRETE: "fatek_build_read_discrete",
+  FATEK_BUILD_WRITE_DISCRETE: "fatek_build_write_discrete",
+  FATEK_BUILD_READ_WORDS: "fatek_build_read_words",
+  FATEK_BUILD_WRITE_WORDS: "fatek_build_write_words",
+  FATEK_PARSE_RESPONSE: "fatek_parse_response",
+  OPEN_FUJI_SPH_CONNECTION: "open_fuji_sph_connection",
+  FUJI_SPH_READ: "fuji_sph_read",
+  FUJI_SPH_PARSE_ADDRESS: "fuji_sph_parse_address",
+  FUJI_SPH_BUILD_READ: "fuji_sph_build_read",
+  FUJI_SPH_BUILD_WRITE: "fuji_sph_build_write",
+  FUJI_SPH_PARSE_RESPONSE: "fuji_sph_parse_response",
+  // GE Series 90 / PACSystems SRTP（离线编解码 + TCP 只读会话）
+  OPEN_GE_SRTP_CONNECTION: "open_ge_srtp_connection",
+  GE_SRTP_READ: "ge_srtp_read",
+  GE_SRTP_PARSE_ADDRESS: "ge_srtp_parse_address",
+  GE_SRTP_BUILD_HANDSHAKE: "ge_srtp_build_handshake",
+  GE_SRTP_PARSE_HANDSHAKE: "ge_srtp_parse_handshake",
+  GE_SRTP_BUILD_READ: "ge_srtp_build_read",
+  GE_SRTP_BUILD_WRITE: "ge_srtp_build_write",
+  GE_SRTP_PARSE_RESPONSE: "ge_srtp_parse_response",
+  // LS Electric XGT FEnet（TCP 只读会话 + 编解码）
+  OPEN_LS_XGT_CONNECTION: "open_ls_xgt_connection",
+  LS_XGT_READ: "ls_xgt_read",
+  LS_XGT_READ_CONTINUOUS: "ls_xgt_read_continuous",
+  LS_XGT_PARSE_ADDRESS: "ls_xgt_parse_address",
+  LS_XGT_BUILD_READ: "ls_xgt_build_read",
+  LS_XGT_BUILD_CONTINUOUS_READ: "ls_xgt_build_continuous_read",
+  LS_XGT_BUILD_WRITE: "ls_xgt_build_write",
+  LS_XGT_BUILD_CONTINUOUS_WRITE: "ls_xgt_build_continuous_write",
+  LS_XGT_PARSE_RESPONSE: "ls_xgt_parse_response",
+  // Panasonic MEWTOCOL-COM（首轮离线编解码）
+  PANASONIC_PARSE_DATA_ADDRESS: "panasonic_parse_data_address",
+  PANASONIC_PARSE_CONTACT_ADDRESS: "panasonic_parse_contact_address",
+  PANASONIC_BUILD_READ: "panasonic_build_read",
+  PANASONIC_BUILD_WRITE: "panasonic_build_write",
+  PANASONIC_BUILD_READ_CONTACT: "panasonic_build_read_contact",
+  PANASONIC_BUILD_WRITE_CONTACT: "panasonic_build_write_contact",
+  PANASONIC_PARSE_RESPONSE: "panasonic_parse_response",
   SHUTDOWN: "shutdown",
 });
 const ALLOWED_COMMANDS = new Set(Object.values(COMMANDS));
+
+function validatePayloadShape(payload) {
+  if (payload === undefined) return {};
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { error: "Rust core request payload must be an object" };
+  }
+
+  const stack = [[payload, 1]];
+  let nodes = 0;
+  while (stack.length) {
+    const [value, depth] = stack.pop();
+    nodes += 1;
+    if (nodes > MAX_PAYLOAD_NODES) {
+      return { error: `Rust core request payload exceeds ${MAX_PAYLOAD_NODES} nodes` };
+    }
+    if (depth > MAX_PAYLOAD_DEPTH) {
+      return { error: `Rust core request payload exceeds depth ${MAX_PAYLOAD_DEPTH}` };
+    }
+    if (!value || typeof value !== "object") continue;
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === "__proto__" || key === "constructor") {
+        return { error: `Rust core request payload contains unsafe key: ${key}` };
+      }
+      stack.push([nested, depth + 1]);
+    }
+  }
+  return { value: payload };
+}
 
 class RustCoreClientError extends Error {
   constructor(message, { code = "RUST_CORE_CLIENT_ERROR", cause, details } = {}) {
@@ -372,6 +567,26 @@ class RustCoreClient {
       unitId,
       quantity,
     });
+  }
+
+  async buildPpiRead(payload) {
+    return this.request(COMMANDS.PPI_BUILD_READ, payload);
+  }
+
+  async buildPpiSaConfirm(payload) {
+    return this.request(COMMANDS.PPI_BUILD_SA_CONFIRM, payload);
+  }
+
+  async parsePpiReadResponse(payload) {
+    return this.request(COMMANDS.PPI_PARSE_READ_RESPONSE, payload);
+  }
+
+  async buildHostLinkCmodeRead(payload) {
+    return this.request(COMMANDS.HOSTLINK_BUILD_CMODE_READ, payload);
+  }
+
+  async parseHostLinkCmodeRead(payload) {
+    return this.request(COMMANDS.HOSTLINK_PARSE_CMODE_READ, payload);
   }
 
   // === RTU 读位(FC01/FC02)===
@@ -636,14 +851,19 @@ class RustCoreClient {
   // === 流式轮询(v2 协议)===
   async startPollStream({ streamId, connectionId, fc, startAddress, quantity, intervalMs = 1000 }, onData, onError) {
     this.subscriptions.set(streamId, { onData, onError });
-    return this.request(COMMANDS.START_POLL_STREAM, {
-      streamId,
-      connectionId,
-      fc,
-      startAddress,
-      quantity,
-      intervalMs,
-    });
+    try {
+      return await this.request(COMMANDS.START_POLL_STREAM, {
+        streamId,
+        connectionId,
+        fc,
+        startAddress,
+        quantity,
+        intervalMs,
+      });
+    } catch (error) {
+      this.subscriptions.delete(streamId);
+      throw error;
+    }
   }
   async stopPollStream({ streamId }) {
     const result = this.request(COMMANDS.STOP_POLL_STREAM, { streamId });
@@ -690,6 +910,10 @@ class RustCoreClient {
     if (!ALLOWED_COMMANDS.has(command)) {
       return Promise.reject(this._clientError(`Unsupported Rust core command: ${command}`, "UNKNOWN_COMMAND"));
     }
+    const payloadShape = validatePayloadShape(payload);
+    if (payloadShape.error) {
+      return Promise.reject(this._clientError(payloadShape.error, "INVALID_PAYLOAD"));
+    }
     if (!allowedStates.includes(this.state)) {
       return Promise.reject(
         this._clientError(`Command ${command} is not allowed while client is ${this.state}`, "INVALID_STATE"),
@@ -702,7 +926,7 @@ class RustCoreClient {
       protocolVersion: PROTOCOL_VERSION,
       requestId,
       command,
-      payload: payload ?? {},
+      payload: payloadShape.value,
     };
     let frame;
     try {
@@ -794,8 +1018,12 @@ class RustCoreClient {
       throw this._clientError("Rust core response must be a JSON object", "INVALID_PROTOCOL");
     }
 
-    // === 流式推送帧路由(v2:有 streamId,可能无 requestId)===
-    if (response.streamId && typeof response.streamId === "string") {
+    // Start/stop stream acknowledgements carry both requestId and streamId.
+    // They must resolve the pending request; requestId-less frames are pushes.
+    const hasRequestId = typeof response.requestId === "string" && response.requestId !== "";
+
+    // === 流式推送帧路由(v2:无 requestId,有 streamId)===
+    if (!hasRequestId && response.streamId && typeof response.streamId === "string") {
       const sub = this.subscriptions.get(response.streamId);
       if (sub) {
         if (response.ok) {
@@ -817,7 +1045,7 @@ class RustCoreClient {
         "PROTOCOL_VERSION_MISMATCH",
       );
     }
-    if (typeof response.requestId !== "string" || response.requestId === "") {
+    if (!hasRequestId) {
       throw this._clientError("Rust core response requestId must be a non-empty string", "INVALID_PROTOCOL");
     }
     if (typeof response.ok !== "boolean") {
@@ -940,7 +1168,7 @@ class RustCoreClient {
 
   _log(level, message) {
     const writer = this.logger?.[level];
-    if (typeof writer === "function") writer.call(this.logger, `[rust-core] ${message}`);
+    if (typeof writer === "function") writer.call(this.logger, `[rust-core] ${redactLogText(message)}`);
   }
 
   _clientError(message, code, cause, details) {
@@ -975,6 +1203,8 @@ function waitWithTimeout(promise, timeoutMs) {
 module.exports = {
   COMMANDS,
   DEFAULT_MAX_STDERR_BUFFER_BYTES,
+  MAX_PAYLOAD_DEPTH,
+  MAX_PAYLOAD_NODES,
   MAX_LINE_BYTES,
   PROTOCOL_VERSION,
   RustCoreClient,

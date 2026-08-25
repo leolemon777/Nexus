@@ -1,6 +1,23 @@
 import "./app.css";
 import { buildPollPlan, splitBatchResult } from "./poll-planner.js";
 import { filterTrace } from "./trace-filter.js";
+import { listProtocolGuideVariants, resolveProtocolGuide } from "./protocol-guides.js";
+import { resolveSiemensRoute } from "./siemens-route.js";
+import { resolveMelsecRoute } from "./melsec-route.js";
+import {
+  isModbusBitFunction,
+  modbusNetworkPrefix,
+  resolveModbusConnect,
+  resolveModbusReadCommand,
+  resolveModbusWriteCommand,
+} from "./modbus-route.js";
+import { readPointImportFile } from "./point-import.js";
+import { initCardCollapse } from "./card-collapse.js";
+import {
+  buildGx3Presentation,
+  formatGx3TechnicalReport,
+  parseGx3DevicePresentation,
+} from "./gx3-presenter.js";
 
 const elements = {
   form: document.querySelector("#serial-form"),
@@ -45,6 +62,7 @@ const elements = {
   writeValueField: document.querySelector("#write-value-field"),
   scanStations: document.querySelector("#scan-stations"),
   scanBaud: document.querySelector("#scan-baud"),
+  scanAll: document.querySelector("#scan-all"),
   pollInterval: document.querySelector("#poll-interval"),
   startPoll: document.querySelector("#start-poll"),
   stopPoll: document.querySelector("#stop-poll"),
@@ -93,6 +111,21 @@ const elements = {
   parserParse: document.querySelector("#parser-parse"),
   parserClear: document.querySelector("#parser-clear"),
   parserResult: document.querySelector("#parser-result"),
+  gx3View: document.querySelector("#gx3-view"),
+  gx3ToolState: document.querySelector("#gx3-tool-state"),
+  gx3ProjectPath: document.querySelector("#gx3-project-path"),
+  gx3SelectProject: document.querySelector("#gx3-select-project"),
+  gx3AnalyzeProject: document.querySelector("#gx3-analyze-project"),
+  gx3AnalysisSummary: document.querySelector("#gx3-analysis-summary"),
+  gx3AnalysisState: document.querySelector("#gx3-analysis-state"),
+  gx3HumanReport: document.querySelector("#gx3-human-report"),
+  gx3TechnicalDetails: document.querySelector("#gx3-technical-details"),
+  gx3AnalysisOutput: document.querySelector("#gx3-analysis-output"),
+  gx3Device: document.querySelector("#gx3-device"),
+  gx3QueryDevice: document.querySelector("#gx3-query-device"),
+  gx3DeviceSummary: document.querySelector("#gx3-device-summary"),
+  gx3DeviceTechnical: document.querySelector("#gx3-device-technical"),
+  gx3DeviceOutput: document.querySelector("#gx3-device-output"),
   sessionTabsBar: document.querySelector("#session-tabs-bar"),
   addSessionTab: document.querySelector("#add-session-tab"),
   scanRows: document.querySelector("#scan-rows"),
@@ -118,6 +151,12 @@ const elements = {
   trendClear: document.querySelector("#trend-clear"),
   trendCanvas: document.querySelector("#trend-canvas"),
   trendLegend: document.querySelector("#trend-legend"),
+  projectName: document.querySelector("#project-name"),
+  projectNew: document.querySelector("#project-new"),
+  projectOpen: document.querySelector("#project-open"),
+  projectSave: document.querySelector("#project-save"),
+  projectSaveAs: document.querySelector("#project-save-as"),
+  projectExportSanitized: document.querySelector("#project-export-sanitized"),
 };
 
 const defaults = {
@@ -136,6 +175,9 @@ let busy = false;
 let tcpConnected = false;
 let activePollId = null;
 let activeView = "master";
+let activeGx3Analysis = null;
+let gx3Busy = false;
+let gx3Available = false;
 const stats = {
   tx: 0,
   rx: 0,
@@ -179,6 +221,7 @@ function syncActionState() {
   elements.writeOnce.disabled = busy || !connected || !isWrite || !!activePollId;
   if (elements.scanStations) elements.scanStations.disabled = busy || !connected;
   if (elements.scanBaud) elements.scanBaud.disabled = busy || !connected;
+  if (elements.scanAll) elements.scanAll.disabled = busy || !connected;
   if (elements.startPoll) elements.startPoll.disabled = busy || !connected || !!activePollId;
   if (elements.stopPoll) elements.stopPoll.disabled = !activePollId;
   if (elements.addCmd) elements.addCmd.disabled = busy || !connected;
@@ -218,6 +261,7 @@ function updateTransportVisibility() {
   // 扫描站号:TCP 和串口都可用(TCP 走 Rust 扫描,串口走 Electron 逐站探测)
   if (elements.scanStations) elements.scanStations.disabled = busy;
   if (elements.scanBaud) elements.scanBaud.disabled = busy || tcpMode; // 波特率扫描仅串口
+  if (elements.scanAll) elements.scanAll.disabled = busy || tcpMode; // 一键扫描仅串口
   // TCP 连接按钮
   if (elements.connectTcp) elements.connectTcp.disabled = busy || !tcpMode || tcpConnected;
   if (elements.disconnectTcp) elements.disconnectTcp.disabled = busy || !tcpMode || !tcpConnected;
@@ -239,20 +283,24 @@ async function connectTcp() {
   }
   setBusy(true);
   try {
-    const framing = transport === "tcp" ? "standard" : transport === "rtu-over-tcp" ? "rtu-over-tcp" : "ascii-over-tcp";
-    const cmd = transport === "udp" ? "open_udp_connection" : "open_tcp_connection";
-    await callBackend(cmd, {
+    const route = resolveModbusConnect(transport);
+    if (!route.command) {
+      throw new Error("当前传输不是 TCP/UDP，请先选择网口方式再连接。");
+    }
+    const t0 = performance.now();
+    await callBackend(route.command, {
       connectionId: "default",
       host,
       port,
       unitId,
-      framing,
+      framing: route.framing,
     });
+    const ms = performance.now() - t0;
     tcpConnected = true;
     elements.connectionPill.dataset.state = "open";
-    elements.connectionLabel.textContent = `${transport.toUpperCase()} ${host}:${port}`;
+    elements.connectionLabel.textContent = `${transport.toUpperCase()} ${host}:${port} · ${ms.toFixed(0)} ms`;
     elements.commandState.textContent = commandReadyText();
-    setNotice("success", "已连接", `${transport.toUpperCase()} ${host}:${port} 站号 ${unitId}`);
+    setNotice("success", "已连接", `${transport.toUpperCase()} ${host}:${port} 站号 ${unitId} · 连接耗时 ${ms.toFixed(0)} ms`);
     renderAdvFcParams(); // 解锁高级 FC 执行按钮
     persistConfig(); // 保存连接配置
   } catch (error) {
@@ -332,6 +380,13 @@ function renderScanResults(found) {
   elements.scanRows.replaceChildren();
   for (const station of found) {
     const row = document.createElement("tr");
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "btn-ghost btn-sm";
+    selectButton.textContent = "选用";
+    selectButton.addEventListener("click", () => {
+      if (elements.unitId) elements.unitId.value = String(station.stationId);
+    });
     appendCells(row, [
       station.stationId,
       "—",
@@ -339,7 +394,7 @@ function renderScanResults(found) {
       `${station.firstResponseMs ?? 0} ms`,
       "FC03",
       "在线",
-      `<button onclick="document.querySelector('#unit-id').value=${station.stationId}">选用</button>`,
+      selectButton,
     ]);
     elements.scanRows.append(row);
   }
@@ -438,11 +493,23 @@ async function pollPointTableTick() {
       transport: currentTransport(),
     };
     try {
+      const readCommandName = resolveModbusReadCommand(currentTransport(), fc);
+      if (!readCommandName) continue;
       let result;
-      if (fc === 1) result = await callBackend("read_coils_once", args);
-      else if (fc === 2) result = await callBackend("read_discrete_inputs_once", args);
-      else if (fc === 4) result = await callBackend("read_input_registers_once", args);
-      else result = await callBackend("read_holding_registers_once", args);
+      if (modbusNetworkPrefix(currentTransport())) {
+        const network = await callBackend(readCommandName, {
+          connectionId: "default",
+          startAddress: batch.startAddress,
+          quantity: batch.quantity,
+        });
+        result = {
+          ok: !network.exceptionCode,
+          coils: network.coils,
+          registers: network.registers,
+        };
+      } else {
+        result = await callBackend(readCommandName, args);
+      }
 
       const values = isCoils ? result?.coils : result?.registers;
       if (!Array.isArray(values)) continue;
@@ -597,6 +664,25 @@ function trendClearAll() {
   trendRefreshPointOptions();
   drawTrendChart();
   setNotice("info", "已清空", "所有趋势曲线已移除。");
+}
+
+/** 从项目/会话恢复趋势选择:只恢复 key,不伪造历史数据。 */
+function restoreTrendSelection(rowKeys) {
+  trendSeries.clear();
+  renderTrendLegend();
+  for (const rowKey of Array.isArray(rowKeys) ? rowKeys : []) {
+    if (typeof rowKey !== "string" || !/^reg-(?:HR|IR)-[0-9]{1,5}$/.test(rowKey)) continue;
+    const row = elements.registerResults.querySelector(`tr[data-key="${rowKey}"]`);
+    if (!row) continue;
+    const name = row.querySelectorAll("td")[1]?.textContent.trim() || rowKey;
+    const usedColors = new Set([...trendSeries.values()].map((series) => series.color));
+    const color = TREND_COLORS.find((candidate) => !usedColors.has(candidate))
+      ?? TREND_COLORS[trendSeries.size % TREND_COLORS.length];
+    trendSeries.set(rowKey, { name, color, dataPoints: [], maxPoints: 300 });
+  }
+  renderTrendLegend();
+  trendRefreshPointOptions();
+  drawTrendChart();
 }
 
 /** HTML 图例(画布左上角覆盖层): 色块 + 名称 + 最新值 + × 删除按钮 */
@@ -1225,6 +1311,159 @@ async function scanBaudRate() {
   }
 }
 
+// === 一键扫描(站号 × 波特率 × 奇偶校验) ===
+
+let scanAllActive = false;
+let scanProgressUnsubscribe = null;
+
+const SCAN_PARITY_LABELS = { none: "8N1", even: "8E1", odd: "8O1" };
+
+function scanAllOptions() {
+  const bauds = [...document.querySelectorAll(".scan-baud-opt:checked")].map((el) => Number(el.value));
+  const parities = [...document.querySelectorAll(".scan-parity-opt:checked")].map((el) => el.value);
+  return {
+    stationStart: Number(document.querySelector("#scan-station-start")?.value) || 1,
+    stationEnd: Number(document.querySelector("#scan-station-end")?.value) || 16,
+    bauds,
+    parities,
+    timeoutMs: Number(document.querySelector("#scan-timeout")?.value) || 200,
+    mode: document.querySelector("#scan-mode")?.value === "full" ? "full" : "firstHit",
+    autoQuantity: Number(document.querySelector("#scan-auto-quantity")?.value) || 8,
+  };
+}
+
+async function scanAll() {
+  if (scanAllActive) {
+    // 扫描中再次点击 = 请求取消
+    try { await callBackend("scan_all_cancel"); } catch { /* 忽略 */ }
+    return;
+  }
+  if (busy || !elements.scanAll || elements.scanAll.disabled) return;
+  const comPort = elements.portName?.value;
+  if (!comPort) {
+    setNotice("error", "参数无效", "请先选择串口。");
+    return;
+  }
+  const opts = scanAllOptions();
+  if (!opts.bauds.length || !opts.parities.length) {
+    setNotice("error", "参数无效", "至少勾选一个波特率与一种校验格式。");
+    return;
+  }
+  const form = elements.form;
+  const lineConfig = {
+    flowControl: form?.elements?.namedItem("flowControl")?.value ?? "none",
+    dtrMode: form?.elements?.namedItem("dtrMode")?.value ?? "preserve",
+    rtsMode: form?.elements?.namedItem("rtsMode")?.value ?? "preserve",
+  };
+  scanAllActive = true;
+  setBusy(true);
+  elements.scanAll.textContent = "停止扫描";
+  elements.commandState.textContent = "一键扫描中…";
+  setNotice("info", "一键扫描", `${opts.bauds.length} 档波特率 × ${opts.parities.length} 种校验 × 站号 ${opts.stationStart}~${opts.stationEnd}`);
+  if (window.nexusDesktop?.onScanProgress) {
+    scanProgressUnsubscribe = window.nexusDesktop.onScanProgress((p) => {
+      const label = SCAN_PARITY_LABELS[p.parity] ?? p.parity;
+      elements.commandState.textContent =
+        `扫描 ${p.baud}·${label} 档 ${p.comboIndex + 1}/${p.totalCombos} · 站 ${p.stationId} · ${(p.elapsedMs / 1000).toFixed(1)}s`;
+    });
+  }
+  try {
+    const result = await callBackend("scan_all", {
+      comPort,
+      stationStart: opts.stationStart,
+      stationEnd: opts.stationEnd,
+      bauds: opts.bauds,
+      parities: opts.parities,
+      timeoutMs: opts.timeoutMs,
+      mode: opts.mode,
+      lineConfig,
+    });
+    if (result?.found) {
+      renderScanAllResults(result.hits ?? []);
+      const first = result.hits?.[0];
+      setNotice("success", `发现 ${result.hits.length} 个命中`,
+        first ? `${first.baudRate}·${first.parityLabel ?? SCAN_PARITY_LABELS[first.parity]} 站号 ${first.stationId} · 耗时 ${(result.elapsedMs / 1000).toFixed(1)}s。点击结果表"选用并连接"一键接入。` : "");
+    } else if (result?.cancelled) {
+      setNotice("info", "已取消", `扫描已停止(尝试 ${result.triedCombos}/${result.totalCombos} 档,耗时 ${(result.elapsedMs / 1000).toFixed(1)}s)。`);
+    } else {
+      setNotice("info", "未发现从站", `${result?.totalCombos ?? "?"} 档参数全部无响应,耗时 ${((result?.elapsedMs ?? 0) / 1000).toFixed(1)}s。请检查 485 接线与供电。`);
+    }
+  } catch (error) {
+    setNotice("error", "扫描失败", error.message || String(error));
+  } finally {
+    if (scanProgressUnsubscribe) { scanProgressUnsubscribe(); scanProgressUnsubscribe = null; }
+    scanAllActive = false;
+    if (elements.scanAll) elements.scanAll.textContent = "一键扫描";
+    setBusy(false);
+    elements.commandState.textContent = isConnected() ? commandReadyText() : "请先连接";
+    syncActionState();
+  }
+}
+
+function renderScanAllResults(hits) {
+  if (!elements.scanRows) return;
+  elements.scanRows.replaceChildren();
+  for (const hit of hits) {
+    const row = document.createElement("tr");
+    const label = hit.parityLabel ?? SCAN_PARITY_LABELS[hit.parity] ?? hit.parity;
+    appendCells(row, [
+      hit.stationId,
+      `${hit.baudRate}·${label}`,
+      hit.format ?? "RTU",
+      hit.firstResponseMs != null ? `${hit.firstResponseMs} ms` : "—",
+      `FC${hit.functionCode ?? 3}`,
+      hit.status ?? "在线",
+    ]);
+    const actionCell = document.createElement("td");
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.textContent = "选用并连接";
+    actionButton.addEventListener("click", () => nexusApplyScanHit(hit.stationId, hit.baudRate, hit.parity));
+    actionCell.append(actionButton);
+    row.append(actionCell);
+    elements.scanRows.append(row);
+  }
+}
+
+/** 扫描结果"选用并连接":回填参数 → 打开串口 → 自动读保持寄存器。 */
+async function nexusApplyScanHit(station, baud, parity) {
+  if (busy) return;
+  const form = elements.form;
+  if (form) {
+    const baudField = form.elements.namedItem("baudRate");
+    if (baudField) baudField.value = String(baud);
+    const parityField = form.elements.namedItem("parity");
+    if (parityField) parityField.value = String(parity);
+  }
+  if (elements.unitId) elements.unitId.value = String(station);
+  setBusy(true);
+  const t0 = performance.now();
+  try {
+    const config = readConfig();
+    const status = await callBackend("open_serial_port", { config });
+    const ms = performance.now() - t0;
+    renderStatus(status);
+    const label = SCAN_PARITY_LABELS[parity] ?? parity;
+    setNotice("success", "已按扫描结果连接", `${config.portName} ${config.baudRate}·${label} · 打开耗时 ${ms.toFixed(0)} ms`);
+    persistConfig();
+    // 自动读保持寄存器(FC03),地址 0 起
+    if (elements.functionCode) elements.functionCode.value = "3";
+    if (elements.startAddress) elements.startAddress.value = "0";
+    if (elements.addressBase) elements.addressBase.value = "0";
+    if (elements.quantity) {
+      const qty = Number(document.querySelector("#scan-auto-quantity")?.value) || 8;
+      elements.quantity.value = String(Math.min(Math.max(qty, 1), 125));
+    }
+    await readRegistersOnce();
+    setNotice("success", "自动读取完成", "数据已入表。可设置倍率/单位(如 0.1 / ℃)并点击「连续轮询」实时刷新。");
+  } catch (error) {
+    renderConnectionFault(`按扫描结果连接失败：${String(error)}`);
+  } finally {
+    setBusy(false);
+    syncActionState();
+  }
+}
+
 // === 指令列表 ===
 
 let commandList = [];
@@ -1257,6 +1496,18 @@ function removeCommand(index) {
 function clearCommands() {
   commandList = [];
   renderCommandList();
+}
+
+function replaceCommandList(commands) {
+  commandList = (Array.isArray(commands) ? commands : []).map((command) => ({
+    fc: Number(command?.fc) || 3,
+    unitId: Number(command?.unitId) || 1,
+    address: Number(command?.address) || 0,
+    quantity: Number(command?.quantity) || 0,
+    value: String(command?.value ?? ""),
+  }));
+  renderCommandList();
+  syncActionState();
 }
 
 function renderCommandList() {
@@ -1326,22 +1577,79 @@ function activateView(viewName) {
   const isSlave = viewName === "slave";
   const isDebug = viewName === "debug";
   const isParser = viewName === "parser";
+  const isGx3 = viewName === "gx3";
   const isMelsec = viewName === "melsec";
   const isInterfaces = viewName === "interfaces";
   const isSiemens = viewName === "siemens";
   const isOmron = viewName === "omron";
+  const isAllenBradley = viewName === "allen-bradley";
+  const isBeckhoff = viewName === "beckhoff";
+  const isKeyence = viewName === "keyence";
+  const isLsElectric = viewName === "ls-electric";
+  const isDelta = viewName === "delta";
+  const isInovance = viewName === "inovance";
+  const isXinje = viewName === "xinje";
+  const isFatek = viewName === "fatek";
+  const isFuji = viewName === "fuji";
+  const isGe = viewName === "ge";
+  const isPanasonic = viewName === "panasonic";
+  const isMqtt = viewName === "mqtt";
+  const isIec104 = viewName === "iec104";
+  const isDnp3 = viewName === "dnp3";
+  const isDlt645 = viewName === "dlt645";
+  const isCjt188 = viewName === "cjt188";
+  const isBacnet = viewName === "bacnet";
+  const isKnx = viewName === "knx";
   if (elements.masterView) elements.masterView.classList.toggle("hidden", !isMaster);
   if (elements.slaveView) elements.slaveView.classList.toggle("hidden", !isSlave);
   if (elements.debugView) elements.debugView.classList.toggle("hidden", !isDebug);
   if (elements.parserView) elements.parserView.classList.toggle("hidden", !isParser);
+  if (elements.gx3View) elements.gx3View.classList.toggle("hidden", !isGx3);
   const melsecView = document.querySelector("#melsec-view");
   if (melsecView) melsecView.classList.toggle("hidden", !isMelsec);
   const siemensView = document.querySelector("#siemens-view");
   if (siemensView) siemensView.classList.toggle("hidden", !isSiemens);
   const omronView = document.querySelector("#omron-view");
   if (omronView) omronView.classList.toggle("hidden", !isOmron);
+  const allenBradleyView = document.querySelector("#allen-bradley-view");
+  if (allenBradleyView) allenBradleyView.classList.toggle("hidden", !isAllenBradley);
+  const beckhoffView = document.querySelector("#beckhoff-view");
+  if (beckhoffView) beckhoffView.classList.toggle("hidden", !isBeckhoff);
+  const keyenceView = document.querySelector("#keyence-view");
+  if (keyenceView) keyenceView.classList.toggle("hidden", !isKeyence);
+  const lsElectricView = document.querySelector("#ls-electric-view");
+  if (lsElectricView) lsElectricView.classList.toggle("hidden", !isLsElectric);
+  const deltaView = document.querySelector("#delta-view");
+  if (deltaView) deltaView.classList.toggle("hidden", !isDelta);
+  const inovanceView = document.querySelector("#inovance-view");
+  if (inovanceView) inovanceView.classList.toggle("hidden", !isInovance);
+  const xinjeView = document.querySelector("#xinje-view");
+  if (xinjeView) xinjeView.classList.toggle("hidden", !isXinje);
+  const fatekView = document.querySelector("#fatek-view");
+  if (fatekView) fatekView.classList.toggle("hidden", !isFatek);
+  const fujiView = document.querySelector("#fuji-view");
+  if (fujiView) fujiView.classList.toggle("hidden", !isFuji);
+  const geView = document.querySelector("#ge-view");
+  if (geView) geView.classList.toggle("hidden", !isGe);
+  const panasonicView = document.querySelector("#panasonic-view");
+  if (panasonicView) panasonicView.classList.toggle("hidden", !isPanasonic);
+  const mqttView = document.querySelector("#mqtt-view");
+  if (mqttView) mqttView.classList.toggle("hidden", !isMqtt);
+  const iec104View = document.querySelector("#iec104-view");
+  if (iec104View) iec104View.classList.toggle("hidden", !isIec104);
+  const dnp3View = document.querySelector("#dnp3-view");
+  if (dnp3View) dnp3View.classList.toggle("hidden", !isDnp3);
+  const dlt645View = document.querySelector("#dlt645-view");
+  if (dlt645View) dlt645View.classList.toggle("hidden", !isDlt645);
+  const cjt188View = document.querySelector("#cjt188-view");
+  if (cjt188View) cjt188View.classList.toggle("hidden", !isCjt188);
+  const bacnetView = document.querySelector("#bacnet-view");
+  if (bacnetView) bacnetView.classList.toggle("hidden", !isBacnet);
+  const knxView = document.querySelector("#knx-view");
+  if (knxView) knxView.classList.toggle("hidden", !isKnx);
   const interfacesView = document.querySelector("#interfaces-view");
   if (interfacesView) interfacesView.classList.toggle("hidden", !isInterfaces);
+  if (isGx3 && !gx3Available) void refreshGx3Status();
   // 打开本页即自动体检(一键看到)
   if (isInterfaces) refreshInterfaces().catch(() => {});
   // 右侧报文面板仅在主站视图显示
@@ -1349,6 +1657,238 @@ function activateView(viewName) {
   if (packetPanel) packetPanel.classList.toggle("hidden", !isMaster);
   // 切 view 时刷新 transport 状态
   updateTransportVisibility();
+}
+
+// === 协议通讯设置帮助窗 ===
+
+let activeProtocolGuideSource = null;
+let protocolGuideReturnFocus = null;
+let savedProtocolGuideReference = null;
+
+function guideValue(selector, fallback = "—") {
+  const value = document.querySelector(selector)?.value;
+  return value == null || String(value).trim() === "" ? fallback : String(value).trim();
+}
+
+function currentProtocolGuideVariant(source) {
+  if (source === "master") return currentTransport();
+  if (source === "slave") return guideValue("#slave-mode", "tcp");
+  if (source === "debug") return "serial";
+  if (source === "melsec") return guideValue("#mc-frame-type", "3e");
+  if (source === "siemens") return guideValue("#s7-variant", "s7comm");
+  if (source === "omron") return guideValue("#om-transport", "tcp");
+  if (source === "allen-bradley") return "cip";
+  if (source === "beckhoff") return "ads";
+  if (source === "keyence") return "kv-host-link";
+  if (source === "ls-electric") return "xgt-fenet";
+  if (source === "delta") return guideValue("#delta-series", "dvp-modbus");
+  if (source === "inovance") return guideValue("#inovance-series", "h3u-modbus");
+  if (source === "xinje") return guideValue("#xinje-series", "xc-modbus");
+  if (source === "fatek") return "ascii";
+  if (source === "fuji") return "sph";
+  if (source === "ge") return "srtp";
+  if (source === "panasonic") return "mewtocol-com";
+  if (source === "mqtt") return "mqtt-311";
+  if (source === "iec") return "iec-60870-5-104";
+  if (source === "dnp") return "dnp3-tcp";
+  if (source === "dlt") return `dlt645-${guideValue("#dlt645-version", "2007")}`;
+  if (source === "cjt") return "cjt188-2004";
+  if (source === "bacnet") return "bacnet-ip";
+  if (source === "knx") return "tunneling-v1";
+  return "";
+}
+
+function serialGuideSnapshot() {
+  const parityLabels = { none: "N", even: "E", odd: "O", mark: "M", space: "S" };
+  const parity = parityLabels[guideValue("#parity", "none")] || guideValue("#parity", "none");
+  return `${guideValue("#port-name", "未选择 COM")} · ${guideValue("#baud-rate", "9600")} ${guideValue("#data-bits", "8")}${parity}${guideValue("#stop-bits", "1")} · ${guideValue("#interface-type", "rs232").toUpperCase()}`;
+}
+
+function protocolGuideCurrentSnapshot(source) {
+  const actualVariant = currentProtocolGuideVariant(source);
+  if (source === "master") {
+    if (["rtu", "ascii"].includes(actualVariant)) {
+      return `${actualVariant.toUpperCase()} · ${serialGuideSnapshot()} · 站号 ${guideValue("#unit-id", "1")}`;
+    }
+    return `${actualVariant.toUpperCase()} · ${guideValue("#tcp-host", "127.0.0.1")}:${guideValue("#tcp-port", "502")} · 站号 ${guideValue("#unit-id", "1")}`;
+  }
+  if (source === "slave") {
+    return actualVariant === "serial"
+      ? `RTU 从站 · ${serialGuideSnapshot()} · 允许站号 ${guideValue("#slave-stations", "全部")}`
+      : `TCP 从站 · 127.0.0.1:${guideValue("#slave-port", "502")} · 允许站号 ${guideValue("#slave-stations", "全部")}`;
+  }
+  if (source === "debug") return `串口调试 · ${serialGuideSnapshot()}`;
+  if (source === "melsec") {
+    if (["mc-c24", "fx-links", "fx-prog"].includes(actualVariant)) {
+      return `${actualVariant} · ${serialGuideSnapshot()} · 站号 ${guideValue("#mc-fx-station", "0")}`;
+    }
+    return `${actualVariant} · ${guideValue("#mc-host", "127.0.0.1")}:${guideValue("#mc-port", "5000")} · 网络号 ${guideValue("#mc-network-no", "0")} / PC号 ${guideValue("#mc-pc-no", "255")}`;
+  }
+  if (source === "siemens") {
+    if (["uss", "rk512"].includes(actualVariant)) return `${actualVariant.toUpperCase()} 参数准备 · ${serialGuideSnapshot()}`;
+    if (actualVariant === "webapi") return `Web API · https://${guideValue("#s7-host", "127.0.0.1")}:443`;
+    return `${actualVariant} · ${guideValue("#s7-host", "127.0.0.1")}:${guideValue("#s7-port", "102")} · rack ${guideValue("#s7-rack", "0")} / slot ${guideValue("#s7-slot", "1")}`;
+  }
+  if (source === "omron") {
+    if (actualVariant === "hostlink-fins-serial") {
+      return `HostLink FINS · ${serialGuideSnapshot()} · 站号 ${guideValue("#om-serial-station", "0")}`;
+    }
+    if (actualVariant === "hostlink-serial") {
+      return `HostLink C-mode · ${serialGuideSnapshot()} · 站号 ${guideValue("#om-serial-station", "0")}`;
+    }
+    return `FINS/${actualVariant.toUpperCase()} · ${guideValue("#om-host", "127.0.0.1")}:${guideValue("#om-port", "9600")} · 节点 ${guideValue("#om-src", "0")} → ${guideValue("#om-dest", "0")}`;
+  }
+  if (source === "allen-bradley") {
+    return `CIP Explicit · TCP ${guideValue("#ab-host", "127.0.0.1")}:${guideValue("#ab-port", "44818")} · Tag ${guideValue("#ab-tag", "MyTag")} · TCP 只读`;
+  }
+  if (source === "beckhoff") {
+    return `ADS/AMS · TCP ${guideValue("#ads-host", "127.0.0.1")}:${guideValue("#ads-port", "48898")} · NetId ${guideValue("#ads-target-netid", "未设置")} · TCP 只读`;
+  }
+  if (source === "keyence") {
+    return `KV Host Link · TCP ${guideValue("#keyence-port", "8501")} · ${guideValue("#keyence-address", "DM0")} · TCP 只读`;
+  }
+  if (source === "ls-electric") {
+    return `XGT FEnet · TCP ${guideValue("#xgt-port", "2004")} · ${guideValue("#xgt-variable", "%DW100")} · TCP 只读`;
+  }
+  if (source === "delta") {
+    return `Delta ${actualVariant === "as-modbus" ? "AS" : "DVP"} · ${guideValue("#delta-address", "D100")} · Modbus profile`;
+  }
+  if (source === "inovance") {
+    return `汇川 ${actualVariant === "h5u-modbus" ? "H5U" : "H3U"} · ${guideValue("#inovance-address", "D100")} · Modbus profile`;
+  }
+  if (source === "xinje") {
+    return `信捷 ${actualVariant === "xd-modbus" ? "XD/XL" : "XC"} · ${guideValue("#xinje-address", "D100")} · Modbus profile`;
+  }
+  if (source === "fatek") {
+    return `FATEK FBs ASCII · ${guideValue("#fatek-host", "127.0.0.1")}:${guideValue("#fatek-port", "5000")} · ${guideValue("#fatek-address", "R12")} · TCP 只读 + 编解码`;
+  }
+  if (source === "fuji") {
+    return `Fuji SPH · ${guideValue("#fuji-host", "127.0.0.1")}:${guideValue("#fuji-port", "18245")} · ${guideValue("#fuji-address", "M1.0")} · TCP 只读 + 编解码`;
+  }
+  if (source === "ge") {
+    return `GE SRTP · ${guideValue("#ge-host", "127.0.0.1")}:${guideValue("#ge-port", "18245")} · ${guideValue("#ge-address", "R1")} · TCP 只读 + 编解码`;
+  }
+  if (source === "panasonic") {
+    return `MEWTOCOL-COM · ${guideValue("#panasonic-port", "COM1")} · 站号 ${guideValue("#panasonic-station", "1")} · 离线编解码`;
+  }
+  if (source === "mqtt") {
+    return `MQTT 3.1.1 · TCP ${guideValue("#mqtt-host", "127.0.0.1")}:${guideValue("#mqtt-port", "1883")} · ${guideValue("#mqtt-topic-filter", "factory/line1/#")} · TCP 只读订阅`;
+  }
+  if (source === "iec") {
+    return `IEC104 · TCP ${guideValue("#iec104-host", "127.0.0.1")}:${guideValue("#iec104-port", "2404")} · CA ${guideValue("#iec104-common-address", "1")} · 只读主站`;
+  }
+  if (source === "dnp") {
+    return `DNP3 · TCP ${guideValue("#dnp3-host", "127.0.0.1")}:${guideValue("#dnp3-port", "20000")} · Link ${guideValue("#dnp3-master-address", "1")} → ${guideValue("#dnp3-outstation-address", "1024")} · 只读 Master`;
+  }
+  if (source === "dlt") {
+    return `DL/T 645-${guideValue("#dlt645-version", "2007")} · ${serialGuideSnapshot()} · 表地址 ${guideValue("#dlt645-address", "未设置")} · DI ${guideValue("#dlt645-data-id", "未设置")} · 共享 COM 只读`;
+  }
+  if (source === "cjt") {
+    return `CJ/T 188-2004 · ${guideValue("#cjt188-meter-type", "cold-water")} · 表地址 ${guideValue("#cjt188-address", "未设置")} · DI ${guideValue("#cjt188-data-id", "未设置")} · 离线编解码`;
+  }
+  if (source === "bacnet") {
+    const global = document.querySelector("#bacnet-whois-global")?.checked ?? true;
+    return `BACnet/IP · UDP ${guideValue("#bacnet-port", "47808")} · ${guideValue("#bacnet-host", "127.0.0.1")} · ${global ? "全局 Who-Is" : `Who-Is ${guideValue("#bacnet-whois-low", "0")}..${guideValue("#bacnet-whois-high", "0")}`} · 只读会话/离线编解码`;
+  }
+  if (source === "knx") {
+    return `KNXnet/IP Tunneling v1 · UDP 3671（仅现场记录） · ${guideValue("#knx-group", "1/2/3")} · 离线只读编解码`;
+  }
+  return "—";
+}
+
+function renderProtocolGuideList(selector, items) {
+  const list = document.querySelector(selector);
+  if (!list) return;
+  list.replaceChildren();
+  for (const item of items || []) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    list.append(li);
+  }
+}
+
+function renderProtocolGuide(source, variant) {
+  const guide = resolveProtocolGuide(source, variant);
+  if (!guide) return;
+  const title = document.querySelector("#protocol-guide-title");
+  const medium = document.querySelector("#protocol-guide-medium");
+  const current = document.querySelector("#protocol-guide-current span");
+  const summary = document.querySelector("#protocol-guide-summary");
+  const rows = document.querySelector("#protocol-guide-parameter-rows");
+  if (title) title.textContent = `${guide.sourceLabel} · ${guide.label}`;
+  if (medium) medium.textContent = guide.medium === "serial" ? "串口 / COM" : "网口 / IP";
+  if (current) current.textContent = protocolGuideCurrentSnapshot(source);
+  if (summary) summary.textContent = guide.summary;
+  if (rows) {
+    rows.replaceChildren();
+    for (const parameter of guide.parameters || []) {
+      const tr = document.createElement("tr");
+      for (const value of parameter) {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.append(td);
+      }
+      rows.append(tr);
+    }
+  }
+  renderProtocolGuideList("#protocol-guide-device-steps", guide.deviceSteps);
+  renderProtocolGuideList("#protocol-guide-pc-steps", guide.pcSteps);
+  renderProtocolGuideList("#protocol-guide-checks", guide.checks);
+  renderProtocolGuideList("#protocol-guide-warnings", guide.warnings);
+}
+
+function openProtocolGuide(source, trigger) {
+  const dialog = document.querySelector("#protocol-guide-dialog");
+  const selector = document.querySelector("#protocol-guide-variant");
+  if (!dialog || !selector) return;
+  const variants = listProtocolGuideVariants(source);
+  if (variants.length === 0) return;
+  activeProtocolGuideSource = source;
+  protocolGuideReturnFocus = trigger || document.activeElement;
+  selector.replaceChildren();
+  for (const variant of variants) {
+    const option = document.createElement("option");
+    option.value = variant.value;
+    option.textContent = variant.label;
+    selector.append(option);
+  }
+  const current = savedProtocolGuideReference?.source === source
+    ? savedProtocolGuideReference.variant
+    : currentProtocolGuideVariant(source);
+  selector.value = variants.some((entry) => entry.value === current) ? current : variants[0].value;
+  savedProtocolGuideReference = { source, variant: selector.value };
+  renderProtocolGuide(source, selector.value);
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function closeProtocolGuide() {
+  const dialog = document.querySelector("#protocol-guide-dialog");
+  if (!dialog?.open) return;
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.removeAttribute("open");
+}
+
+function initProtocolGuides() {
+  const dialog = document.querySelector("#protocol-guide-dialog");
+  const selector = document.querySelector("#protocol-guide-variant");
+  for (const button of document.querySelectorAll("[data-protocol-help]")) {
+    button.addEventListener("click", () => openProtocolGuide(button.dataset.protocolHelp, button));
+  }
+  document.querySelector("#protocol-guide-close")?.addEventListener("click", closeProtocolGuide);
+  selector?.addEventListener("change", () => {
+    if (activeProtocolGuideSource) renderProtocolGuide(activeProtocolGuideSource, selector.value);
+    if (activeProtocolGuideSource) {
+      savedProtocolGuideReference = { source: activeProtocolGuideSource, variant: selector.value };
+    }
+  });
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog) closeProtocolGuide();
+  });
+  dialog?.addEventListener("close", () => {
+    if (protocolGuideReturnFocus instanceof HTMLElement && protocolGuideReturnFocus.isConnected) protocolGuideReturnFocus.focus();
+    protocolGuideReturnFocus = null;
+  });
 }
 
 // === 从站模拟 ===
@@ -1620,32 +2160,74 @@ async function calcChecksum(type) {
 const STORAGE_KEY_CONFIG = "nexus.config.v1";
 const STORAGE_KEY_POINTS = "nexus.pointTable.v1";
 
+function collectPersistentConfig() {
+  return {
+    transport: currentTransport(),
+    serial: {
+      portName: elements.portName?.value || "",
+      baudRate: elements.baudRate?.value || "9600",
+      parity: elements.parity?.value || "none",
+      dataBits: elements.dataBits?.value || "8",
+      stopBits: elements.stopBits?.value || "1",
+    },
+    tcp: {
+      host: elements.tcpHost?.value || "127.0.0.1",
+      port: elements.tcpPort?.value || "502",
+    },
+    command: {
+      unitId: elements.unitId?.value || "1",
+      functionCode: elements.functionCode?.value || "3",
+      startAddress: elements.startAddress?.value || "0",
+      quantity: elements.quantity?.value || "1",
+      displayType: elements.displayType?.value || "Unsigned16",
+      pollInterval: elements.pollInterval?.value || "1000",
+    },
+  };
+}
+
+function applyPersistentConfig(config) {
+  if (!config || typeof config !== "object") return;
+  const allowedTransports = new Set(["rtu", "ascii", "tcp", "udp", "rtu-over-tcp", "ascii-over-tcp"]);
+  if (allowedTransports.has(config.transport)) {
+    for (const radio of elements.transportRadios) radio.checked = radio.value === config.transport;
+  }
+  if (config.serial) {
+    if (elements.baudRate && config.serial.baudRate) elements.baudRate.value = config.serial.baudRate;
+    if (elements.parity && config.serial.parity) elements.parity.value = config.serial.parity;
+    if (elements.dataBits && config.serial.dataBits) elements.dataBits.value = config.serial.dataBits;
+    if (elements.stopBits && config.serial.stopBits) elements.stopBits.value = config.serial.stopBits;
+    if (config.serial.portName) {
+      const tryRestore = () => {
+        const sel = elements.portName;
+        if (sel && [...sel.options].some((option) => option.value === config.serial.portName)) {
+          sel.value = config.serial.portName;
+        }
+      };
+      tryRestore();
+      setTimeout(tryRestore, 1500);
+    }
+  }
+  if (config.tcp) {
+    if (elements.tcpHost && config.tcp.host) elements.tcpHost.value = config.tcp.host;
+    if (elements.tcpPort && config.tcp.port) elements.tcpPort.value = config.tcp.port;
+  }
+  if (config.command) {
+    if (elements.unitId && config.command.unitId) elements.unitId.value = config.command.unitId;
+    if (elements.functionCode && config.command.functionCode) elements.functionCode.value = config.command.functionCode;
+    if (elements.startAddress && config.command.startAddress) elements.startAddress.value = config.command.startAddress;
+    if (elements.quantity && config.command.quantity) elements.quantity.value = config.command.quantity;
+    if (elements.displayType && config.command.displayType) elements.displayType.value = config.command.displayType;
+    if (elements.pollInterval && config.command.pollInterval) elements.pollInterval.value = config.command.pollInterval;
+  }
+  updateTransportVisibility();
+  syncActionState();
+  renderCodeSample();
+}
+
 /** 保存当前配置到 localStorage */
 function persistConfig() {
   try {
-    const config = {
-      transport: currentTransport(),
-      serial: {
-        portName: elements.portName?.value || "",
-        baudRate: elements.baudRate?.value || "9600",
-        parity: elements.parity?.value || "none",
-        dataBits: elements.dataBits?.value || "8",
-        stopBits: elements.stopBits?.value || "1",
-      },
-      tcp: {
-        host: elements.tcpHost?.value || "127.0.0.1",
-        port: elements.tcpPort?.value || "502",
-      },
-      command: {
-        unitId: elements.unitId?.value || "1",
-        functionCode: elements.functionCode?.value || "3",
-        startAddress: elements.startAddress?.value || "0",
-        quantity: elements.quantity?.value || "1",
-        displayType: elements.displayType?.value || "Unsigned16",
-        pollInterval: elements.pollInterval?.value || "1000",
-      },
-    };
-    localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(collectPersistentConfig()));
   } catch {
     // localStorage 不可用时静默失败
   }
@@ -1656,44 +2238,7 @@ function restoreConfig() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CONFIG);
     if (!raw) return;
-    const config = JSON.parse(raw);
-    // 恢复传输方式
-    if (config.transport) {
-      const radio = document.querySelector(`input[name="transport"][value="${config.transport}"]`);
-      if (radio) { radio.checked = true; }
-    }
-    // 恢复串口参数
-    if (config.serial) {
-      if (elements.baudRate && config.serial.baudRate) elements.baudRate.value = config.serial.baudRate;
-      if (elements.parity && config.serial.parity) elements.parity.value = config.serial.parity;
-      if (elements.dataBits && config.serial.dataBits) elements.dataBits.value = config.serial.dataBits;
-      if (elements.stopBits && config.serial.stopBits) elements.stopBits.value = config.serial.stopBits;
-      // portName 等 refreshPorts 后匹配
-      if (config.serial.portName) {
-        const tryRestore = () => {
-          const sel = elements.portName;
-          if (sel && [...sel.options].some((o) => o.value === config.serial.portName)) {
-            sel.value = config.serial.portName;
-          }
-        };
-        setTimeout(tryRestore, 1500); // 等待串口列表加载
-      }
-    }
-    // 恢复 TCP 参数
-    if (config.tcp) {
-      if (elements.tcpHost && config.tcp.host) elements.tcpHost.value = config.tcp.host;
-      if (elements.tcpPort && config.tcp.port) elements.tcpPort.value = config.tcp.port;
-    }
-    // 恢复命令参数
-    if (config.command) {
-      if (elements.unitId && config.command.unitId) elements.unitId.value = config.command.unitId;
-      if (elements.functionCode && config.command.functionCode) elements.functionCode.value = config.command.functionCode;
-      if (elements.startAddress && config.command.startAddress) elements.startAddress.value = config.command.startAddress;
-      if (elements.quantity && config.command.quantity) elements.quantity.value = config.command.quantity;
-      if (elements.displayType && config.command.displayType) elements.displayType.value = config.command.displayType;
-      if (elements.pollInterval && config.command.pollInterval) elements.pollInterval.value = config.command.pollInterval;
-    }
-    updateTransportVisibility();
+    applyPersistentConfig(JSON.parse(raw));
   } catch {
     // 解析失败静默
   }
@@ -1788,35 +2333,23 @@ function importPoints() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".csv,.json";
-  input.onchange = (e) => {
-    const file = e.target.files?.[0];
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = reader.result;
-        if (file.name.endsWith(".json")) {
-          const data = JSON.parse(text);
-          if (Array.isArray(data)) {
-            pointTable.push(...data);
-          }
-        } else {
-          // CSV: name,unitId,fc,address,quantity,dataType
-          const lines = text.split("\n").filter((l) => l.trim() && !l.startsWith("name,"));
-          for (const line of lines) {
-            const [name, unitId, fc, address, quantity, dataType] = line.split(",").map((s) => s?.trim());
-            pointTable.push({ name, unitId: Number(unitId) || 1, fc: Number(fc) || 3, address: Number(address) || 0, quantity: Number(quantity) || 1, dataType: dataType || "Unsigned16" });
-          }
-        }
-        setNotice("success", "导入成功", `共 ${pointTable.length} 个点位`);
-        renderPointRows();
-        persistPointTable();
-      } catch (err) {
-        setNotice("error", "导入失败", err.message);
+    try {
+      const imported = await readPointImportFile(file);
+      if (!imported?.length) {
+        setNotice("error", "导入失败", "文件中没有可导入的点位。");
+        return;
       }
-    };
-    reader.readAsText(file);
-  };
+      pointTable.push(...imported);
+      setNotice("success", "导入成功", `已导入 ${imported.length} 个点位，当前共 ${pointTable.length} 个`);
+      renderPointRows();
+      persistPointTable();
+    } catch (error) {
+      setNotice("error", "导入失败", error.message || String(error));
+    }
+  });
   input.click();
 }
 
@@ -1916,12 +2449,14 @@ async function mcConnect() {
     const host = document.querySelector("#mc-host")?.value?.trim() || "127.0.0.1";
     const port = Number(document.querySelector("#mc-port")?.value) || 5000;
     try {
+      const t0 = performance.now();
       await callBackend("open_mc_1e_tcp", { connectionId: MC_CONN_ID, host, port });
+      const ms = performance.now() - t0;
       mcConnected = true;
       mcIsAscii = false; mcIsUdp = false;
       mcFxProtocol = "1e";
-      mcSetState(`1E 已连接 ${host}:${port}`, true);
-      setNotice("success", "A-1E 已连接", `${host}:${port} (FX3U-ENET/FX5U/A 系兼容)`);
+      mcSetState(`1E 已连接 ${host}:${port} · ${ms.toFixed(0)} ms`, true);
+      setNotice("success", "A-1E 已连接", `${host}:${port} (FX3U-ENET/FX5U/A 系兼容) · 连接耗时 ${ms.toFixed(0)} ms`);
     } catch (error) {
       mcSetState("连接失败");
       setNotice("error", "1E 连接失败", error.message || String(error));
@@ -1961,17 +2496,19 @@ async function mcConnect() {
   setNotice("info", "连接中", `${host}:${port} (${variant.toUpperCase()})`);
   try {
     const cmd = isUdp ? "open_mc_udp_connection" : (isAscii ? "open_mc_ascii_connection" : "open_mc_tcp_connection");
+    const t0 = performance.now();
     await callBackend(cmd, {
       connectionId: MC_CONN_ID,
       host, port, frameType,
       networkNo, pcNo, watchdog,
     });
+    const ms = performance.now() - t0;
     mcConnected = true;
     mcIsAscii = isAscii;
     mcIsUdp = isUdp;
     mcFxProtocol = null;
-    mcSetState(`已连接 ${host}:${port} ${isUdp ? "UDP" : (isAscii ? "ASCII" : "Binary")}`, true);
-    setNotice("success", "MC 已连接", `${host}:${port} (${variant.toUpperCase()})`);
+    mcSetState(`已连接 ${host}:${port} ${isUdp ? "UDP" : (isAscii ? "ASCII" : "Binary")} · ${ms.toFixed(0)} ms`, true);
+    setNotice("success", "MC 已连接", `${host}:${port} (${variant.toUpperCase()}) · 连接耗时 ${ms.toFixed(0)} ms`);
   } catch (error) {
     mcSetState("连接失败");
     setNotice("error", "MC 连接失败", error.message || String(error));
@@ -2016,19 +2553,20 @@ async function mcStopSlave() {
 
 function mcSyncButtons() {
   const q = (id) => document.querySelector(id);
+  const c24ReadOnly = mcFxProtocol === "c24";
   if (q("#mc-connect")) q("#mc-connect").disabled = mcConnected;
   if (q("#mc-disconnect")) q("#mc-disconnect").disabled = !mcConnected;
   if (q("#mc-read")) q("#mc-read").disabled = !mcConnected;
-  if (q("#mc-write")) q("#mc-write").disabled = !mcConnected;
+  if (q("#mc-write")) q("#mc-write").disabled = !mcConnected || c24ReadOnly;
   if (q("#mc-start-slave")) q("#mc-start-slave").disabled = mcSlaveRunning;
   if (q("#mc-stop-slave")) q("#mc-stop-slave").disabled = !mcSlaveRunning;
   // M2 诊断/控制按钮随连接状态启用
   for (const id of ["#mc-read-type", "#mc-read-status", "#mc-read-clock", "#mc-echo",
                     "#mc-random-read", "#mc-remote-run", "#mc-remote-stop", "#mc-remote-reset"]) {
-    if (q(id)) q(id).disabled = !mcConnected;
+    if (q(id)) q(id).disabled = !mcConnected || c24ReadOnly;
   }
   const diagState = document.querySelector("#mc-diag-state");
-  if (diagState) diagState.textContent = mcConnected ? "已连接" : "需要连接";
+  if (diagState) diagState.textContent = mcConnected ? (c24ReadOnly ? "C24 只读" : "已连接") : "需要连接";
 }
 
 function mcRenderRows(address, values, isBit) {
@@ -2098,8 +2636,7 @@ async function mcRead() {
       setNotice("success", "1E 读取成功", `${address} × ${points}`);
       return;
     }
-    if (mcFxProtocol) {
-      // FX 串口在线事务
+    if (mcFxProtocol === "links" || mcFxProtocol === "prog") {
       const station = Number(document.querySelector("#mc-fx-station")?.value) || 0;
       const m = address.match(/^([A-Za-z]+)(\d+)$/);
       if (!m) { setNotice("error", "地址无效", "FX 地址形如 D100/M100/X0"); return; }
@@ -2152,6 +2689,11 @@ async function mcWrite() {
   }
   try {
     let result;
+    if (mcFxProtocol === "c24") {
+      const route = resolveMelsecRoute("mc-c24");
+      setNotice("error", route.label + " 写入未开放", route.reason);
+      return;
+    }
     if (mcFxProtocol === "1e") {
       const w1e = await callBackend("mc_1e_write", { connectionId: MC_CONN_ID, address, values });
       if (w1e.endCode !== 0) {
@@ -2162,7 +2704,7 @@ async function mcWrite() {
       await mcRead();
       return;
     }
-    if (mcFxProtocol) {
+    if (mcFxProtocol === "links" || mcFxProtocol === "prog") {
       const station = Number(document.querySelector("#mc-fx-station")?.value) || 0;
       const m = address.match(/^([A-Za-z]+)(\d+)$/);
       if (!m) { setNotice("error", "地址无效", "FX 地址形如 D100/M100"); return; }
@@ -2199,8 +2741,10 @@ async function mcWrite() {
 
 // === 欧姆龙 FINS ===
 
-let omConnected = false, omSlaveRunning = false, omIsUdp = false;
+let omConnected = false, omSlaveRunning = false, omIsUdp = false, omActiveVariant = null;
 const OM_CONN_ID = "omron";
+const OM_FINS_MAX_POINTS = 512;
+const OM_HOSTLINK_MAX_POINTS = 100;
 
 function omSetState(text, ok = false) {
   const el = document.querySelector("#om-state");
@@ -2211,12 +2755,55 @@ function omSyncButtons() {
   if (q("#om-connect")) q("#om-connect").disabled = omConnected;
   if (q("#om-disconnect")) q("#om-disconnect").disabled = !omConnected;
   if (q("#om-read")) q("#om-read").disabled = !omConnected;
-  if (q("#om-write")) q("#om-write").disabled = !omConnected;
-  if (q("#om-start-slave")) q("#om-start-slave").disabled = omSlaveRunning;
+  const hostLinkSerial = ["hostlink-serial", "hostlink-fins-serial"].includes(omActiveVariant);
+  if (q("#om-write")) q("#om-write").disabled = !omConnected || hostLinkSerial;
+  if (q("#om-transport")) q("#om-transport").disabled = omConnected;
+  if (q("#om-start-slave")) q("#om-start-slave").disabled = omSlaveRunning || hostLinkSerial;
   if (q("#om-stop-slave")) q("#om-stop-slave").disabled = !omSlaveRunning;
+}
+function omApplyVariant() {
+  const variant = document.querySelector("#om-transport")?.value || "tcp";
+  const isHostLink = ["hostlink-serial", "hostlink-fins-serial"].includes(variant);
+  document.querySelector("#om-network-fields")?.classList.toggle("hidden", isHostLink);
+  document.querySelector("#om-serial-station-wrap")?.classList.toggle("hidden", !isHostLink);
+  const hint = document.querySelector("#om-hint");
+  if (hint) hint.textContent = variant === "hostlink-fins-serial"
+    ? "HostLink FINS 首轮只读字：D100/CIO0/W0/H0 · 站号 0..31 · 共享 COM"
+    : isHostLink
+    ? "HostLink C-mode 首轮只读 DM：D100 · 站号 0..31 · 共享 COM"
+    : "地址:D100 / CIO10.00 / W0 / H50 / T0(TS/CS 查手册)";
+  const title = document.querySelector("#om-connection-title");
+  if (title) title.textContent = variant === "hostlink-fins-serial"
+    ? "HostLink FINS 串口只读配置"
+    : isHostLink ? "HostLink C-mode 串口只读配置" : "FINS 连接配置";
+  omSyncButtons();
 }
 async function omConnect() {
   if (omConnected) return;
+  const variant = document.querySelector("#om-transport")?.value || "tcp";
+  omActiveVariant = variant;
+  if (["hostlink-serial", "hostlink-fins-serial"].includes(variant)) {
+    const station = Number(document.querySelector("#om-serial-station")?.value);
+    if (!Number.isInteger(station) || station < 0 || station > 31) {
+      omSetState("站号无效");
+      setNotice("error", "HostLink 站号无效", "请输入 0 到 31 的整数");
+      omActiveVariant = null;
+      omSyncButtons();
+      return;
+    }
+    try {
+      const status = await callBackend("get_serial_status", {});
+      if (!status?.isOpen) throw new Error("请先在主站页打开 HostLink 使用的 COM 串口");
+      omConnected = true;
+      omSetState(`HostLink 只读就绪 · 站 ${station}`, true);
+      setNotice("success", "HostLink 串口已就绪", variant === "hostlink-fins-serial" ? "当前只开放 FINS 0101 字读取" : "当前只开放 C-mode RR 读 DM");
+    } catch (error) {
+      omActiveVariant = null;
+      omSetState("连接失败");
+      setNotice("error", "HostLink 串口不可用", error.message || String(error));
+    } finally { omSyncButtons(); }
+    return;
+  }
   const host = document.querySelector("#om-host")?.value?.trim() || "127.0.0.1";
   const port = Number(document.querySelector("#om-port")?.value) || 9600;
   const destNode = Number(document.querySelector("#om-dest")?.value) || 0;
@@ -2230,14 +2817,18 @@ async function omConnect() {
     omSetState(`已连接 ${host}:${port} ${omIsUdp ? "UDP" : "TCP"}`, true);
     setNotice("success", "FINS 已连接", "");
   } catch (error) {
+    omActiveVariant = null;
     omSetState("连接失败");
     setNotice("error", "FINS 连接失败", error.message || String(error));
   } finally { omSyncButtons(); }
 }
 async function omDisconnect() {
   if (!omConnected) return;
-  try { await callBackend("close_connection", { connectionId: OM_CONN_ID }); } catch { }
+  if (!["hostlink-serial", "hostlink-fins-serial"].includes(omActiveVariant)) {
+    try { await callBackend("close_connection", { connectionId: OM_CONN_ID }); } catch { }
+  }
   omConnected = false;
+  omActiveVariant = null;
   omSetState("未连接"); omSyncButtons();
 }
 async function omStartSlave() {
@@ -2280,9 +2871,29 @@ function omRender(address, values, isBit) {
 async function omRead() {
   if (!omConnected) return;
   const address = document.querySelector("#om-address")?.value?.trim();
-  const count = Number(document.querySelector("#om-points")?.value) || 1;
+  const count = Number(document.querySelector("#om-points")?.value);
   if (!address) { setNotice("error", "地址无效", "如 D100 / CIO0.00 / W0 / T0"); return; }
+  const maxPoints = ["hostlink-serial", "hostlink-fins-serial"].includes(omActiveVariant)
+    ? OM_HOSTLINK_MAX_POINTS
+    : OM_FINS_MAX_POINTS;
+  if (!Number.isInteger(count) || count < 1 || count > maxPoints) {
+    setNotice("error", "读取数量无效", `当前变体允许 1..${maxPoints} 点`);
+    return;
+  }
   try {
+    if (["hostlink-serial", "hostlink-fins-serial"].includes(omActiveVariant)) {
+      const r = await callBackend("omron_hostlink_serial_read", {
+        station: Number(document.querySelector("#om-serial-station")?.value) || 0,
+        address,
+        count,
+        timeoutMs: 1500,
+        mode: omActiveVariant === "hostlink-fins-serial" ? "fins" : "cmode",
+      });
+      if (r?.ok === false) throw new Error(r.error?.message || "HostLink 读取失败");
+      omRender(address, omActiveVariant === "hostlink-fins-serial" ? (r.values || []) : (r.words || []), false);
+      setNotice("success", "HostLink 读取成功", `${r.address || address} × ${r.count || count} · 只读`);
+      return;
+    }
     const r = await callBackend("fins_read", { connectionId: OM_CONN_ID, address, count });
     if (r.endCode !== 0) { setNotice("error", `FINS 0x${r.endCode.toString(16).toUpperCase().padStart(4, "0")}`, ""); return; }
     omRender(address, r.values, r.isBit);
@@ -2291,12 +2902,20 @@ async function omRead() {
 }
 async function omWrite() {
   if (!omConnected) return;
+  if (["hostlink-serial", "hostlink-fins-serial"].includes(omActiveVariant)) {
+    setNotice("info", "HostLink 当前只读", "C-mode RR 写入未开放");
+    return;
+  }
   const address = document.querySelector("#om-address")?.value?.trim();
   const raw = document.querySelector("#om-write-values")?.value?.trim() || "";
   if (!address) return;
   const values = raw.split(",").map((v) => Number(v.trim()));
   if (!values.length || values.some((v) => !Number.isInteger(v) || v < 0 || v > 65535)) {
     setNotice("error", "写入值无效", "逗号分隔的整数(0-65535)"); return;
+  }
+  if (values.length > OM_FINS_MAX_POINTS) {
+    setNotice("error", "写入数量超限", `FINS 网络写入当前软件安全上限 ${OM_FINS_MAX_POINTS} 点`);
+    return;
   }
   try {
     const r = await callBackend("fins_write", { connectionId: OM_CONN_ID, address, values });
@@ -2309,8 +2928,2786 @@ function initOmronUi() {
   q("#om-connect", omConnect); q("#om-disconnect", omDisconnect);
   q("#om-start-slave", omStartSlave); q("#om-stop-slave", omStopSlave);
   q("#om-read", omRead); q("#om-write", omWrite);
+  q("#om-transport", omApplyVariant, "change");
+  omApplyVariant();
   const addr = document.querySelector("#om-address");
   if (addr) addr.addEventListener("keydown", (e) => { if (e.key === "Enter" && omConnected) omRead(); });
+}
+
+// === Allen-Bradley EtherNet/IP / CIP（TCP 只读会话 + 编解码）===
+
+function abUnsigned(value, max, label) {
+  const text = String(value ?? "").trim();
+  const number = /^0x/i.test(text) ? Number.parseInt(text, 16) : Number(text);
+  if (!Number.isSafeInteger(number) || number < 0 || number > max) {
+    throw new Error(`${label} 必须是 0..${max} 的整数`);
+  }
+  return number;
+}
+
+function abFrameText(bytes) {
+  return (bytes || []).map((byte) => Number(byte).toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function showAbResult(result) {
+  const output = document.querySelector("#ab-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (key === "frame" || key === "payload" || key === "data" || key === "tagPath") return Array.isArray(value) ? abFrameText(value) : value;
+    return value;
+  }, 2);
+}
+
+function abCurrentPayload() {
+  return {
+    sessionHandle: abUnsigned(document.querySelector("#ab-session")?.value || "0", 0xFFFF_FFFF, "Session Handle"),
+    senderContext: abUnsigned(document.querySelector("#ab-context")?.value || "0", Number.MAX_SAFE_INTEGER, "Sender Context"),
+  };
+}
+
+function abHost() {
+  const value = guideValue("#ab-host", "127.0.0.1").trim();
+  if (!value) throw new Error("EtherNet/IP TCP 主机不能为空");
+  return value;
+}
+
+function abPort() {
+  return abUnsigned(document.querySelector("#ab-port")?.value || "44818", 65535, "EtherNet/IP TCP 端口") || 44818;
+}
+
+function abSessionId() {
+  return "enip-live";
+}
+
+async function abBuild(command, payload) {
+  try {
+    const result = await callBackend(command, payload);
+    showAbResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#ab-frame-input");
+      if (input) input.value = abFrameText(result.frame);
+    }
+    setNotice("success", "CIP 报文已生成", `${command} · 软件编解码，不代表实机响应`);
+  } catch (error) {
+    showAbResult({ error: error.message || String(error) });
+    setNotice("error", "CIP 编解码失败", error.message || String(error));
+  }
+}
+
+async function abParse(command) {
+  try {
+    const frame = parseHexInput(document.querySelector("#ab-frame-input")?.value || "");
+    if (!frame.length) throw new Error("请先粘贴或生成 ENIP HEX 报文");
+    const result = await callBackend(command, { frame });
+    showAbResult(result);
+    setNotice("success", "CIP 报文已解析", `${command} · 仅验证软件边界`);
+  } catch (error) {
+    showAbResult({ error: error.message || String(error) });
+    setNotice("error", "CIP 解析失败", error.message || String(error));
+  }
+}
+
+function initAllenBradleyUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#ab-open-connection", async () => {
+    try {
+      const result = await callBackend("open_enip_connection", { connectionId: abSessionId(), host: abHost(), port: abPort() });
+      showAbResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "EtherNet/IP RegisterSession 失败");
+      const handle = result?.sessionHandle;
+      if (handle !== undefined) {
+        const input = document.querySelector("#ab-session");
+        if (input) input.value = String(handle);
+      }
+      setNotice("success", "EtherNet/IP TCP 只读会话已建立", `${abHost()}:${abPort()} · RegisterSession`);
+    } catch (error) {
+      showAbResult({ error: error.message || String(error) });
+      setNotice("error", "EtherNet/IP 连接失败", error.message || String(error));
+    }
+  });
+  q("#ab-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: abSessionId() });
+      showAbResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "EtherNet/IP 断开失败");
+      setNotice("success", "EtherNet/IP TCP 会话已断开", "");
+    } catch (error) {
+      showAbResult({ error: error.message || String(error) });
+      setNotice("error", "EtherNet/IP 断开失败", error.message || String(error));
+    }
+  });
+  q("#ab-register", () => {
+    try {
+      abBuild("enip_build_register_session", {
+        sessionHandle: 0,
+        senderContext: abUnsigned(document.querySelector("#ab-context")?.value || "0", Number.MAX_SAFE_INTEGER, "Sender Context"),
+      });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ab-unregister", () => {
+    try { abBuild("enip_build_unregister_session", abCurrentPayload()); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ab-read-tag", () => {
+    try {
+      const tag = document.querySelector("#ab-tag")?.value?.trim();
+      if (!tag) throw new Error("CIP Tag 不能为空");
+      abBuild("enip_build_read_tag", {
+        ...abCurrentPayload(),
+        tag,
+        elements: abUnsigned(document.querySelector("#ab-elements")?.value || "1", 65535, "Elements"),
+      });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ab-live-read", async () => {
+    try {
+      const tag = document.querySelector("#ab-tag")?.value?.trim();
+      if (!tag) throw new Error("CIP Tag 不能为空");
+      const result = await callBackend("enip_read_tag", {
+        connectionId: abSessionId(),
+        tag,
+        elements: abUnsigned(document.querySelector("#ab-elements")?.value || "1", 65535, "Elements"),
+      });
+      showAbResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "CIP TCP 只读失败");
+      setNotice("success", "CIP TCP 只读完成", `${tag} · ${result?.dataHex || ""}`);
+    } catch (error) {
+      showAbResult({ error: error.message || String(error) });
+      setNotice("error", "CIP TCP 只读失败", error.message || String(error));
+    }
+  });
+  q("#ab-parse-frame", () => abParse("enip_parse_frame"));
+  q("#ab-parse-cip", () => abParse("enip_parse_cip_response"));
+  q("#ab-clear", () => {
+    const input = document.querySelector("#ab-frame-input");
+    const output = document.querySelector("#ab-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成或粘贴报文。";
+  });
+}
+
+// === Beckhoff ADS / AMS（TCP 只读会话 + 编解码）===
+
+function adsFrameText(bytes) {
+  return (bytes || []).map((byte) => Number(byte).toString(16).padStart(2, "0").toUpperCase()).join(" ");
+}
+
+function showAdsResult(result) {
+  const output = document.querySelector("#ads-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "payload", "data", "writeData"].includes(key) && Array.isArray(value)) return adsFrameText(value);
+    return value;
+  }, 2);
+}
+
+function adsUnsigned(value, max, label) {
+  return abUnsigned(value, max, label);
+}
+
+function adsContextPayload() {
+  return {
+    targetNetId: document.querySelector("#ads-target-netid")?.value?.trim() || "",
+    targetPort: adsUnsigned(document.querySelector("#ads-target-port")?.value || "851", 65535, "目标 AMS Port"),
+    sourceNetId: document.querySelector("#ads-source-netid")?.value?.trim() || "",
+    sourcePort: adsUnsigned(document.querySelector("#ads-source-port")?.value || "32905", 65535, "源 AMS Port"),
+    invokeId: adsUnsigned(document.querySelector("#ads-invoke")?.value || "0", 0xFFFF_FFFF, "InvokeId"),
+  };
+}
+
+function adsAddressPayload() {
+  return {
+    indexGroup: adsUnsigned(document.querySelector("#ads-group")?.value || "0", 0xFFFF_FFFF, "IndexGroup"),
+    indexOffset: adsUnsigned(document.querySelector("#ads-offset")?.value || "0", 0xFFFF_FFFF, "IndexOffset"),
+    readLength: adsUnsigned(document.querySelector("#ads-read-length")?.value || "0", 0xFFFF_FFFF, "Read bytes"),
+  };
+}
+
+function adsHost() {
+  const value = guideValue("#ads-host", "127.0.0.1").trim();
+  if (!value) throw new Error("ADS/TCP 主机不能为空");
+  return value;
+}
+
+function adsPort() {
+  return adsUnsigned(document.querySelector("#ads-port")?.value || "48898", 65535, "ADS/TCP 端口") || 48898;
+}
+
+function adsSessionId() {
+  return "ads-live";
+}
+
+async function adsBuild(command, payload) {
+  try {
+    const result = await callBackend(command, payload);
+    showAdsResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#ads-frame-input");
+      if (input) input.value = adsFrameText(result.frame);
+    }
+    setNotice("success", "ADS 报文已生成", `${command} · 软件编解码，不代表 TwinCAT/PLC 实机响应`);
+  } catch (error) {
+    showAdsResult({ error: error.message || String(error) });
+    setNotice("error", "ADS 编解码失败", error.message || String(error));
+  }
+}
+
+async function adsParse(command) {
+  try {
+    const frame = parseHexInput(document.querySelector("#ads-frame-input")?.value || "");
+    if (!frame.length) throw new Error("请先粘贴或生成 ADS HEX 报文");
+    const payload = { frame };
+    if (command === "ads_parse_response") {
+      payload.expectedInvokeId = adsUnsigned(document.querySelector("#ads-invoke")?.value || "0", 0xFFFF_FFFF, "InvokeId");
+    }
+    const result = await callBackend(command, payload);
+    showAdsResult(result);
+    setNotice("success", "ADS 报文已解析", `${command} · 仅验证软件边界`);
+  } catch (error) {
+    showAdsResult({ error: error.message || String(error) });
+    setNotice("error", "ADS 解析失败", error.message || String(error));
+  }
+}
+
+function initBeckhoffUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#ads-open-connection", async () => {
+    try {
+      const context = adsContextPayload();
+      const result = await callBackend("open_ads_connection", {
+        connectionId: adsSessionId(),
+        host: adsHost(),
+        port: adsPort(),
+        ...context,
+      });
+      showAdsResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "ADS/TCP 连接失败");
+      setNotice("success", "ADS/TCP 只读会话已建立", `${adsHost()}:${adsPort()} · ${context.targetNetId}:${context.targetPort}`);
+    } catch (error) {
+      showAdsResult({ error: error.message || String(error) });
+      setNotice("error", "ADS/TCP 连接失败", error.message || String(error));
+    }
+  });
+  q("#ads-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: adsSessionId() });
+      showAdsResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "ADS/TCP 断开失败");
+      setNotice("success", "ADS/TCP 会话已断开", "");
+    } catch (error) {
+      showAdsResult({ error: error.message || String(error) });
+      setNotice("error", "ADS/TCP 断开失败", error.message || String(error));
+    }
+  });
+  q("#ads-build-read", () => {
+    try { adsBuild("ads_build_read", { ...adsContextPayload(), ...adsAddressPayload() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ads-build-write", () => {
+    try {
+      const data = parseHexInput(document.querySelector("#ads-write-data")?.value || "");
+      adsBuild("ads_build_write", { ...adsContextPayload(), ...adsAddressPayload(), data });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ads-build-readwrite", () => {
+    try {
+      const data = parseHexInput(document.querySelector("#ads-write-data")?.value || "");
+      adsBuild("ads_build_readwrite", { ...adsContextPayload(), ...adsAddressPayload(), writeData: data });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ads-build-info", () => {
+    try { adsBuild("ads_build_read_device_info", adsContextPayload()); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ads-build-state", () => {
+    try { adsBuild("ads_build_read_state", adsContextPayload()); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#ads-live-read", async () => {
+    try {
+      const result = await callBackend("ads_read", { connectionId: adsSessionId(), ...adsAddressPayload() });
+      showAdsResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "ADS Read 失败");
+      setNotice("success", "ADS TCP 只读完成", `${result?.dataHex || ""}`);
+    } catch (error) {
+      showAdsResult({ error: error.message || String(error) });
+      setNotice("error", "ADS TCP 只读失败", error.message || String(error));
+    }
+  });
+  q("#ads-live-info", async () => {
+    try {
+      const result = await callBackend("ads_read_device_info", { connectionId: adsSessionId() });
+      showAdsResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "ADS ReadDeviceInfo 失败");
+      setNotice("success", "ADS ReadDeviceInfo 完成", "只读");
+    } catch (error) {
+      showAdsResult({ error: error.message || String(error) });
+      setNotice("error", "ADS ReadDeviceInfo 失败", error.message || String(error));
+    }
+  });
+  q("#ads-live-state", async () => {
+    try {
+      const result = await callBackend("ads_read_state", { connectionId: adsSessionId() });
+      showAdsResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "ADS ReadState 失败");
+      setNotice("success", "ADS ReadState 完成", "只读");
+    } catch (error) {
+      showAdsResult({ error: error.message || String(error) });
+      setNotice("error", "ADS ReadState 失败", error.message || String(error));
+    }
+  });
+  q("#ads-parse-frame", () => adsParse("ads_parse_frame"));
+  q("#ads-parse-response", () => adsParse("ads_parse_response"));
+  q("#ads-clear", () => {
+    const input = document.querySelector("#ads-frame-input");
+    const output = document.querySelector("#ads-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成或粘贴报文。";
+  });
+}
+
+// === MQTT 3.1.1（TCP 只读订阅 + 编解码）===
+
+function showMqttResult(result) {
+  const output = document.querySelector("#mqtt-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "request", "response", "payload"].includes(key) && Array.isArray(value)) return value.map((byte) => Number(byte).toString(16).padStart(2, "0").toUpperCase()).join(" ");
+    return value;
+  }, 2);
+}
+
+function mqttHost() {
+  const value = guideValue("#mqtt-host", "127.0.0.1").trim();
+  if (!value) throw new Error("MQTT Broker 主机不能为空");
+  return value;
+}
+
+function mqttPort() {
+  return abUnsigned(document.querySelector("#mqtt-port")?.value || "1883", 65535, "MQTT TCP 端口") || 1883;
+}
+
+function mqttClientId() {
+  const value = guideValue("#mqtt-client-id", "nexus-readonly").trim();
+  if (!value) throw new Error("MQTT Client ID 不能为空");
+  return value;
+}
+
+function mqttKeepAlive() {
+  return abUnsigned(document.querySelector("#mqtt-keep-alive")?.value || "30", 65535, "Keep Alive");
+}
+
+function mqttTopicFilter() {
+  const value = guideValue("#mqtt-topic-filter", "factory/line1/#").trim();
+  if (!value) throw new Error("MQTT Topic Filter 不能为空");
+  return value;
+}
+
+function mqttQos() {
+  return abUnsigned(document.querySelector("#mqtt-qos")?.value || "0", 2, "QoS");
+}
+
+function mqttSessionId() {
+  return "mqtt-live";
+}
+
+async function mqttBuild(command, payload) {
+  try {
+    const result = await callBackend(command, payload);
+    showMqttResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#mqtt-frame-input");
+      if (input) input.value = result.frameHex || result.frame.map((byte) => Number(byte).toString(16).padStart(2, "0").toUpperCase()).join(" ");
+    }
+    setNotice("success", "MQTT 报文已生成", `${command} · 只读软件编解码，不代表 Broker 实机权限`);
+  } catch (error) {
+    showMqttResult({ error: error.message || String(error) });
+    setNotice("error", "MQTT 编解码失败", error.message || String(error));
+  }
+}
+
+async function mqttParse(command) {
+  try {
+    const frame = parseHexInput(document.querySelector("#mqtt-frame-input")?.value || "");
+    if (!frame.length) throw new Error("请先粘贴或生成 MQTT HEX 报文");
+    const result = await callBackend(command, { frame });
+    showMqttResult(result);
+    setNotice("success", "MQTT 报文已解析", `${command} · 仅验证软件边界`);
+  } catch (error) {
+    showMqttResult({ error: error.message || String(error) });
+    setNotice("error", "MQTT 解析失败", error.message || String(error));
+  }
+}
+
+function initMqttUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#mqtt-open-connection", async () => {
+    try {
+      const result = await callBackend("open_mqtt_connection", {
+        connectionId: mqttSessionId(),
+        host: mqttHost(),
+        port: mqttPort(),
+        clientId: mqttClientId(),
+        keepAlive: mqttKeepAlive(),
+        cleanSession: Boolean(document.querySelector("#mqtt-clean-session")?.checked),
+      });
+      showMqttResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "MQTT CONNECT 失败");
+      setNotice("success", "MQTT TCP 只读会话已建立", `${mqttHost()}:${mqttPort()} · CONNACK 0`);
+    } catch (error) {
+      showMqttResult({ error: error.message || String(error) });
+      setNotice("error", "MQTT 连接失败", error.message || String(error));
+    }
+  });
+  q("#mqtt-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: mqttSessionId() });
+      showMqttResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "MQTT 断开失败");
+      setNotice("success", "MQTT 会话已断开", "DISCONNECT · 不发布数据");
+    } catch (error) {
+      showMqttResult({ error: error.message || String(error) });
+      setNotice("error", "MQTT 断开失败", error.message || String(error));
+    }
+  });
+  q("#mqtt-subscribe", async () => {
+    try {
+      const result = await callBackend("mqtt_subscribe", { connectionId: mqttSessionId(), topicFilter: mqttTopicFilter(), qos: mqttQos() });
+      showMqttResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "MQTT SUBSCRIBE 失败");
+      setNotice("success", "MQTT 只读订阅成功", `${mqttTopicFilter()} · QoS ${mqttQos()}`);
+    } catch (error) {
+      showMqttResult({ error: error.message || String(error) });
+      setNotice("error", "MQTT 订阅失败", error.message || String(error));
+    }
+  });
+  q("#mqtt-read-publish", async () => {
+    try {
+      const result = await callBackend("mqtt_read_publish", { connectionId: mqttSessionId() });
+      showMqttResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "MQTT PUBLISH 读取失败");
+      setNotice("success", "MQTT PUBLISH 已读取", `${result?.topic || "Topic"} · QoS ${result?.qos ?? "—"}`);
+    } catch (error) {
+      showMqttResult({ error: error.message || String(error) });
+      setNotice("error", "MQTT PUBLISH 读取失败", error.message || String(error));
+    }
+  });
+  q("#mqtt-ping", async () => {
+    try {
+      const result = await callBackend("mqtt_ping", { connectionId: mqttSessionId() });
+      showMqttResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "MQTT PING 失败");
+      setNotice("success", "MQTT PING/PINGRESP 成功", "只做心跳诊断");
+    } catch (error) {
+      showMqttResult({ error: error.message || String(error) });
+      setNotice("error", "MQTT PING 失败", error.message || String(error));
+    }
+  });
+  q("#mqtt-build-connect", () => mqttBuild("mqtt_build_connect", { clientId: mqttClientId(), keepAlive: mqttKeepAlive(), cleanSession: Boolean(document.querySelector("#mqtt-clean-session")?.checked) }));
+  q("#mqtt-build-subscribe", () => mqttBuild("mqtt_build_subscribe", { packetId: 1, topicFilter: mqttTopicFilter(), qos: mqttQos() }));
+  q("#mqtt-build-pingreq", () => mqttBuild("mqtt_build_pingreq", {}));
+  q("#mqtt-build-disconnect", () => mqttBuild("mqtt_build_disconnect", {}));
+  q("#mqtt-parse-connack", () => mqttParse("mqtt_parse_connack"));
+  q("#mqtt-parse-suback", () => mqttParse("mqtt_parse_suback"));
+  q("#mqtt-parse-publish", () => mqttParse("mqtt_parse_publish"));
+  q("#mqtt-clear", () => {
+    const input = document.querySelector("#mqtt-frame-input");
+    const output = document.querySelector("#mqtt-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先连接 Broker 或生成/解析 MQTT 报文。";
+  });
+}
+
+// === IEC 60870-5-104（TCP 只读 Client/Master + 总召） ===
+
+function showIec104Result(result) {
+  const output = document.querySelector("#iec104-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "request", "response", "asdu"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    if (["receivedFrames", "acknowledgementFrames"].includes(key) && Array.isArray(value)) {
+      return value.map((frame) => Array.isArray(frame) ? abFrameText(frame) : frame);
+    }
+    return value;
+  }, 2);
+}
+
+function iec104SessionId() {
+  return "iec104-readonly";
+}
+
+function iec104Host() {
+  const value = guideValue("#iec104-host", "127.0.0.1").trim();
+  if (!value) throw new Error("IEC104 RTU/IED 地址不能为空");
+  return value;
+}
+
+function iec104Port() {
+  return abUnsigned(document.querySelector("#iec104-port")?.value || "2404", 65535, "IEC104 TCP 端口") || 2404;
+}
+
+function iec104CommonAddress() {
+  return abUnsigned(document.querySelector("#iec104-common-address")?.value || "1", 65535, "IEC104 公共地址");
+}
+
+function iec104OriginatorAddress() {
+  return abUnsigned(document.querySelector("#iec104-originator")?.value || "0", 255, "IEC104 发起方地址");
+}
+
+function iec104Group() {
+  return abUnsigned(document.querySelector("#iec104-group")?.value || "0", 16, "IEC104 总召组");
+}
+
+function iec104ReceiveSequence() {
+  return abUnsigned(document.querySelector("#iec104-receive-sequence")?.value || "0", 32767, "IEC104 N(R)");
+}
+
+function writeIec104Frame(result) {
+  const input = document.querySelector("#iec104-frame-input");
+  const frame = result?.frame || result?.request;
+  if (input && Array.isArray(frame)) input.value = result.frameHex || result.requestHex || abFrameText(frame);
+}
+
+async function iec104Build(command, payload) {
+  try {
+    const result = await callBackend(command, payload);
+    showIec104Result(result);
+    writeIec104Frame(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${command} 失败`);
+    setNotice("success", "IEC104 报文已生成", `${command} · 只读软件编解码`);
+  } catch (error) {
+    showIec104Result({ error: error.message || String(error) });
+    setNotice("error", "IEC104 编解码失败", error.message || String(error));
+  }
+}
+
+function initIec104Ui() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#iec104-open-connection", async () => {
+    try {
+      const result = await callBackend("open_iec104_connection", {
+        connectionId: iec104SessionId(),
+        host: iec104Host(),
+        port: iec104Port(),
+        commonAddress: iec104CommonAddress(),
+        originatorAddress: iec104OriginatorAddress(),
+      });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 STARTDT 失败");
+      setNotice("success", "IEC104 只读主站会话已建立", `${iec104Host()}:${iec104Port()} · CA ${iec104CommonAddress()} · STARTDT_CON`);
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 连接失败", error.message || String(error));
+    }
+  });
+  q("#iec104-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: iec104SessionId() });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 断开失败");
+      setNotice("success", "IEC104 会话已断开", "已 best-effort 发送 STOPDT_ACT；未开放任何控制写入");
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 断开失败", error.message || String(error));
+    }
+  });
+  q("#iec104-test-frame", async () => {
+    try {
+      const result = await callBackend("iec104_test_frame", { connectionId: iec104SessionId() });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 TESTFR 失败");
+      setNotice("success", "IEC104 TESTFR 已确认", "TESTFR_ACT / TESTFR_CON");
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 TESTFR 失败", error.message || String(error));
+    }
+  });
+  q("#iec104-interrogate", async () => {
+    try {
+      const result = await callBackend("iec104_general_interrogation", {
+        connectionId: iec104SessionId(),
+        group: iec104Group(),
+      });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 总召失败");
+      setNotice("success", "IEC104 只读总召完成", `QOI ${result?.qualifier ?? 20 + iec104Group()} · ${result?.pointCount ?? 0} 点 · ACT_TERM`);
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 总召失败", error.message || String(error));
+    }
+  });
+  q("#iec104-build-interrogation", () => iec104Build("iec104_build_general_interrogation", {
+    commonAddress: iec104CommonAddress(),
+    group: iec104Group(),
+    originatorAddress: iec104OriginatorAddress(),
+    sendSequence: 0,
+    receiveSequence: 0,
+  }));
+  q("#iec104-build-s-frame", () => iec104Build("iec104_build_s_frame", {
+    receiveSequence: iec104ReceiveSequence(),
+  }));
+  q("#iec104-build-u-frame", () => iec104Build("iec104_build_u_frame", {
+    function: guideValue("#iec104-u-function", "TESTFR_ACT"),
+  }));
+  q("#iec104-parse-apdu", async () => {
+    try {
+      const frame = parseHexInput(guideValue("#iec104-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴 IEC104 APDU HEX");
+      const result = await callBackend("iec104_parse_apdu", { frame });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 APDU 解析失败");
+      setNotice("success", "IEC104 APDU 已解析", `${result?.format || result?.apdu?.format || "APDU"} · 严格长度/控制域校验`);
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 APDU 解析失败", error.message || String(error));
+    }
+  });
+  q("#iec104-parse-asdu", async () => {
+    try {
+      let asdu = parseHexInput(guideValue("#iec104-frame-input", ""));
+      if (asdu[0] === 0x68 && asdu.length >= 6) asdu = asdu.slice(6);
+      if (!asdu.length) throw new Error("请先粘贴 IEC104 ASDU 或完整 I 帧 HEX");
+      const result = await callBackend("iec104_parse_asdu", { asdu });
+      showIec104Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "IEC104 ASDU 解析失败");
+      setNotice("success", "IEC104 ASDU 已解析", `${result?.asdu?.typeName || "ASDU"} · ${result?.pointCount ?? 0} 点`);
+    } catch (error) {
+      showIec104Result({ error: error.message || String(error) });
+      setNotice("error", "IEC104 ASDU 解析失败", error.message || String(error));
+    }
+  });
+  q("#iec104-clear", () => {
+    const input = document.querySelector("#iec104-frame-input");
+    const output = document.querySelector("#iec104-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先连接独立 Outstation/真实站端，或生成/解析 IEC104 报文。";
+  });
+}
+
+// === DNP3（TCP 只读 Master + Class 0/1/2/3） ===
+
+function showDnp3Result(result) {
+  const output = document.querySelector("#dnp3-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "pdu", "userData"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    if (["requestFrames", "responseFrames", "confirmationFrames"].includes(key) && Array.isArray(value)) {
+      return value.map((frame) => Array.isArray(frame) ? abFrameText(frame) : frame);
+    }
+    return value;
+  }, 2);
+}
+
+function dnp3SessionId() {
+  return "dnp3-readonly";
+}
+
+function dnp3Host() {
+  const value = guideValue("#dnp3-host", "127.0.0.1").trim();
+  if (!value) throw new Error("DNP3 RTU/IED 地址不能为空");
+  return value;
+}
+
+function dnp3Port() {
+  return abUnsigned(document.querySelector("#dnp3-port")?.value || "20000", 65535, "DNP3 TCP 端口") || 20000;
+}
+
+function dnp3MasterAddress() {
+  return abUnsigned(document.querySelector("#dnp3-master-address")?.value || "1", 65519, "DNP3 Master Link Address");
+}
+
+function dnp3OutstationAddress() {
+  return abUnsigned(document.querySelector("#dnp3-outstation-address")?.value || "1024", 65519, "DNP3 Outstation Link Address");
+}
+
+function dnp3Class() {
+  return abUnsigned(document.querySelector("#dnp3-class")?.value || "1", 3, "DNP3 Class");
+}
+
+function dnp3ClassPayload(selected = dnp3Class()) {
+  return {
+    class0: selected === 0,
+    class1: selected === 1,
+    class2: selected === 2,
+    class3: selected === 3,
+  };
+}
+
+function dnp3Group() {
+  return abUnsigned(document.querySelector("#dnp3-group")?.value || "30", 255, "DNP3 Group");
+}
+
+function dnp3Variation() {
+  return abUnsigned(document.querySelector("#dnp3-variation")?.value || "5", 255, "DNP3 Variation");
+}
+
+function dnp3Start() {
+  return abUnsigned(document.querySelector("#dnp3-start")?.value || "0", 65535, "DNP3 Start");
+}
+
+function dnp3Stop() {
+  return abUnsigned(document.querySelector("#dnp3-stop")?.value || "0", 65535, "DNP3 Stop");
+}
+
+function dnp3Sequence() {
+  return abUnsigned(document.querySelector("#dnp3-sequence")?.value || "0", 15, "DNP3 Application SEQ");
+}
+
+function writeDnp3Bytes(result) {
+  const input = document.querySelector("#dnp3-frame-input");
+  const bytes = result?.frame || result?.pdu;
+  if (input && Array.isArray(bytes)) input.value = result.frameHex || result.pduHex || abFrameText(bytes);
+}
+
+async function dnp3Build(command, payload) {
+  try {
+    const result = await callBackend(command, payload);
+    showDnp3Result(result);
+    writeDnp3Bytes(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${command} 失败`);
+    setNotice("success", "DNP3 只读报文已生成", `${command} · 不生成 Select/Operate/校时`);
+  } catch (error) {
+    showDnp3Result({ error: error.message || String(error) });
+    setNotice("error", "DNP3 编解码失败", error.message || String(error));
+  }
+}
+
+function initDnp3Ui() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#dnp3-open-connection", async () => {
+    try {
+      const result = await callBackend("open_dnp3_connection", {
+        connectionId: dnp3SessionId(),
+        host: dnp3Host(),
+        port: dnp3Port(),
+        masterAddress: dnp3MasterAddress(),
+        outstationAddress: dnp3OutstationAddress(),
+      });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 连接失败");
+      setNotice("success", "DNP3 只读 Master 已连接", `${dnp3Host()}:${dnp3Port()} · Link ${dnp3MasterAddress()} → ${dnp3OutstationAddress()}`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 连接失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: dnp3SessionId() });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 断开失败");
+      setNotice("success", "DNP3 会话已断开", "未发送 Select/Operate、校时、Restart 或 Freeze");
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 断开失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-integrity-poll", async () => {
+    try {
+      const result = await callBackend("dnp3_integrity_poll", { connectionId: dnp3SessionId() });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 完整性轮询失败");
+      setNotice("success", "DNP3 完整性轮询完成", `Class 0/1/2/3 · ${result?.pointCount ?? 0} 点 · IIN ${result?.iin?.labels?.join(", ") || "none"}`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 完整性轮询失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-class-scan", async () => {
+    try {
+      const selected = dnp3Class();
+      const result = await callBackend("dnp3_class_scan", {
+        connectionId: dnp3SessionId(),
+        ...dnp3ClassPayload(selected),
+      });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 Class 扫描失败");
+      setNotice("success", `DNP3 Class ${selected} 扫描完成`, `${result?.pointCount ?? 0} 点 · 自发响应 ${result?.unsolicitedResponseCount ?? 0}`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 Class 扫描失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-read-range", async () => {
+    try {
+      const result = await callBackend("dnp3_read", {
+        connectionId: dnp3SessionId(),
+        group: dnp3Group(),
+        variation: dnp3Variation(),
+        start: dnp3Start(),
+        stop: dnp3Stop(),
+      });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 对象读取失败");
+      setNotice("success", `DNP3 g${dnp3Group()}v${dnp3Variation()} 读取完成`, `${result?.pointCount ?? 0} 点 · 只读 READ`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 对象读取失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-build-integrity", () => dnp3Build("dnp3_build_class_scan", {
+    sequence: dnp3Sequence(), class0: true, class1: true, class2: true, class3: true,
+  }));
+  q("#dnp3-build-read", () => dnp3Build("dnp3_build_read_request", {
+    sequence: dnp3Sequence(), group: dnp3Group(), variation: dnp3Variation(), start: dnp3Start(), stop: dnp3Stop(),
+  }));
+  q("#dnp3-build-confirm", () => dnp3Build("dnp3_build_confirm", {
+    sequence: dnp3Sequence(), unsolicited: false,
+  }));
+  q("#dnp3-parse-link", async () => {
+    try {
+      const frame = parseHexInput(guideValue("#dnp3-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴完整 DNP3 链路帧 HEX");
+      const result = await callBackend("dnp3_parse_link_frame", { frame });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 链路帧解析失败");
+      setNotice("success", "DNP3 链路帧已解析", `Link ${result?.link?.source} → ${result?.link?.destination} · CRC 全部通过`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 链路帧解析失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-parse-application", async () => {
+    try {
+      const pdu = parseHexInput(guideValue("#dnp3-frame-input", ""));
+      if (!pdu.length) throw new Error("请先粘贴 DNP3 应用响应 PDU HEX");
+      const result = await callBackend("dnp3_parse_application_response", { pdu });
+      showDnp3Result(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "DNP3 应用响应解析失败");
+      setNotice("success", "DNP3 应用响应已解析", `${result?.pointCount ?? 0} 点 · IIN ${result?.response?.iin?.labels?.join(", ") || "none"}`);
+    } catch (error) {
+      showDnp3Result({ error: error.message || String(error) });
+      setNotice("error", "DNP3 应用响应解析失败", error.message || String(error));
+    }
+  });
+  q("#dnp3-clear", () => {
+    const input = document.querySelector("#dnp3-frame-input");
+    const output = document.querySelector("#dnp3-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先连接独立 Outstation/真实站端，或生成/解析 DNP3 报文。";
+  });
+}
+
+// === DL/T 645-1997/2007（共享 COM 只读电表） ===
+
+function showDlt645Result(result) {
+  const output = document.querySelector("#dlt645-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "tx", "rx", "payload", "data", "wireBytes", "addressBytes"].includes(key) && Array.isArray(value)) {
+      return abFrameText(value);
+    }
+    return value;
+  }, 2);
+}
+
+function dlt645Version() {
+  const version = guideValue("#dlt645-version", "2007");
+  if (!["1997", "2007"].includes(version)) throw new Error("DL/T 645 版本只能是 1997 或 2007");
+  return version;
+}
+
+function dlt645Address() {
+  const address = guideValue("#dlt645-address", "");
+  if (!/^\d{12}$/.test(address)) throw new Error("DL/T 645 表地址必须是恰好 12 位十进制数字");
+  if (address === "999999999999") throw new Error("只读请求不能使用广播地址 999999999999");
+  return address;
+}
+
+function dlt645DataId() {
+  const version = dlt645Version();
+  const dataId = guideValue("#dlt645-data-id", "").replace(/\s/g, "").toUpperCase();
+  const digits = version === "1997" ? 4 : 8;
+  if (!new RegExp(`^[0-9A-F]{${digits}}$`).test(dataId)) {
+    throw new Error(`DL/T 645-${version} DI 必须是 ${digits} 位十六进制`);
+  }
+  return dataId;
+}
+
+function dlt645Payload() {
+  return {
+    version: dlt645Version(),
+    address: dlt645Address(),
+    dataId: dlt645DataId(),
+    preambleCount: abUnsigned(document.querySelector("#dlt645-preamble")?.value || "4", 4, "FE 前导数量"),
+  };
+}
+
+async function dlt645BuildRead() {
+  try {
+    const payload = dlt645Payload();
+    const result = await callBackend("dlt645_build_read_request", payload);
+    showDlt645Result(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "DL/T 645 读请求生成失败");
+    const input = document.querySelector("#dlt645-frame-input");
+    if (input && Array.isArray(result?.frame)) input.value = result.frameHex || abFrameText(result.frame);
+    setNotice("success", `DL/T 645-${payload.version} 读请求已生成`, `${payload.address} · DI ${payload.dataId} · 只读，不发送`);
+  } catch (error) {
+    showDlt645Result({ error: error.message || String(error) });
+    setNotice("error", "DL/T 645 组帧失败", error.message || String(error));
+  }
+}
+
+async function dlt645LiveRead() {
+  try {
+    const payload = {
+      ...dlt645Payload(),
+      timeoutMs: abUnsigned(document.querySelector("#dlt645-timeout")?.value || "1500", 600000, "DL/T 645 超时"),
+      retries: abUnsigned(document.querySelector("#dlt645-retries")?.value || "1", 3, "DL/T 645 重试次数"),
+      model: guideValue("#dlt645-model", ""),
+      serialNumber: guideValue("#dlt645-device-serial", ""),
+    };
+    const result = await callBackend("dlt645_serial_read", payload);
+    showDlt645Result(result);
+    if (!result?.ok) throw new Error(result?.error?.message || "DL/T 645 共享 COM 读取失败");
+    const input = document.querySelector("#dlt645-frame-input");
+    if (input && Array.isArray(result.rx)) input.value = abFrameText(result.rx);
+    const known = result.response?.knownValue;
+    const exception = result.meterException;
+    if (exception) {
+      setNotice("error", "电表返回 DL/T 645 异常", `异常字 0x${Number(exception.code).toString(16).padStart(2, "0").toUpperCase()} · ${exception.flags?.join(", ") || "未标注"}`);
+    } else {
+      const value = known?.value?.decimal || known?.value?.isoDate || known?.value?.isoTime || known?.value?.raw || "原始数据已返回";
+      setNotice("success", `DL/T 645-${payload.version} 只读完成`, `${payload.address} · DI ${payload.dataId} · ${value}${known?.unit ? ` ${known.unit}` : ""}`);
+    }
+  } catch (error) {
+    showDlt645Result({ error: error.message || String(error) });
+    setNotice("error", "DL/T 645 共享 COM 读取失败", error.message || String(error));
+  }
+}
+
+async function dlt645Parse(command, payload, successTitle) {
+  try {
+    const result = await callBackend(command, payload);
+    showDlt645Result(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    setNotice("success", successTitle, "BCD、字节序、+33H 和 CS 校验已由 Rust Core 执行");
+  } catch (error) {
+    showDlt645Result({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+function applyDlt645VersionDefaults(force = false) {
+  const version = dlt645Version();
+  const input = document.querySelector("#dlt645-data-id");
+  if (!input) return;
+  input.maxLength = version === "1997" ? 4 : 8;
+  const validForVersion = new RegExp(version === "1997" ? "^[0-9A-Fa-f]{4}$" : "^[0-9A-Fa-f]{8}$").test(input.value.trim());
+  if (force || !validForVersion) input.value = version === "1997" ? "9010" : "00010000";
+}
+
+function initDlt645Ui() {
+  const q = (selector, fn) => document.querySelector(selector)?.addEventListener("click", fn);
+  document.querySelector("#dlt645-version")?.addEventListener("change", () => applyDlt645VersionDefaults(true));
+  for (const button of document.querySelectorAll(".dlt645-di-preset")) {
+    button.addEventListener("click", () => {
+      const version = document.querySelector("#dlt645-version");
+      const input = document.querySelector("#dlt645-data-id");
+      if (version) version.value = button.dataset.version || "2007";
+      if (input) input.value = button.dataset.dataId || "00010000";
+      applyDlt645VersionDefaults(false);
+    });
+  }
+  q("#dlt645-live-read", () => void dlt645LiveRead());
+  q("#dlt645-build-read", () => void dlt645BuildRead());
+  q("#dlt645-parse-address", () => {
+    try { void dlt645Parse("dlt645_parse_address", { address: dlt645Address() }, "DL/T 645 表地址有效"); }
+    catch (error) { showDlt645Result({ error: error.message || String(error) }); setNotice("error", "表地址检查失败", error.message || String(error)); }
+  });
+  q("#dlt645-parse-data-id", () => {
+    try { void dlt645Parse("dlt645_parse_data_id", { version: dlt645Version(), dataId: dlt645DataId() }, "DL/T 645 数据标识有效"); }
+    catch (error) { showDlt645Result({ error: error.message || String(error) }); setNotice("error", "DI 检查失败", error.message || String(error)); }
+  });
+  q("#dlt645-parse-frame", () => {
+    try {
+      const frame = parseHexInput(guideValue("#dlt645-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴完整 DL/T 645 帧 HEX");
+      void dlt645Parse("dlt645_parse_frame", { frame }, "DL/T 645 帧校验通过");
+    } catch (error) { showDlt645Result({ error: error.message || String(error) }); setNotice("error", "帧解析失败", error.message || String(error)); }
+  });
+  q("#dlt645-parse-read-response", () => {
+    try {
+      const frame = parseHexInput(guideValue("#dlt645-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴完整 DL/T 645 读响应 HEX");
+      const payload = dlt645Payload();
+      void dlt645Parse("dlt645_parse_read_response", {
+        version: payload.version,
+        address: payload.address,
+        dataId: payload.dataId,
+        frame,
+      }, "DL/T 645 读响应已解析");
+    } catch (error) { showDlt645Result({ error: error.message || String(error) }); setNotice("error", "读响应解析失败", error.message || String(error)); }
+  });
+  q("#dlt645-clear", () => {
+    const input = document.querySelector("#dlt645-frame-input");
+    const output = document.querySelector("#dlt645-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先选择版本、填写表地址与 DI，再生成只读请求或复用已打开的 COM 读取。";
+  });
+  applyDlt645VersionDefaults(false);
+}
+
+// === CJ/T 188-2004（水/气/热表离线只读编解码）===
+
+function showCjt188Result(result) {
+  const output = document.querySelector("#cjt188-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "payload", "wireBytes", "addressBytes"].includes(key) && Array.isArray(value)) {
+      return abFrameText(value);
+    }
+    return value;
+  }, 2);
+}
+
+function cjt188MeterType() {
+  const meterType = guideValue("#cjt188-meter-type", "cold-water");
+  if (!["cold-water", "hot-water", "heat", "gas"].includes(meterType)) {
+    throw new Error("CJ/T 188 表类型只能是冷水、热水、热量或燃气");
+  }
+  return meterType;
+}
+
+function cjt188Address() {
+  const address = guideValue("#cjt188-address", "").replace(/\s/g, "").toUpperCase();
+  if (!/^[0-9A-F]{14}$/.test(address)) {
+    throw new Error("CJ/T 188 表地址必须是恰好 14 位十六进制/BCD 字符");
+  }
+  if (address === "AAAAAAAAAAAAAA") {
+    throw new Error("本轮读数据不允许使用 AA×7 广播地址");
+  }
+  return address;
+}
+
+function cjt188DataId() {
+  const dataId = guideValue("#cjt188-data-id", "").replace(/\s/g, "").toUpperCase();
+  if (!/^[0-9A-F]{4}$/.test(dataId)) {
+    throw new Error("CJ/T 188-2004 DI 必须是 4 位十六进制（2 字节）");
+  }
+  return dataId;
+}
+
+function cjt188Sequence() {
+  return abUnsigned(document.querySelector("#cjt188-sequence")?.value || "1", 255, "CJ/T 188 SER 序列号");
+}
+
+function cjt188Payload() {
+  return {
+    meterType: cjt188MeterType(),
+    address: cjt188Address(),
+    dataId: cjt188DataId(),
+    sequence: cjt188Sequence(),
+    preambleCount: abUnsigned(document.querySelector("#cjt188-preamble")?.value || "0", 4, "FE 前导数量"),
+  };
+}
+
+async function cjt188Run(command, payload, successTitle, successDetail) {
+  try {
+    const result = await callBackend(command, payload);
+    showCjt188Result(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    setNotice("success", successTitle, successDetail);
+    return result;
+  } catch (error) {
+    showCjt188Result({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+    return null;
+  }
+}
+
+async function cjt188BuildRead() {
+  const payload = cjt188Payload();
+  const result = await cjt188Run(
+    "cjt188_build_read_request",
+    payload,
+    "CJ/T 188 读请求已生成",
+    `${payload.address} · DI ${payload.dataId} · SER ${payload.sequence} · 只生成帧，不发送`,
+  );
+  if (result?.ok !== false && Array.isArray(result?.frame)) {
+    const input = document.querySelector("#cjt188-frame-input");
+    if (input) input.value = result.frameHex || abFrameText(result.frame);
+  }
+}
+
+function initCjt188Ui() {
+  const q = (selector, fn) => document.querySelector(selector)?.addEventListener("click", fn);
+  q("#cjt188-build-read", () => void cjt188BuildRead());
+  q("#cjt188-parse-meter-type", () => {
+    try {
+      void cjt188Run("cjt188_parse_meter_type", { meterType: cjt188MeterType() }, "CJ/T 188 表类型有效", "表类型代码、单位和确认范围已由 Rust Core 校验");
+    } catch (error) { showCjt188Result({ error: error.message || String(error) }); setNotice("error", "表类型检查失败", error.message || String(error)); }
+  });
+  q("#cjt188-parse-address", () => {
+    try {
+      void cjt188Run("cjt188_parse_address", { address: cjt188Address() }, "CJ/T 188 表地址有效", "14 位 BCD 与低位对先传字节序已由 Rust Core 校验");
+    } catch (error) { showCjt188Result({ error: error.message || String(error) }); setNotice("error", "表地址检查失败", error.message || String(error)); }
+  });
+  q("#cjt188-parse-data-id", () => {
+    try {
+      void cjt188Run("cjt188_parse_data_id", { dataId: cjt188DataId() }, "CJ/T 188 数据标识有效", "2 字节 DI 与高位在前线序已由 Rust Core 校验");
+    } catch (error) { showCjt188Result({ error: error.message || String(error) }); setNotice("error", "DI 检查失败", error.message || String(error)); }
+  });
+  q("#cjt188-parse-frame", () => {
+    try {
+      const frame = parseHexInput(guideValue("#cjt188-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴完整 CJ/T 188 帧 HEX");
+      void cjt188Run("cjt188_parse_frame", { frame }, "CJ/T 188 帧校验通过", "单 68H、类型、地址、长度、算术和 CS 和 16H 已验证");
+    } catch (error) { showCjt188Result({ error: error.message || String(error) }); setNotice("error", "帧解析失败", error.message || String(error)); }
+  });
+  q("#cjt188-parse-read-response", () => {
+    try {
+      const frame = parseHexInput(guideValue("#cjt188-frame-input", ""));
+      if (!frame.length) throw new Error("请先粘贴完整 CJ/T 188 读响应 HEX");
+      void cjt188Run("cjt188_parse_read_response", { ...cjt188Payload(), frame }, "CJ/T 188 读响应已解析", "表类型/地址/DI/SER 回显与 CS 已验证；未知 DI 保持原始数据");
+    } catch (error) { showCjt188Result({ error: error.message || String(error) }); setNotice("error", "读响应解析失败", error.message || String(error)); }
+  });
+  q("#cjt188-clear", () => {
+    const input = document.querySelector("#cjt188-frame-input");
+    const output = document.querySelector("#cjt188-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先选择表类型并生成 901F 读请求向量，再解析响应帧；本页不提供 COM 发送入口。";
+  });
+}
+
+// === BACnet/IP（Who-Is / I-Am 离线只读编解码）===
+
+function showBacnetResult(result) {
+  const output = document.querySelector("#bacnet-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (key === "frame" && Array.isArray(value)) return abFrameText(value);
+    return value;
+  }, 2);
+}
+
+function bacnetInstanceValue(selector, field) {
+  return abUnsigned(document.querySelector(selector)?.value || "0", 4194303, field);
+}
+
+function bacnetWhoisPayload() {
+  const global = document.querySelector("#bacnet-whois-global")?.checked ?? true;
+  const broadcast = document.querySelector("#bacnet-whois-broadcast")?.checked ?? true;
+  if (global) return { broadcast };
+  const low = bacnetInstanceValue("#bacnet-whois-low", "Who-Is 低范围");
+  const high = bacnetInstanceValue("#bacnet-whois-high", "Who-Is 高范围");
+  if (low > high) throw new Error("Who-Is 低范围不能大于高范围");
+  return { lowLimit: low, highLimit: high, broadcast };
+}
+
+function bacnetIamPayload() {
+  const maxApdu = abUnsigned(
+    document.querySelector("#bacnet-iam-max-apdu")?.value || "480",
+    4294967295,
+    "I-Am Max-APDU",
+  );
+  if (!maxApdu) throw new Error("I-Am Max-APDU 不能为 0");
+  return {
+    deviceInstance: bacnetInstanceValue("#bacnet-iam-instance", "I-Am Device Instance"),
+    maxApdu,
+    segmentation: guideValue("#bacnet-iam-segmentation", "none"),
+    vendorId: abUnsigned(document.querySelector("#bacnet-iam-vendor")?.value || "0", 65535, "I-Am Vendor ID"),
+    broadcast: document.querySelector("#bacnet-iam-broadcast")?.checked ?? false,
+  };
+}
+
+function bacnetReadPropertyPayload() {
+  const useIndex = document.querySelector("#bacnet-rp-use-index")?.checked ?? false;
+  return {
+    objectType: abUnsigned(document.querySelector("#bacnet-rp-object-type")?.value || "0", 1023, "BACnet Object Type"),
+    objectInstance: bacnetInstanceValue("#bacnet-rp-object-instance", "BACnet Object Instance"),
+    propertyIdentifier: bacnetInstanceValue("#bacnet-rp-property", "BACnet Property ID"),
+    propertyArrayIndex: useIndex ? bacnetInstanceValue("#bacnet-rp-index", "BACnet Array Index") : undefined,
+    invokeId: abUnsigned(document.querySelector("#bacnet-rp-invoke")?.value || "1", 255, "BACnet Invoke ID"),
+  };
+}
+
+function bacnetConnectionId() {
+  const id = guideValue("#bacnet-connection-id", "").trim();
+  if (!id) throw new Error("BACnet connectionId 不能为空");
+  return id;
+}
+
+function bacnetHost() {
+  const host = guideValue("#bacnet-host", "").trim();
+  if (!host) throw new Error("BACnet 对端 IP 不能为空");
+  return host;
+}
+
+function bacnetPort() {
+  return abUnsigned(document.querySelector("#bacnet-port")?.value || "47808", 65535, "BACnet UDP 端口") || 47808;
+}
+
+function bacnetTimeout() {
+  return abUnsigned(document.querySelector("#bacnet-timeout")?.value || "1500", 5000, "BACnet 超时") || 1500;
+}
+
+async function bacnetBuild(command, payload, successTitle, successDetail) {
+  try {
+    const result = await callBackend(command, payload);
+    showBacnetResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#bacnet-frame-input");
+      if (input) input.value = result.frameHex || abFrameText(result.frame);
+    }
+    setNotice("success", successTitle, successDetail);
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+async function bacnetParseFrame() {
+  try {
+    const frame = parseHexInput(guideValue("#bacnet-frame-input", ""));
+    if (!frame.length) throw new Error("请先粘贴完整 BACnet/IP UDP 载荷 HEX");
+    const result = await callBackend("bacnet_ip_parse_frame", { frame });
+    showBacnetResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "BACnet/IP 帧解析失败");
+    setNotice("success", "BACnet/IP 帧校验通过", "BVLC、本地 NPDU、Unconfirmed APDU 和 Who-Is/I-Am 标签已验证；未发送 UDP");
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "BACnet/IP 帧解析失败", error.message || String(error));
+  }
+}
+
+async function bacnetReadProperty(command, payload, successTitle, successDetail) {
+  try {
+    const result = await callBackend(command, payload);
+    showBacnetResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#bacnet-frame-input");
+      if (input) input.value = result.frameHex || abFrameText(result.frame);
+    }
+    setNotice("success", successTitle, successDetail);
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+async function bacnetConnect() {
+  try {
+    const payload = {
+      connectionId: bacnetConnectionId(),
+      host: bacnetHost(),
+      port: bacnetPort(),
+    };
+    const result = await callBackend("open_bacnet_ip_connection", payload);
+    showBacnetResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "BACnet UDP 连接失败");
+    setNotice("success", "BACnet UDP 对端已连接", `${payload.host}:${payload.port} · 只读，不使用广播/BBMD`);
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "BACnet UDP 连接失败", error.message || String(error));
+  }
+}
+
+async function bacnetDisconnect() {
+  try {
+    const payload = { connectionId: bacnetConnectionId() };
+    const result = await callBackend("close_connection", payload);
+    showBacnetResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "BACnet UDP 断开失败");
+    setNotice("success", "BACnet UDP 对端已断开", "本地只读会话已释放");
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "BACnet UDP 断开失败", error.message || String(error));
+  }
+}
+
+async function bacnetWhoisLive() {
+  try {
+    const whois = bacnetWhoisPayload();
+    const payload = {
+      connectionId: bacnetConnectionId(),
+      timeoutMs: bacnetTimeout(),
+    };
+    if (!whois.global) {
+      payload.lowLimit = whois.lowLimit;
+      payload.highLimit = whois.highLimit;
+    }
+    await bacnetReadProperty(
+      "bacnet_ip_whois",
+      payload,
+      "BACnet Who-Is 已完成",
+      "0AH 定向单播，不使用广播",
+    );
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "BACnet Who-Is 失败", error.message || String(error));
+  }
+}
+
+async function bacnetReadPropertyLive() {
+  try {
+    const read = bacnetReadPropertyPayload();
+    const payload = {
+      connectionId: bacnetConnectionId(),
+      objectType: read.objectType,
+      objectInstance: read.objectInstance,
+      propertyIdentifier: read.propertyIdentifier,
+      timeoutMs: bacnetTimeout(),
+    };
+    if (read.propertyArrayIndex != null) payload.propertyArrayIndex = read.propertyArrayIndex;
+    await bacnetReadProperty(
+      "bacnet_ip_read_property_live",
+      payload,
+      "BACnet ReadProperty 已完成",
+      `Invoke ${read.invokeId} · ACK 已核对对象/属性/索引回显`,
+    );
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "BACnet ReadProperty 失败", error.message || String(error));
+  }
+}
+
+async function bacnetParseReadPropertyRequest() {
+  try {
+    const frame = parseHexInput(guideValue("#bacnet-frame-input", ""));
+    if (!frame.length) throw new Error("请先粘贴完整 BACnet ReadProperty 请求 HEX");
+    await bacnetReadProperty(
+      "bacnet_ip_parse_read_property_request",
+      { frame },
+      "ReadProperty 请求已解析",
+      "BVLC 0AH、DER、Confirmed 0CH、对象/属性/数组索引标签已验证；未发送 UDP",
+    );
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "ReadProperty 请求解析失败", error.message || String(error));
+  }
+}
+
+async function bacnetParseReadPropertyAck() {
+  try {
+    const frame = parseHexInput(guideValue("#bacnet-frame-input", ""));
+    if (!frame.length) throw new Error("请先粘贴完整 BACnet ReadProperty ComplexACK HEX");
+    await bacnetReadProperty(
+      "bacnet_ip_parse_read_property_ack",
+      { frame, expectedRequest: bacnetReadPropertyPayload() },
+      "ReadProperty ACK 已解析",
+      "Invoke ID、对象、属性、数组索引回显和 [3] 应用值已验证；未知标签保留原始字节",
+    );
+  } catch (error) {
+    showBacnetResult({ error: error.message || String(error) });
+    setNotice("error", "ReadProperty ACK 解析失败", error.message || String(error));
+  }
+}
+
+function updateBacnetWhoisRangeState() {
+  const global = document.querySelector("#bacnet-whois-global")?.checked ?? true;
+  for (const selector of ["#bacnet-whois-low", "#bacnet-whois-high"]) {
+    const input = document.querySelector(selector);
+    if (input) input.disabled = global;
+  }
+}
+
+function initBacnetUi() {
+  const q = (selector, fn) => document.querySelector(selector)?.addEventListener("click", fn);
+  document.querySelector("#bacnet-whois-global")?.addEventListener("change", updateBacnetWhoisRangeState);
+  document.querySelector("#bacnet-rp-use-index")?.addEventListener("change", () => {
+    const useIndex = document.querySelector("#bacnet-rp-use-index")?.checked ?? false;
+    const input = document.querySelector("#bacnet-rp-index");
+    if (input) input.disabled = !useIndex;
+  });
+  q("#bacnet-build-whois", () => {
+    try {
+      const payload = bacnetWhoisPayload();
+      void bacnetBuild(
+        "bacnet_ip_build_whois",
+        payload,
+        "BACnet Who-Is 已生成",
+        payload.lowLimit == null ? "全局范围 · 只生成帧，不发送 UDP" : `范围 ${payload.lowLimit}..${payload.highLimit} · 只生成帧，不发送 UDP`,
+      );
+    } catch (error) { showBacnetResult({ error: error.message || String(error) }); setNotice("error", "Who-Is 构帧失败", error.message || String(error)); }
+  });
+  q("#bacnet-build-iam", () => {
+    try {
+      const payload = bacnetIamPayload();
+      void bacnetBuild(
+        "bacnet_ip_build_iam",
+        payload,
+        "BACnet I-Am 已生成",
+        `Device ${payload.deviceInstance} · Max-APDU ${payload.maxApdu} · ${payload.segmentation} · 只生成帧`,
+      );
+    } catch (error) { showBacnetResult({ error: error.message || String(error) }); setNotice("error", "I-Am 构帧失败", error.message || String(error)); }
+  });
+  q("#bacnet-parse-frame", () => void bacnetParseFrame());
+  q("#bacnet-rp-build", () => {
+    try {
+      const payload = bacnetReadPropertyPayload();
+      void bacnetReadProperty(
+        "bacnet_ip_build_read_property_request",
+        payload,
+        "BACnet ReadProperty 请求已生成",
+        `Object ${payload.objectType}:${payload.objectInstance} · Property ${payload.propertyIdentifier} · Invoke ${payload.invokeId} · 只生成帧，不发送 UDP`,
+      );
+    } catch (error) { showBacnetResult({ error: error.message || String(error) }); setNotice("error", "ReadProperty 构帧失败", error.message || String(error)); }
+  });
+  q("#bacnet-rp-parse-request", () => void bacnetParseReadPropertyRequest());
+  q("#bacnet-rp-parse-ack", () => void bacnetParseReadPropertyAck());
+  q("#bacnet-connect", () => void bacnetConnect());
+  q("#bacnet-disconnect", () => void bacnetDisconnect());
+  q("#bacnet-whois-live", () => void bacnetWhoisLive());
+  q("#bacnet-rp-live", () => void bacnetReadPropertyLive());
+  q("#bacnet-clear", () => {
+    const input = document.querySelector("#bacnet-frame-input");
+    const output = document.querySelector("#bacnet-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成 Who-Is / I-Am，或粘贴 BACnet/IP UDP 载荷解析；本页不提供 UDP 发送入口。";
+  });
+  updateBacnetWhoisRangeState();
+}
+
+// === KNXnet/IP Tunneling v1（离线只读编解码）===
+
+function showKnxResult(result) {
+  const output = document.querySelector("#knx-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "payload", "wireBytes", "suggestedAck"].includes(key) && Array.isArray(value)) {
+      return abFrameText(value);
+    }
+    return value;
+  }, 2);
+}
+
+function knxGroupAddress() {
+  const address = guideValue("#knx-group", "").trim();
+  // 完整范围与格式校验保留在 Rust Core；这里只阻止空请求。
+  if (!address) throw new Error("KNX 三层组地址不能为空");
+  return address;
+}
+
+function knxFrameInput() {
+  const frame = parseHexInput(guideValue("#knx-frame-input", ""));
+  if (!frame.length) throw new Error("请先粘贴完整 KNXnet/IP UDP 载荷 HEX");
+  return frame;
+}
+
+function knxConnectionId() {
+  const id = guideValue("#knx-connection-id", "").trim();
+  if (!id) throw new Error("KNX connectionId 不能为空");
+  return id;
+}
+
+function knxHost() {
+  const host = guideValue("#knx-host", "").trim();
+  if (!host) throw new Error("KNX 网关 IP 不能为空");
+  return host;
+}
+
+function knxPort() {
+  return abUnsigned(document.querySelector("#knx-port")?.value || "3671", 65535, "KNX UDP 端口") || 3671;
+}
+
+function knxTimeout() {
+  return abUnsigned(document.querySelector("#knx-timeout")?.value || "1500", 5000, "KNX 超时") || 1500;
+}
+
+async function knxLive(command, payload, successTitle, successDetail) {
+  try {
+    const result = await callBackend(command, payload);
+    showKnxResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    setNotice("success", successTitle, successDetail);
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+async function knxConnectLive() {
+  try {
+    await knxLive(
+      "open_knx_connection",
+      {
+        connectionId: knxConnectionId(),
+        host: knxHost(),
+        port: knxPort(),
+        timeoutMs: knxTimeout(),
+      },
+      "KNX UDP 网关已连接",
+      "Connect Response 已核对 Channel、数据端点和个体地址；只读隧道",
+    );
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", "KNX 连接失败", error.message || String(error));
+  }
+}
+
+async function knxGroupReadLive() {
+  try {
+    await knxLive(
+      "knx_group_read",
+      {
+        connectionId: knxConnectionId(),
+        address: knxGroupAddress(),
+        timeoutMs: knxTimeout(),
+      },
+      "KNX GroupValueRead 已完成",
+      "已核对网关 ACK、响应 Channel/Sequence/组地址并回送 ACK",
+    );
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", "KNX GroupValueRead 失败", error.message || String(error));
+  }
+}
+
+async function knxDisconnectLive() {
+  try {
+    await knxLive(
+      "knx_disconnect",
+      {
+        connectionId: knxConnectionId(),
+        timeoutMs: knxTimeout(),
+      },
+      "KNX 隧道已断开",
+      "Disconnect Response 已核对 Channel 和 status",
+    );
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", "KNX 断开失败", error.message || String(error));
+  }
+}
+
+async function knxConnectionState() {
+  try {
+    await knxLive(
+      "knx_connection_state",
+      {
+        connectionId: knxConnectionId(),
+        timeoutMs: knxTimeout(),
+      },
+      "KNX Connection State 正常",
+      "网关返回 status=00；连续超时或非零状态会释放本地会话，可重新连接",
+    );
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", "KNX Connection State 失败", error.message || String(error));
+  }
+}
+
+function knxKeepaliveInterval() {
+  return abUnsigned(
+    document.querySelector("#knx-keepalive-interval")?.value || "60000",
+    600000,
+    "KNX 保活间隔",
+  ) || 60000;
+}
+
+async function knxKeepalive(command, successTitle, successDetail) {
+  try {
+    const result = await callBackend(command, {
+      connectionId: knxConnectionId(),
+      intervalMs: knxKeepaliveInterval(),
+    });
+    showKnxResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    setNotice("success", successTitle, successDetail);
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+async function knxRun(command, payload, successTitle, successDetail, putFrame = true) {
+  try {
+    const result = await callBackend(command, payload);
+    showKnxResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || `${successTitle}失败`);
+    if (putFrame) {
+      const frame = result?.frame || result?.suggestedAck;
+      if (Array.isArray(frame)) {
+        const input = document.querySelector("#knx-frame-input");
+        if (input) input.value = result.frameHex || result.suggestedAckHex || abFrameText(frame);
+      }
+    }
+    setNotice("success", successTitle, successDetail);
+  } catch (error) {
+    showKnxResult({ error: error.message || String(error) });
+    setNotice("error", `${successTitle}失败`, error.message || String(error));
+  }
+}
+
+function initKnxUi() {
+  const q = (selector, fn) => document.querySelector(selector)?.addEventListener("click", fn);
+  q("#knx-build-connect", () => {
+    void knxRun(
+      "knx_build_connect_request",
+      {
+        localIp: guideValue("#knx-local-ip", "127.0.0.1"),
+        localPort: abUnsigned(document.querySelector("#knx-local-port")?.value || "50000", 65535, "KNX 本机 UDP 端口"),
+      },
+      "KNX Connect Request 已生成",
+      "06 10 公共头、两段 HPAI 和 Tunneling CRI 已由 Rust Core 校验；不发送 UDP",
+    );
+  });
+  q("#knx-parse-connect-response", () => {
+    try {
+      void knxRun(
+        "knx_parse_connect_response",
+        { frame: knxFrameInput() },
+        "KNX Connect Response 已解析",
+        "通道、状态、数据端点和个体地址已验证；不代表隧道已连接",
+        false,
+      );
+    } catch (error) { showKnxResult({ error: error.message || String(error) }); setNotice("error", "Connect Response 解析失败", error.message || String(error)); }
+  });
+  q("#knx-build-read", () => {
+    try {
+      const address = knxGroupAddress();
+      void knxRun(
+        "knx_build_group_read_request",
+        {
+          channelId: abUnsigned(document.querySelector("#knx-channel")?.value || "1", 255, "KNX Channel"),
+          sequence: abUnsigned(document.querySelector("#knx-sequence")?.value || "0", 255, "KNX Sequence"),
+          address,
+        },
+        "KNX GroupValueRead 已生成",
+        "L_Data.req、三层组地址、APCI 和 APDU 长度已验证；只生成帧，不发送 UDP",
+      );
+    } catch (error) { showKnxResult({ error: error.message || String(error) }); setNotice("error", "GroupValueRead 构帧失败", error.message || String(error)); }
+  });
+  q("#knx-parse-request", () => {
+    try {
+      void knxRun(
+        "knx_parse_tunneling_request",
+        { frame: knxFrameInput() },
+        "KNX Tunneling Request 已解析",
+        "公共头、连接头、cEMI、组地址和 APCI 已验证；未发送 UDP",
+        false,
+      );
+    } catch (error) { showKnxResult({ error: error.message || String(error) }); setNotice("error", "Tunneling Request 解析失败", error.message || String(error)); }
+  });
+  q("#knx-parse-response", () => {
+    try {
+      void knxRun(
+        "knx_parse_group_value_response",
+        { frame: knxFrameInput() },
+        "KNX GroupValueResponse 已解析",
+        "L_Data.ind、APCI Response、payload 和建议 ACK 已验证；未发送 UDP",
+        false,
+      );
+    } catch (error) { showKnxResult({ error: error.message || String(error) }); setNotice("error", "GroupValueResponse 解析失败", error.message || String(error)); }
+  });
+  q("#knx-parse-ack", () => {
+    try {
+      void knxRun(
+        "knx_parse_tunneling_ack",
+        { frame: knxFrameInput() },
+        "KNX Tunneling ACK 已解析",
+        "通道、序号和状态已验证；未发送 UDP",
+        false,
+      );
+    } catch (error) { showKnxResult({ error: error.message || String(error) }); setNotice("error", "Tunneling ACK 解析失败", error.message || String(error)); }
+  });
+  q("#knx-build-ack", () => {
+    void knxRun(
+      "knx_build_tunneling_ack",
+      {
+        channelId: abUnsigned(document.querySelector("#knx-channel")?.value || "1", 255, "KNX Channel"),
+        sequence: abUnsigned(document.querySelector("#knx-sequence")?.value || "0", 255, "KNX Sequence"),
+        status: 0,
+      },
+      "KNX Tunneling ACK 已生成",
+      "按当前 Channel/Sequence 生成 status=00 ACK；只生成帧，不发送 UDP",
+    );
+  });
+  q("#knx-connect", () => void knxConnectLive());
+  q("#knx-state", () => void knxConnectionState());
+  q("#knx-start-keepalive", () => {
+    void knxKeepalive(
+      "knx_start_keepalive",
+      "KNX 周期保活已启动",
+      "后台按间隔发送 Connection State；失败后释放本地会话，需显式重连",
+    );
+  });
+  q("#knx-stop-keepalive", () => {
+    void knxKeepalive(
+      "knx_stop_keepalive",
+      "KNX 周期保活已停止",
+      "只停止后台保活，不主动断开当前隧道",
+    );
+  });
+  q("#knx-keepalive-status", () => {
+    void knxKeepalive(
+      "knx_keepalive_status",
+      "KNX 保活状态已查询",
+      "会话不存在时显示未启用；恢复连接必须显式重新 Connect",
+    );
+  });
+  q("#knx-live-read", () => void knxGroupReadLive());
+  q("#knx-disconnect-live", () => void knxDisconnectLive());
+  q("#knx-clear", () => {
+    const input = document.querySelector("#knx-frame-input");
+    const output = document.querySelector("#knx-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成 Connect/GroupValueRead，或粘贴 KNXnet/IP UDP 载荷解析；本页不提供 UDP 发送入口。";
+  });
+}
+
+// === Keyence KV Host Link ASCII（TCP 只读会话 + 编解码）===
+
+function showKeyenceResult(result) {
+  const output = document.querySelector("#keyence-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, null, 2);
+}
+
+function keyenceAddress() {
+  const value = document.querySelector("#keyence-address")?.value?.trim();
+  if (!value) throw new Error("Keyence 地址不能为空");
+  return value;
+}
+
+function keyenceCount() {
+  return abUnsigned(document.querySelector("#keyence-count")?.value || "1", 256, "数量");
+}
+
+function keyenceBuild(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showKeyenceResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#keyence-response-input");
+      if (input) input.value = result.text || new TextDecoder().decode(new Uint8Array(result.frame));
+    }
+    setNotice("success", "Keyence Host Link 报文已生成", `${command} · 软件编解码，不代表 KV PLC 实机响应`);
+  }).catch((error) => {
+    showKeyenceResult({ error: error.message || String(error) });
+    setNotice("error", "Keyence 编解码失败", error.message || String(error));
+  });
+}
+
+function keyenceResponse(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showKeyenceResult(result);
+    setNotice("success", "Keyence 响应已解析", `${command} · 仅验证软件边界`);
+  }).catch((error) => {
+    showKeyenceResult({ error: error.message || String(error) });
+    setNotice("error", "Keyence 响应解析失败", error.message || String(error));
+  });
+}
+
+function keyenceStationPayload() {
+  const station = abUnsigned(document.querySelector("#keyence-station")?.value || "0", 31, "站号");
+  return { station, useStation: Boolean(document.querySelector("#keyence-use-station")?.checked) };
+}
+
+function keyenceHost() {
+  const value = guideValue("#keyence-host", "127.0.0.1").trim();
+  if (!value) throw new Error("Keyence TCP 主机不能为空");
+  return value;
+}
+
+function keyencePort() {
+  return abUnsigned(document.querySelector("#keyence-port")?.value || "8501", 65535, "Keyence TCP 端口") || 8501;
+}
+
+function keyenceSessionId() {
+  return "keyence-live";
+}
+
+function initKeyenceUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#keyence-open-connection", async () => {
+    try {
+      const station = keyenceStationPayload();
+      const result = await callBackend("open_keyence_connection", {
+        connectionId: keyenceSessionId(),
+        host: keyenceHost(),
+        port: keyencePort(),
+        ...station,
+      });
+      showKeyenceResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "Keyence TCP 握手失败");
+      setNotice("success", "Keyence TCP 只读会话已建立", `${keyenceHost()}:${keyencePort()} · ${station.useStation ? `站号 ${station.station}` : "无站号"}`);
+    } catch (error) {
+      showKeyenceResult({ error: error.message || String(error) });
+      setNotice("error", "Keyence TCP 连接失败", error.message || String(error));
+    }
+  });
+  q("#keyence-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: keyenceSessionId() });
+      showKeyenceResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "Keyence TCP 断开失败");
+      setNotice("success", "Keyence TCP 会话已断开", "");
+    } catch (error) {
+      showKeyenceResult({ error: error.message || String(error) });
+      setNotice("error", "Keyence TCP 断开失败", error.message || String(error));
+    }
+  });
+  const keyenceLiveRead = (command, label) => async () => {
+    try {
+      const result = await callBackend(command, {
+        connectionId: keyenceSessionId(),
+        address: keyenceAddress(),
+        count: keyenceCount(),
+      });
+      showKeyenceResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || `${label}失败`);
+      setNotice("success", label, `${keyenceAddress()} · ${result.result?.dataAscii || result.dataAscii || ""}`);
+    } catch (error) {
+      showKeyenceResult({ error: error.message || String(error) });
+      setNotice("error", label, error.message || String(error));
+    }
+  };
+  q("#keyence-live-read-words", keyenceLiveRead("keyence_read_words", "Keyence TCP 只读字完成"));
+  q("#keyence-live-read-bits", keyenceLiveRead("keyence_read_bits", "Keyence TCP 只读位完成"));
+  q("#keyence-build-connect", () => {
+    try { keyenceBuild("keyence_build_connect", keyenceStationPayload()); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-build-read-words", () => {
+    try { keyenceBuild("keyence_build_read_words", { address: keyenceAddress(), count: keyenceCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-build-read-bits", () => {
+    try { keyenceBuild("keyence_build_read_bits", { address: keyenceAddress(), count: keyenceCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-build-write-words", () => {
+    try {
+      const raw = document.querySelector("#keyence-write-values")?.value?.trim() || "";
+      const values = raw.split(/[\s,]+/).filter(Boolean).map((value) => abUnsigned(value, 65535, "字写入值"));
+      if (!values.length) throw new Error("字写入值不能为空");
+      keyenceBuild("keyence_build_write_words", { address: keyenceAddress(), values });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-build-write-bit", () => {
+    try { keyenceBuild("keyence_build_write_bit", { address: keyenceAddress(), value: Boolean(document.querySelector("#keyence-bit-value")?.checked) }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-parse-connect", () => keyenceResponse("keyence_parse_connect", { response: document.querySelector("#keyence-response-input")?.value || "" }));
+  q("#keyence-parse-words", () => {
+    try { keyenceResponse("keyence_parse_words", { response: document.querySelector("#keyence-response-input")?.value || "", expectedCount: keyenceCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-parse-bits", () => {
+    try { keyenceResponse("keyence_parse_bits", { response: document.querySelector("#keyence-response-input")?.value || "", expectedCount: keyenceCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#keyence-parse-write", () => keyenceResponse("keyence_parse_write", { response: document.querySelector("#keyence-response-input")?.value || "" }));
+  q("#keyence-clear", () => {
+    const input = document.querySelector("#keyence-response-input");
+    const output = document.querySelector("#keyence-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成或粘贴 ASCII 报文。";
+  });
+}
+
+// === LS Electric XGT FEnet（首轮离线编解码）===
+
+function showLsXgtResult(result) {
+  const output = document.querySelector("#xgt-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "data"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    return value;
+  }, 2);
+}
+
+function xgtUnsigned(selector, max, label, fallback) {
+  return abUnsigned(document.querySelector(selector)?.value || String(fallback), max, label);
+}
+
+function xgtContextPayload() {
+  return {
+    invokeId: xgtUnsigned("#xgt-invoke", 65535, "InvokeId", 1),
+    cpu: xgtUnsigned("#xgt-cpu", 255, "CPU", 160),
+    baseNo: xgtUnsigned("#xgt-base", 15, "Base", 0),
+    slotNo: xgtUnsigned("#xgt-slot", 15, "Slot", 3),
+    companyId: guideValue("#xgt-company", "LSIS-XGT"),
+  };
+}
+
+function xgtVariable() {
+  const value = guideValue("#xgt-variable", "");
+  if (!value) throw new Error("XGT 变量不能为空");
+  return value;
+}
+
+function xgtDataType() {
+  return xgtUnsigned("#xgt-data-type", 4, "单变量类型", 2);
+}
+
+function xgtByteCount() {
+  return xgtUnsigned("#xgt-byte-count", 65535, "连续字节数", 4);
+}
+
+function xgtHost() {
+  const value = guideValue("#xgt-host", "127.0.0.1").trim();
+  if (!value) throw new Error("XGT TCP 主机不能为空");
+  return value;
+}
+
+function xgtPort() {
+  return abUnsigned(document.querySelector("#xgt-port")?.value || "2004", 65535, "XGT TCP 端口") || 2004;
+}
+
+function xgtSessionId() {
+  return "xgt-live";
+}
+
+function xgtBuild(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showLsXgtResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#xgt-frame-input");
+      if (input) input.value = abFrameText(result.frame);
+    }
+    setNotice("success", "XGT 报文已生成", `${command} · 软件编解码，不代表 LS Electric 实机响应`);
+  }).catch((error) => {
+    showLsXgtResult({ error: error.message || String(error) });
+    setNotice("error", "XGT 编解码失败", error.message || String(error));
+  });
+}
+
+function xgtParse(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showLsXgtResult(result);
+    setNotice("success", "XGT 报文已解析", `${command} · 仅验证软件边界`);
+  }).catch((error) => {
+    showLsXgtResult({ error: error.message || String(error) });
+    setNotice("error", "XGT 解析失败", error.message || String(error));
+  });
+}
+
+function initLsXgtUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#xgt-open-connection", async () => {
+    try {
+      const context = xgtContextPayload();
+      const result = await callBackend("open_ls_xgt_connection", {
+        connectionId: xgtSessionId(),
+        host: xgtHost(),
+        port: xgtPort(),
+        cpu: context.cpu,
+        baseNo: context.baseNo,
+        slotNo: context.slotNo,
+        companyId: context.companyId,
+      });
+      showLsXgtResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "XGT TCP 连接失败");
+      setNotice("success", "XGT TCP 只读会话已建立", `${xgtHost()}:${xgtPort()} · ${context.companyId}`);
+    } catch (error) {
+      showLsXgtResult({ error: error.message || String(error) });
+      setNotice("error", "XGT TCP 连接失败", error.message || String(error));
+    }
+  });
+  q("#xgt-close-connection", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: xgtSessionId() });
+      showLsXgtResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "XGT TCP 断开失败");
+      setNotice("success", "XGT TCP 会话已断开", "");
+    } catch (error) {
+      showLsXgtResult({ error: error.message || String(error) });
+      setNotice("error", "XGT TCP 断开失败", error.message || String(error));
+    }
+  });
+  q("#xgt-live-read", async () => {
+    try {
+      const result = await callBackend("ls_xgt_read", {
+        connectionId: xgtSessionId(),
+        variableName: xgtVariable(),
+        dataType: xgtDataType(),
+      });
+      showLsXgtResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "XGT TCP 单变量只读失败");
+      setNotice("success", "XGT TCP 单变量只读完成", `${xgtVariable()} · ${result.result?.dataHex || result.dataHex || ""}`);
+    } catch (error) {
+      showLsXgtResult({ error: error.message || String(error) });
+      setNotice("error", "XGT TCP 单变量只读失败", error.message || String(error));
+    }
+  });
+  q("#xgt-live-read-continuous", async () => {
+    try {
+      const result = await callBackend("ls_xgt_read_continuous", {
+        connectionId: xgtSessionId(),
+        variableName: xgtVariable(),
+        byteCount: xgtByteCount(),
+      });
+      showLsXgtResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "XGT TCP 连续只读失败");
+      setNotice("success", "XGT TCP 连续只读完成", `${xgtVariable()} · ${result.result?.dataHex || result.dataHex || ""}`);
+    } catch (error) {
+      showLsXgtResult({ error: error.message || String(error) });
+      setNotice("error", "XGT TCP 连续只读失败", error.message || String(error));
+    }
+  });
+  q("#xgt-build-read", () => {
+    try { xgtBuild("ls_xgt_build_read", { ...xgtContextPayload(), variableName: xgtVariable(), dataType: xgtDataType() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#xgt-build-continuous-read", () => {
+    try { xgtBuild("ls_xgt_build_continuous_read", { ...xgtContextPayload(), variableName: xgtVariable(), byteCount: xgtByteCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#xgt-build-write", () => {
+    try {
+      const value = parseHexInput(document.querySelector("#xgt-write-data")?.value || "");
+      if (!value.length) throw new Error("XGT 写入 HEX 不能为空");
+      xgtBuild("ls_xgt_build_write", { ...xgtContextPayload(), variableName: xgtVariable(), dataType: xgtDataType(), value });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#xgt-build-continuous-write", () => {
+    try {
+      const value = parseHexInput(document.querySelector("#xgt-write-data")?.value || "");
+      if (!value.length) throw new Error("XGT 写入 HEX 不能为空");
+      xgtBuild("ls_xgt_build_continuous_write", { ...xgtContextPayload(), variableName: xgtVariable(), value });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#xgt-parse-address", () => xgtParse("ls_xgt_parse_address", { address: xgtVariable() }));
+  q("#xgt-parse-response", () => {
+    try {
+      const frame = parseHexInput(document.querySelector("#xgt-frame-input")?.value || "");
+      if (!frame.length) throw new Error("请先粘贴或生成 XGT HEX 报文");
+      xgtParse("ls_xgt_parse_response", { frame, expectedInvokeId: xgtUnsigned("#xgt-invoke", 65535, "InvokeId", 1) });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#xgt-clear", () => {
+    const input = document.querySelector("#xgt-frame-input");
+    const output = document.querySelector("#xgt-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成或粘贴 XGT 报文。";
+  });
+}
+
+// === Panasonic MEWTOCOL-COM（首轮离线编解码）===
+
+// === Delta DVP/AS Modbus 地址 profile ===
+
+function showDeltaResult(result) {
+  const output = document.querySelector("#delta-output");
+  if (output) output.textContent = JSON.stringify(result, null, 2);
+}
+
+function deltaSeriesValue() {
+  return guideValue("#delta-series", "dvp-modbus") === "as-modbus" ? "as" : "dvp";
+}
+
+function deltaAddressValue() {
+  const value = guideValue("#delta-address", "");
+  if (!value) throw new Error("Delta 软元件地址不能为空");
+  return value;
+}
+
+function deltaQuantityValue() {
+  return abUnsigned(document.querySelector("#delta-quantity")?.value || "1", 2000, "Delta 连续数量") || 1;
+}
+
+function deltaUnitValue() {
+  return abUnsigned(document.querySelector("#delta-unit-id")?.value || "1", 247, "Modbus 站号");
+}
+
+function deltaReadPayload() {
+  return {
+    series: deltaSeriesValue(),
+    address: deltaAddressValue(),
+    quantity: deltaQuantityValue(),
+    unitId: deltaUnitValue(),
+    transport: guideValue("#delta-transport", "rtu").toLowerCase(),
+    timeoutMs: abUnsigned(document.querySelector("#command-timeout")?.value || "1000", 600000, "Modbus 超时") || 1000,
+    model: guideValue("#delta-model", ""),
+    firmware: guideValue("#delta-firmware", ""),
+  };
+}
+
+async function deltaPlanRange() {
+  try {
+    const payload = deltaReadPayload();
+    const result = await callBackend("delta_modbus_plan", payload);
+    showDeltaResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "Delta 分段规划失败");
+    setNotice("success", "Delta 分段规划完成", `${result.series} · ${result.segments?.length ?? 0} 段 · 只读规划`);
+  } catch (error) {
+    showDeltaResult({ error: error.message || String(error) });
+    setNotice("error", "Delta 分段规划失败", error.message || String(error));
+  }
+}
+
+async function deltaLiveRead() {
+  try {
+    const payload = deltaReadPayload();
+    const result = await callBackend("delta_modbus_read", payload);
+    showDeltaResult(result);
+    if (result?.ok === false) throw new Error(result.error?.message || "Delta Modbus 只读失败");
+    setNotice("success", "Delta Modbus 只读完成", `${result.series} · ${result.quantity} 点 · ${result.segments?.length ?? 0} 段 · 不执行写入`);
+  } catch (error) {
+    showDeltaResult({ error: error.message || String(error) });
+    setNotice("error", "Delta Modbus 只读失败", error.message || String(error));
+  }
+}
+
+function initDeltaUi() {
+  const button = document.querySelector("#delta-parse-address");
+  button?.addEventListener("click", async () => {
+    const series = guideValue("#delta-series", "dvp-modbus");
+    const address = guideValue("#delta-address", "");
+    if (!address) {
+      showDeltaResult({ error: "Delta 软元件地址不能为空" });
+      setNotice("error", "Delta 地址无效", "请输入 D100、Y17、X1.2 等地址");
+      return;
+    }
+    try {
+      const result = await callBackend("delta_parse_address", {
+        series: series === "as-modbus" ? "as" : "dvp",
+        address,
+      });
+      showDeltaResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "Delta 地址解析失败");
+      setNotice("success", "Delta 地址解析成功", `${result.series} · ${result.area} · FC${result.readFunction}`);
+    } catch (error) {
+      showDeltaResult({ error: error.message || String(error) });
+      setNotice("error", "Delta 地址解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#delta-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#delta-output");
+      if (output) output.textContent = "先选择系列并解析软元件地址。";
+  });
+  document.querySelector("#delta-plan-range")?.addEventListener("click", () => { void deltaPlanRange(); });
+  document.querySelector("#delta-live-read")?.addEventListener("click", () => { void deltaLiveRead(); });
+}
+
+// === Inovance H3U/H5U Modbus 地址 profile ===
+
+function showInovanceResult(result) {
+  const output = document.querySelector("#inovance-output");
+  if (output) output.textContent = JSON.stringify(result, null, 2);
+}
+
+function initInovanceUi() {
+  document.querySelector("#inovance-parse-address")?.addEventListener("click", async () => {
+    const series = guideValue("#inovance-series", "h3u-modbus");
+    const address = guideValue("#inovance-address", "");
+    const kind = guideValue("#inovance-kind", "auto");
+    if (!address) {
+      showInovanceResult({ error: "汇川软元件地址不能为空" });
+      setNotice("error", "汇川地址无效", "请输入 D100、M0、X10、Y17 或 C200");
+      return;
+    }
+    try {
+      const result = await callBackend("inovance_parse_address", {
+        series: series === "h5u-modbus" ? "h5u" : "h3u",
+        address,
+        kind,
+      });
+      showInovanceResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "汇川地址解析失败");
+      setNotice("success", "汇川地址解析成功", `${result.series} · ${result.area} · FC${result.readFunction} · 底层 ${result.underlyingProtocol}`);
+    } catch (error) {
+      showInovanceResult({ error: error.message || String(error) });
+      setNotice("error", "汇川地址解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#inovance-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#inovance-output");
+    if (output) output.textContent = "先选择 H3U/H5U 并解析软元件地址。";
+  });
+}
+
+// === Xinje XC/XD Modbus 地址 profile（首轮仅确认 D） ===
+
+function showXinjeResult(result) {
+  const output = document.querySelector("#xinje-output");
+  if (output) output.textContent = JSON.stringify(result, null, 2);
+}
+
+function initXinjeUi() {
+  document.querySelector("#xinje-parse-address")?.addEventListener("click", async () => {
+    const series = guideValue("#xinje-series", "xc-modbus");
+    const address = guideValue("#xinje-address", "");
+    const kind = guideValue("#xinje-kind", "auto");
+    if (!address) {
+      showXinjeResult({ error: "信捷地址不能为空" });
+      setNotice("error", "信捷地址无效", "首轮只确认 D100 这类 D 数据寄存器");
+      return;
+    }
+    try {
+      const result = await callBackend("xinjie_parse_address", {
+        series: series === "xd-modbus" ? "xd" : "xc",
+        address,
+        kind,
+      });
+      showXinjeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "信捷地址解析失败");
+      setNotice("success", "信捷地址解析成功", `${result.series} · ${result.area} · FC${result.readFunction} · 底层 ${result.underlyingProtocol}`);
+    } catch (error) {
+      showXinjeResult({ error: error.message || String(error) });
+      setNotice("error", "信捷地址解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#xinje-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#xinje-output");
+    if (output) output.textContent = "先选择 XC/XD 并解析 D 地址。";
+  });
+}
+
+// === FATEK FBs 原生 ASCII（TCP 只读会话 + 编解码） ===
+
+function showFatekResult(result) {
+  const output = document.querySelector("#fatek-output");
+  if (output) output.textContent = JSON.stringify(result, (key, value) => {
+    if (key === "frame" || key === "data" || key === "response") return Array.isArray(value) ? abFrameText(value) : value;
+    return value;
+  }, 2);
+}
+
+function fatekStationValue() {
+  return abUnsigned(document.querySelector("#fatek-station")?.value || "1", 254, "FATEK 站号") || 1;
+}
+
+function fatekCountValue() {
+  return abUnsigned(document.querySelector("#fatek-count")?.value || "1", 255, "FATEK 数量") || 1;
+}
+
+function fatekHost() {
+  const value = guideValue("#fatek-host", "127.0.0.1").trim();
+  if (!value) throw new Error("FATEK TCP 主机不能为空");
+  return value;
+}
+
+function fatekPort() {
+  return abUnsigned(document.querySelector("#fatek-port")?.value || "5000", 65535, "FATEK TCP 端口") || 5000;
+}
+
+function fatekSessionId() {
+  return "fatek-live";
+}
+
+async function initFatekUi() {
+  const station = () => fatekStationValue();
+  const address = () => guideValue("#fatek-address", "");
+  const kind = () => guideValue("#fatek-kind", "auto");
+  document.querySelector("#fatek-open-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("open_fatek_connection", {
+        connectionId: fatekSessionId(),
+        host: fatekHost(),
+        port: fatekPort(),
+        station: station(),
+      });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK TCP 连接失败");
+      setNotice("success", "FATEK TCP 只读会话已建立", `${fatekHost()}:${fatekPort()} · 站号 ${station()}`);
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK TCP 连接失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-close-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: fatekSessionId() });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK TCP 断开失败");
+      setNotice("success", "FATEK TCP 会话已断开", "");
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK TCP 断开失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-live-read")?.addEventListener("click", async () => {
+    try {
+      const parsed = await callBackend("fatek_parse_address", { address: address(), kind: kind() });
+      if (parsed?.ok === false) throw new Error(parsed.error?.message || "FATEK 地址解析失败");
+      const isDiscrete = !!(parsed.result?.isDiscrete ?? parsed.isDiscrete);
+      const command = isDiscrete ? "fatek_read_discrete" : "fatek_read_words";
+      const result = await callBackend(command, {
+        connectionId: fatekSessionId(),
+        address: address(),
+        count: fatekCountValue(),
+      });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK TCP 只读失败");
+      setNotice("success", "FATEK TCP 只读完成", `${address()} · ${result.result?.dataAscii || result.dataAscii || ""}`);
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK TCP 只读失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-parse-address")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("fatek_parse_address", { address: address(), kind: kind() });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK 地址解析失败");
+      setNotice("success", "FATEK 地址解析成功", `${result.dataCode}${result.number} · ${result.kind}`);
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK 地址解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-build-read")?.addEventListener("click", async () => {
+    try {
+      const parsed = await callBackend("fatek_parse_address", { address: address(), kind: kind() });
+      if (parsed?.ok === false) throw new Error(parsed.error?.message || "FATEK 地址解析失败");
+      const command = parsed.result?.isDiscrete ? "fatek_build_read_discrete" : "fatek_build_read_words";
+      const result = await callBackend(command, { station: station(), address: address(), count: fatekCountValue() });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK 读帧生成失败");
+      setNotice("success", "FATEK 读帧已生成", result.frameHex || result.result?.frameHex || "");
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK 读帧生成失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-pack")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("fatek_pack_command", { station: station(), command: guideValue("#fatek-command", "40") });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK 命令封装失败");
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK 命令封装失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-parse-response")?.addEventListener("click", async () => {
+    try {
+      const response = parseHexInput(guideValue("#fatek-response-hex", ""));
+      const result = await callBackend("fatek_parse_response", { station: station(), command: guideValue("#fatek-command", "46").slice(0, 2), response });
+      showFatekResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "FATEK 响应解析失败");
+      setNotice("success", "FATEK 响应解析成功", `${result.command} · status ${result.status}`);
+    } catch (error) {
+      showFatekResult({ error: error.message || String(error) });
+      setNotice("error", "FATEK 响应解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fatek-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#fatek-output");
+    if (output) output.textContent = "先解析地址或生成 FATEK ASCII 报文。";
+  });
+}
+
+// === Fuji MICREX-SX SPH Loader Command（TCP 只读会话 + 编解码） ===
+
+function showFujiResult(result) {
+  const output = document.querySelector("#fuji-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "data", "response"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    return value;
+  }, 2);
+}
+
+function fujiConnectionId() {
+  const text = guideValue("#fuji-connection-id", "FE").replace(/^0x/i, "");
+  const value = Number.parseInt(text, 16);
+  if (!Number.isInteger(value) || value < 0 || value > 0xFF) throw new Error("SPH 连接 ID 必须是 00..FF 十六进制");
+  return value;
+}
+
+function fujiWordCount() {
+  return abUnsigned(document.querySelector("#fuji-words")?.value || "1", 230, "SPH 字数量") || 1;
+}
+
+function fujiHost() {
+  return guideValue("#fuji-host", "127.0.0.1");
+}
+
+function fujiPort() {
+  return abUnsigned(document.querySelector("#fuji-port")?.value || "18245", 65535, "SPH TCP 端口") || 18245;
+}
+
+function fujiSessionId() {
+  return "fuji-sph-live";
+}
+
+async function initFujiUi() {
+  const address = () => guideValue("#fuji-address", "");
+  document.querySelector("#fuji-open-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("open_fuji_sph_connection", {
+        connectionId: fujiSessionId(),
+        host: fujiHost(),
+        port: fujiPort(),
+        connectionIdByte: fujiConnectionId(),
+      });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH TCP 连接失败");
+      setNotice("success", "SPH TCP 只读会话已建立", `${fujiHost()}:${fujiPort()} · connection ${fujiConnectionId().toString(16).toUpperCase()}`);
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH TCP 连接失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-close-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: fujiSessionId() });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH TCP 断开失败");
+      setNotice("success", "SPH TCP 会话已断开", "");
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH TCP 断开失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-live-read")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("fuji_sph_read", {
+        connectionId: fujiSessionId(),
+        address: address(),
+        words: fujiWordCount(),
+      });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH 只读失败");
+      setNotice("success", "SPH 只读完成", `${address()} · ${result.result?.dataHex || result.dataHex || ""}`);
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH 只读失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-parse-address")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("fuji_sph_parse_address", { address: address() });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH 地址解析失败");
+      setNotice("success", "SPH 地址解析成功", `${result.result?.canonical || result.canonical} · type ${result.result?.typeCodeHex || result.typeCodeHex}`);
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH 地址解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-build-read")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("fuji_sph_build_read", { connectionId: fujiConnectionId(), address: address(), words: fujiWordCount() });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH 读帧生成失败");
+      setNotice("success", "SPH 00H 读帧已生成", result.result?.frameHex || result.frameHex || "");
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH 读帧生成失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-build-write")?.addEventListener("click", async () => {
+    try {
+      const data = parseHexInput(guideValue("#fuji-write-data", ""));
+      const result = await callBackend("fuji_sph_build_write", { connectionId: fujiConnectionId(), address: address(), data });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH 写帧生成失败");
+      setNotice("success", "SPH 01H 写帧已生成", result.result?.frameHex || result.frameHex || "（仅离线）");
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH 写帧生成失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-parse-response")?.addEventListener("click", async () => {
+    try {
+      const response = parseHexInput(guideValue("#fuji-response-hex", ""));
+      const command = abUnsigned(document.querySelector("#fuji-command")?.value || "0", 1, "SPH 命令");
+      const expectedDataBytes = abUnsigned(document.querySelector("#fuji-expected-bytes")?.value || "0", 65535, "SPH 期望数据字节") || 0;
+      const result = await callBackend("fuji_sph_parse_response", { connectionId: fujiConnectionId(), command, expectedDataBytes, response });
+      showFujiResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "SPH 响应解析失败");
+      setNotice("success", "SPH 响应解析成功", `${result.result?.wordAddress ?? result.wordAddress} · ${result.result?.dataHex ?? result.dataHex ?? ""}`);
+    } catch (error) {
+      showFujiResult({ error: error.message || String(error) });
+      setNotice("error", "SPH 响应解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#fuji-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#fuji-output");
+    if (output) output.textContent = "先解析 SPH 地址或生成 Loader Command 报文。";
+  });
+}
+
+function showGeResult(result) {
+  const output = document.querySelector("#ge-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "data", "response"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    return value;
+  }, 2);
+}
+
+function geTransactionId() {
+  return abUnsigned(document.querySelector("#ge-transaction-id")?.value || "1", 65535, "GE SRTP 事务号") || 1;
+}
+
+function geElementCount() {
+  return abUnsigned(document.querySelector("#ge-element-count")?.value || "1", 65535, "GE SRTP 元素数量") || 1;
+}
+
+function geBitAccess() {
+  return !!document.querySelector("#ge-bit-access")?.checked;
+}
+
+function geHost() {
+  const value = guideValue("#ge-host", "127.0.0.1").trim();
+  if (!value) throw new Error("GE SRTP TCP 主机不能为空");
+  return value;
+}
+
+function gePort() {
+  return abUnsigned(document.querySelector("#ge-port")?.value || "18245", 65535, "GE SRTP TCP 端口") || 18245;
+}
+
+function geConnectionId() {
+  const value = guideValue("#ge-connection-id", "ge-readonly").trim();
+  if (!value) throw new Error("GE SRTP 连接 ID 不能为空");
+  return value;
+}
+
+async function initGeUi() {
+  const address = () => guideValue("#ge-address", "");
+  const run = async (command, payload, successTitle, successDetail = "") => {
+    try {
+      const result = await callBackend(command, payload);
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || `${command} 失败`);
+      setNotice("success", successTitle, successDetail || result.result?.frameHex || result.frameHex || "");
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", `${successTitle}失败`, error.message || String(error));
+    }
+  };
+  document.querySelector("#ge-open-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("open_ge_srtp_connection", {
+        connectionId: geConnectionId(),
+        host: geHost(),
+        port: gePort(),
+      });
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "GE SRTP TCP 连接失败");
+      setNotice("success", "GE SRTP TCP 只读连接已建立", `${geHost()}:${gePort()} · 已完成 56B 会话初始化 · L2 仍待实机`);
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP TCP 连接失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-close-connection")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("close_connection", { connectionId: geConnectionId() });
+      showGeResult(result);
+      setNotice("success", "GE SRTP 连接已断开", geConnectionId());
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP 断开失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-parse-address")?.addEventListener("click", () => run(
+    "ge_srtp_parse_address",
+    { address: address() },
+    "GE SRTP 地址解析成功",
+  ));
+  document.querySelector("#ge-build-handshake")?.addEventListener("click", () => run(
+    "ge_srtp_build_handshake",
+    {},
+    "GE SRTP 会话初始化帧已生成",
+  ));
+  document.querySelector("#ge-parse-handshake")?.addEventListener("click", async () => {
+    try {
+      const response = parseHexInput(guideValue("#ge-handshake-response", ""));
+      const result = await callBackend("ge_srtp_parse_handshake", { response });
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "GE SRTP 会话响应解析失败");
+      setNotice("success", "GE SRTP 会话响应解析成功", "sessionInitialized=true");
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP 会话响应解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-build-read")?.addEventListener("click", () => run(
+    "ge_srtp_build_read",
+    { transactionId: geTransactionId(), address: address(), elementCount: geElementCount(), bitAccess: geBitAccess() },
+    "GE SRTP 读帧已生成",
+  ));
+  document.querySelector("#ge-live-read")?.addEventListener("click", async () => {
+    try {
+      const result = await callBackend("ge_srtp_read", {
+        connectionId: geConnectionId(),
+        address: address(),
+        elementCount: geElementCount(),
+        bitAccess: geBitAccess(),
+      });
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "GE SRTP TCP 读取失败");
+      setNotice("success", "GE SRTP TCP 只读成功", `${address()} · ${result?.dataHex || result?.result?.dataHex || ""} · 不执行写入`);
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP TCP 只读失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-build-write")?.addEventListener("click", async () => {
+    try {
+      const data = parseHexInput(guideValue("#ge-write-data", ""));
+      const result = await callBackend("ge_srtp_build_write", {
+        transactionId: geTransactionId(),
+        address: address(),
+        data,
+        elementCount: geElementCount(),
+        bitAccess: geBitAccess(),
+      });
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "GE SRTP 写帧生成失败");
+      setNotice("success", "GE SRTP 写帧已生成", result.result?.frameHex || result.frameHex || "（仅离线）");
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP 写帧生成失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-parse-response")?.addEventListener("click", async () => {
+    try {
+      const response = parseHexInput(guideValue("#ge-response-hex", ""));
+      const expectedDataLength = abUnsigned(document.querySelector("#ge-expected-bytes")?.value || "0", 65535, "GE SRTP 期望数据字节") || 0;
+      const result = await callBackend("ge_srtp_parse_response", {
+        transactionId: geTransactionId(),
+        expectedDataLength,
+        response,
+      });
+      showGeResult(result);
+      if (result?.ok === false) throw new Error(result.error?.message || "GE SRTP 响应解析失败");
+      setNotice("success", "GE SRTP 响应解析成功", result.result?.dataHex || result.dataHex || "");
+    } catch (error) {
+      showGeResult({ error: error.message || String(error) });
+      setNotice("error", "GE SRTP 响应解析失败", error.message || String(error));
+    }
+  });
+  document.querySelector("#ge-clear")?.addEventListener("click", () => {
+    const output = document.querySelector("#ge-output");
+    if (output) output.textContent = "先解析 GE 地址或生成 SRTP 会话/读写报文。";
+  });
+}
+
+function showPanasonicResult(result) {
+  const output = document.querySelector("#panasonic-output");
+  if (!output) return;
+  output.textContent = JSON.stringify(result, (key, value) => {
+    if (["frame", "data"].includes(key) && Array.isArray(value)) return abFrameText(value);
+    return value;
+  }, 2);
+}
+
+function panasonicStation() {
+  return abUnsigned(document.querySelector("#panasonic-station")?.value || "1", 32, "MEWTOCOL 站号");
+}
+
+function panasonicWordCount() {
+  return abUnsigned(document.querySelector("#panasonic-word-count")?.value || "1", 500, "字数量");
+}
+
+function panasonicDataAddress() {
+  const value = guideValue("#panasonic-data-address", "");
+  if (!value) throw new Error("MEWTOCOL 数据地址不能为空");
+  return value;
+}
+
+function panasonicContactAddress() {
+  const value = guideValue("#panasonic-contact-address", "");
+  if (!value) throw new Error("MEWTOCOL 触点地址不能为空");
+  return value;
+}
+
+function panasonicLivePayload() {
+  return {
+    station: panasonicStation(),
+    timeoutMs: abUnsigned(document.querySelector("#panasonic-timeout")?.value || "1500", 600000, "MEWTOCOL 超时"),
+    retries: abUnsigned(document.querySelector("#panasonic-retries")?.value || "1", 3, "MEWTOCOL 重试次数"),
+    model: guideValue("#panasonic-model", ""),
+    serialNumber: guideValue("#panasonic-device-serial", ""),
+  };
+}
+
+async function panasonicLiveRead(mode = "data") {
+  try {
+    const payload = panasonicLivePayload();
+    if (mode === "contact") payload.address = panasonicContactAddress();
+    else {
+      payload.address = panasonicDataAddress();
+      payload.wordCount = panasonicWordCount();
+    }
+    const result = await callBackend("panasonic_serial_read", { ...payload, mode });
+    if (result?.ok === false) throw new Error(result.error?.message || "MEWTOCOL COM 读取失败");
+    showPanasonicResult(result);
+    if (Array.isArray(result?.rx)) {
+      const response = new TextDecoder().decode(Uint8Array.from(result.rx));
+      const input = document.querySelector("#panasonic-response-input");
+      if (input) input.value = response;
+    }
+    setNotice("success", "MEWTOCOL COM 只读成功", `${mode === "contact" ? "RCS" : "RD"} · 共享 COM · attempt ${result?.attempt ?? 1} · 不执行写入`);
+  } catch (error) {
+    showPanasonicResult({ error: error.message || String(error) });
+    setNotice("error", "MEWTOCOL COM 只读失败", error.message || String(error));
+  }
+}
+
+function panasonicBuild(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showPanasonicResult(result);
+    if (Array.isArray(result?.frame)) {
+      const input = document.querySelector("#panasonic-response-input");
+      if (input) input.value = result.text || "";
+    }
+    setNotice("success", "MEWTOCOL 报文已生成", `${command} · 软件编解码，不代表 Panasonic FP 实机响应`);
+  }).catch((error) => {
+    showPanasonicResult({ error: error.message || String(error) });
+    setNotice("error", "MEWTOCOL 编解码失败", error.message || String(error));
+  });
+}
+
+function panasonicParse(command, payload) {
+  return callBackend(command, payload).then((result) => {
+    showPanasonicResult(result);
+    setNotice("success", "MEWTOCOL 报文已解析", `${command} · 仅验证软件边界`);
+  }).catch((error) => {
+    showPanasonicResult({ error: error.message || String(error) });
+    setNotice("error", "MEWTOCOL 解析失败", error.message || String(error));
+  });
+}
+
+function initPanasonicUi() {
+  const q = (id, fn) => document.querySelector(id)?.addEventListener("click", fn);
+  q("#panasonic-build-read", () => {
+    try { panasonicBuild("panasonic_build_read", { station: panasonicStation(), address: panasonicDataAddress(), wordCount: panasonicWordCount() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-build-write", () => {
+    try {
+      const data = parseHexInput(document.querySelector("#panasonic-write-data")?.value || "");
+      if (!data.length) throw new Error("MEWTOCOL 写入 HEX 不能为空");
+      panasonicBuild("panasonic_build_write", { station: panasonicStation(), address: panasonicDataAddress(), data });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-build-read-contact", () => {
+    try { panasonicBuild("panasonic_build_read_contact", { station: panasonicStation(), address: panasonicContactAddress() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-build-write-contact", () => {
+    try { panasonicBuild("panasonic_build_write_contact", { station: panasonicStation(), address: panasonicContactAddress(), value: Boolean(document.querySelector("#panasonic-contact-value")?.checked) }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-parse-address", () => {
+    try { panasonicParse("panasonic_parse_data_address", { address: panasonicDataAddress() }); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-parse-response", () => {
+    try {
+      const response = Array.from(new TextEncoder().encode(document.querySelector("#panasonic-response-input")?.value || ""));
+      if (!response.length) throw new Error("请先粘贴或生成 MEWTOCOL ASCII 响应");
+      const expectedCommand = guideValue("#panasonic-expected-command", "RD").toUpperCase();
+      const expectedHeader = guideValue("#panasonic-expected-header", "%");
+      panasonicParse("panasonic_parse_response", { station: panasonicStation(), expectedCommand, expectedHeader, response });
+    } catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-live-read", () => {
+    try { void panasonicLiveRead("data"); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-live-read-contact", () => {
+    try { void panasonicLiveRead("contact"); }
+    catch (error) { setNotice("error", "参数无效", error.message); }
+  });
+  q("#panasonic-clear", () => {
+    const input = document.querySelector("#panasonic-response-input");
+    const output = document.querySelector("#panasonic-output");
+    if (input) input.value = "";
+    if (output) output.textContent = "先生成或粘贴 MEWTOCOL 报文。";
+  });
 }
 
 // === 本机接口体检 ===
@@ -2378,7 +5775,7 @@ async function ifRenderComPorts() {
   try {
     ports = await callBackend("list_serial_ports", {});
   } catch (error) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">COM 口枚举失败:${error.message || error}</td></tr>`;
+    renderEmptyTableRow(tbody, 5, `COM 口枚举失败:${error.message || error}`);
     ifSetComState("枚举失败");
     return;
   }
@@ -2441,12 +5838,12 @@ async function ifRenderUsbDevices() {
   try {
     data = await callBackend("list_usb_devices", {});
   } catch (error) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">USB 枚举失败:${error.message || error}</td></tr>`;
+    renderEmptyTableRow(tbody, 4, `USB 枚举失败:${error.message || error}`);
     if (stateEl) stateEl.textContent = "枚举失败";
     return;
   }
   if (!data.ok) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">${data.message || "USB 枚举失败"}</td></tr>`;
+    renderEmptyTableRow(tbody, 4, data.message || "USB 枚举失败");
     if (stateEl) stateEl.textContent = "枚举失败";
     return;
   }
@@ -2542,6 +5939,116 @@ function initInterfacesUi() {
   const dhcp = document.querySelector("#if-ip-dhcp");
   if (dhcp) dhcp.addEventListener("click", () => ifApplyDhcp().catch((e) =>
     setNotice("error", "恢复失败", e.message || String(e))));
+  const pingBtn = document.querySelector("#if-ping-run");
+  if (pingBtn) pingBtn.addEventListener("click", () => ifRunPing().catch((e) =>
+    setNotice("error", "Ping 失败", e.message || String(e))));
+  const pingHost = document.querySelector("#if-ping-host");
+  if (pingHost) pingHost.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      ifRunPing().catch((e) => setNotice("error", "Ping 失败", e.message || String(e)));
+    }
+  });
+}
+
+const PING_TARGET_SPLIT = /[\s,;，；]+/;
+const MAX_PING_TARGETS = 16;
+
+function splitPingTargets(text) {
+  const hosts = [];
+  const seen = new Set();
+  for (const part of String(text ?? "").split(PING_TARGET_SPLIT)) {
+    const host = part.trim();
+    if (!host) continue;
+    const key = host.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hosts.push(host);
+    if (hosts.length >= MAX_PING_TARGETS) break;
+  }
+  return hosts;
+}
+
+function pingSummaryLine(host, r) {
+  if (!r?.ok) return `✗ ${host} 参数无效 · ${r?.error?.message ?? "无法 Ping"}`;
+  const times = (r.timesMs ?? []).map((t) => `${t}`).join("/");
+  if (r.alive) {
+    const rtt = r.avgMs != null ? `${r.avgMs} ms` : "—";
+    return `✓ ${host} 通 · 发送 ${r.sent ?? "—"} / 接收 ${r.received ?? "—"} / 丢包 ${r.lossPct ?? "—"}% · 平均 ${rtt}` +
+      (times ? ` · ${times} ms` : "");
+  }
+  return `✗ ${host} 不通 · 丢包 ${r.lossPct ?? "—"}%`;
+}
+
+/** 网络连通性 Ping(interfaces 视图):支持一次多个 IP/主机名,逐个显示通断。 */
+async function ifRunPing() {
+  const hostEl = document.querySelector("#if-ping-host");
+  const stateEl = document.querySelector("#if-ping-state");
+  const resultEl = document.querySelector("#if-ping-result");
+  const runBtn = document.querySelector("#if-ping-run");
+  const hosts = splitPingTargets(hostEl?.value);
+  if (!hosts.length) {
+    setNotice("error", "参数无效", "请输入至少一个 IP 或主机名。多个地址用逗号、空格或换行分开。");
+    return;
+  }
+  const uniqueCount = [...new Set(String(hostEl?.value ?? "").split(PING_TARGET_SPLIT).map((part) => part.trim().toLowerCase()).filter(Boolean))].length;
+  if (uniqueCount > MAX_PING_TARGETS) {
+    setNotice("info", `最多 ${MAX_PING_TARGETS} 个目标`, `已截取前 ${MAX_PING_TARGETS} 个地址。`);
+  }
+  const count = Number(document.querySelector("#if-ping-count")?.value) || 4;
+  if (stateEl) {
+    stateEl.textContent = hosts.length === 1 ? "Ping 中…" : `0/${hosts.length} 完成`;
+    stateEl.style.color = "";
+  }
+  if (resultEl) resultEl.replaceChildren(document.createTextNode(
+    hosts.length === 1 ? "Ping 中,请稍候…" : `准备 Ping ${hosts.length} 个目标…`,
+  ));
+  if (runBtn) runBtn.disabled = true;
+
+  const list = document.createElement("div");
+  list.className = "ping-result-list";
+  const pending = hosts.map((host) => {
+    const line = document.createElement("div");
+    line.className = "ping-result-line is-pending";
+    line.textContent = `… ${host} 等待中`;
+    list.append(line);
+    return line;
+  });
+  if (resultEl) resultEl.replaceChildren(list);
+
+  try {
+    let aliveCount = 0;
+    let failedCount = 0;
+    for (let i = 0; i < hosts.length; i += 1) {
+      const host = hosts[i];
+      pending[i].textContent = `… ${host} Ping 中`;
+      if (stateEl) stateEl.textContent = `${i}/${hosts.length} 完成 · 正在 ${host}`;
+      const r = await callBackend("ping_host", { host, count, timeoutMs: 1000 });
+      pending[i].classList.remove("is-pending");
+      pending[i].textContent = pingSummaryLine(host, r);
+      if (r?.ok && r.alive) {
+        pending[i].classList.add("is-alive");
+        aliveCount += 1;
+      } else {
+        pending[i].classList.add("is-down");
+        failedCount += 1;
+      }
+      if (hosts.length === 1 && r?.ok && r.raw) {
+        const pre = document.createElement("pre");
+        pre.className = "ping-result-raw";
+        pre.textContent = r.raw;
+        list.append(pre);
+      }
+    }
+    if (stateEl) {
+      stateEl.textContent = failedCount === 0
+        ? (hosts.length === 1 ? `通 · ${aliveCount}/${hosts.length}` : `${aliveCount}/${hosts.length} 通`)
+        : `${aliveCount}/${hosts.length} 通`;
+      stateEl.style.color = failedCount === 0 ? "var(--ok, #3fb950)" : "var(--danger, #f85149)";
+    }
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+  }
 }
 
 // === 西门子 S7comm ===
@@ -2549,6 +6056,7 @@ function initInterfacesUi() {
 let s7Connected = false;
 let s7SlaveRunning = false;
 let s7FxWebApi = false; // Web API 模式分流
+let s7ActiveVariant = null;
 const S7_CONN_ID = "siemens";
 
 /// 型号默认 rack/slot(调研 §6.3 表)
@@ -2563,10 +6071,12 @@ const S7_MODEL_DEFAULTS = {
 /// 连接前置检查清单(VOC 报告 ③,按型号)
 function s7ChecklistHtml(model) {
   if (model === "smart") {
-    return `<strong>S7-200 SMART —— 无需任何 PLC 侧设置,本体网口直连:</strong><br/>
-      · 默认 IP <code>192.168.2.1</code>(与 PC 同网段) · rack=0 / slot=0(1 亦可) · 端口 102<br/>
-      · V 区自动映射 DB1:VW100 = DB1.DBW100 · 单次读上限约 200 字节(自动分片)<br/>
-      · 紧凑型 CR20s/CR30s/CR40s/CR60s 无网口,只能 PPI(本工具暂不支持)`
+    return `<strong>S7-200 SMART —— 先核对 CPU 型号、固件与实际 IP:</strong><br/>
+      · STEP 7-Micro/WIN SMART V2.8 对应 CPU V2.8 及更早；V3 软件对应 V3 CPU；端口 102<br/>
+      · <strong>V3 的 Put/Get Server 默认关闭</strong>：通讯设置 → 启用 Put/Get Server → 保存并下载到 PLC<br/>
+      · 建议同时启用通信写限制，只开放演示保留 V 区；Nexus 首次真机先只读，不写 PLC<br/>
+      · rack=0 / slot=0，连接失败自动再试 slot=1；V 语法按 DB1 兼容映射（VW100 = DB1.DBW100）<br/>
+      · CR20s/CR30s/CR40s/CR60s 无以太网口，只能走串口；以 CPU 铭牌/订货号为准`
   }
   if (model === "300" || model === "400") {
     return `<strong>S7-${model} —— 经典机型,默认开放外部访问:</strong><br/>
@@ -2591,8 +6101,79 @@ function s7CurrentModel() {
   return variant === "smart" ? "smart" : (document.querySelector("#s7-model")?.value || "1200");
 }
 
+function s7SelectedVariant() {
+  return document.querySelector("#s7-variant")?.value || "s7comm";
+}
+
+function s7ActiveRoute() {
+  return resolveSiemensRoute(s7ActiveVariant || s7SelectedVariant());
+}
+
+function s7ParseFetchWriteAddress(address) {
+  const text = String(address || "").trim().toUpperCase();
+  let match = /^DB(\d+)\.DB([BWD])(\d+)$/.exec(text);
+  if (match) {
+    return {
+      area: "DB",
+      db: Number(match[1]),
+      address: Number(match[3]),
+      elementBytes: { B: 1, W: 2, D: 4 }[match[2]],
+    };
+  }
+  match = /^([MIQ])([BWD])?(\d+)$/.exec(text);
+  if (match) {
+    return {
+      area: match[1],
+      db: 0,
+      address: Number(match[3]),
+      elementBytes: { B: 1, W: 2, D: 4 }[match[2] || "B"],
+    };
+  }
+  match = /^([CT])(\d+)$/.exec(text);
+  if (match) {
+    return { area: match[1], db: 0, address: Number(match[2]), elementBytes: 2 };
+  }
+  throw new Error("Fetch/Write 仅支持 DB1.DBB/W/Dn、MB/W/Dn、IB/W/Dn、QB/W/Dn、C/Tn；位地址不能直接访问");
+}
+
+function s7ParseUssAddress(address) {
+  const text = String(address || "").trim().toUpperCase();
+  const match = /^P(\d{1,4})(?:\[(\d{1,4})\])?$/.exec(text);
+  if (!match) throw new Error("USS 参数地址格式为 P700 或 P2200[1]");
+  const param = Number(match[1]);
+  const index = match[2] === undefined ? 0 : Number(match[2]);
+  if (param > 0x0FFF || index > 0xFFFF) throw new Error("USS 参数号/子索引超出范围");
+  return { param, index };
+}
+
+function s7ParseWebApiValue(raw) {
+  const text = String(raw || "").trim();
+  if (!text) throw new Error("Web API 写入值不能为空");
+  if (/^json:/i.test(text)) {
+    try { return JSON.parse(text.slice(5).trim()); } catch (error) {
+      throw new Error("JSON 写入值无效: " + (error.message || String(error)));
+    }
+  }
+  if (/^text:/i.test(text)) return text.slice(5);
+  if (/^hex:/i.test(text)) {
+    const bytes = text.slice(4).trim().split(/[\s,]+/).filter(Boolean).map((v) => Number.parseInt(v, 16));
+    if (!bytes.length || bytes.some((v) => !Number.isInteger(v) || v < 0 || v > 255)) {
+      throw new Error("hex 写入值必须是 00-FF 字节列表");
+    }
+    return bytes;
+  }
+  if (text.includes(",")) {
+    const values = text.split(",").map((v) => Number(v.trim()));
+    if (values.some((v) => !Number.isFinite(v))) throw new Error("逗号分隔的 Web API 数组必须是数字");
+    return values;
+  }
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : text;
+}
+
 function s7ApplyModel() {
   const model = s7CurrentModel();
+  const selectedVariant = s7SelectedVariant();
   const def = S7_MODEL_DEFAULTS[model] || S7_MODEL_DEFAULTS["1200"];
   const rack = document.querySelector("#s7-rack");
   const slot = document.querySelector("#s7-slot");
@@ -2600,12 +6181,18 @@ function s7ApplyModel() {
   if (slot) slot.value = def.slot;
   const hint = document.querySelector("#s7-hint");
   if (hint) {
-    hint.textContent = model === "smart"
+    hint.textContent = selectedVariant === "uss"
+      ? "USS 参数语法:P700 / P2200[1] · 只读参数值，不发送控制字"
+      : model === "smart"
       ? "SMART V 区语法:VW100(=DB1.DBW100) / VB100 / V100.3 · 或直接用 DB1.DBW100"
       : "地址语法:DB1.DBW20 / M10.3 / IW0 / T5 / C3";
   }
   const addr = document.querySelector("#s7-address");
-  if (addr) addr.placeholder = model === "smart" ? "VW100 / VB100 / V100.3 / DB1.DBW100" : "DB1.DBW20 / M10.3 / IW0";
+  if (addr) addr.placeholder = selectedVariant === "uss" ? "P700 / P2200[1]" : model === "smart" ? "VW100 / VB100 / V100.3 / DB1.DBW100" : "DB1.DBW20 / M10.3 / IW0";
+  const serialStationWrap = document.querySelector("#s7-serial-station-wrap");
+  if (serialStationWrap) serialStationWrap.classList.toggle("hidden", !["ppi", "ppi-serial", "uss"].includes(selectedVariant));
+  const serialStationLabel = document.querySelector("#s7-serial-station-label");
+  if (serialStationLabel) serialStationLabel.textContent = selectedVariant === "uss" ? "USS 站号" : "PPI 站号";
   // 已展开的清单同步刷新
   const body = document.querySelector("#s7-checklist-body");
   if (body && !body.classList.contains("hidden")) {
@@ -2617,10 +6204,14 @@ function s7SyncButtons() {
   const q = (id) => document.querySelector(id);
   if (q("#s7-connect")) q("#s7-connect").disabled = s7Connected;
   if (q("#s7-disconnect")) q("#s7-disconnect").disabled = !s7Connected;
-  if (q("#s7-read")) q("#s7-read").disabled = !s7Connected;
-  if (q("#s7-write")) q("#s7-write").disabled = !s7Connected;
+  if (q("#s7-read")) q("#s7-read").disabled = !s7Connected || !s7ActiveRoute().readCommand;
+  if (q("#s7-write")) q("#s7-write").disabled = !s7Connected || !s7ActiveRoute().writeCommand;
+  if (q("#s7-variant")) q("#s7-variant").disabled = s7Connected;
+  if (q("#s7-model")) q("#s7-model").disabled = s7Connected;
+  const route = s7ActiveRoute();
+  const cpuControlAvailable = s7Connected && route.kind === "s7comm";
   for (const id of ["#s7-read-status", "#s7-pwd-btn", "#s7-hot-start", "#s7-cold-start", "#s7-stop-cpu"]) {
-    if (q(id)) q(id).disabled = !s7Connected;
+    if (q(id)) q(id).disabled = !cpuControlAvailable;
   }
   const diagState = document.querySelector("#s7-diag-state");
   if (diagState) diagState.textContent = s7Connected ? "已连接" : "需要连接";
@@ -2630,90 +6221,192 @@ function s7SyncButtons() {
 
 async function s7Connect() {
   if (s7Connected) return;
-  const variant = document.querySelector("#s7-variant")?.value || "s7comm";
+  const variant = s7SelectedVariant();
+  const route = resolveSiemensRoute(variant);
   const host = document.querySelector("#s7-host")?.value?.trim() || "127.0.0.1";
-  const port = Number(document.querySelector("#s7-port")?.value) || 102;
+  const portInput = Number(document.querySelector("#s7-port")?.value);
+  const port = variant === "fw"
+    ? (portInput === 102 || !portInput ? 2000 : portInput)
+    : (portInput || 102);
   const rack = Number(document.querySelector("#s7-rack")?.value) || 0;
   const slot = Number(document.querySelector("#s7-slot")?.value) || 0;
   const model = s7CurrentModel();
-  s7FxWebApi = false;
-
-  // === 变体分流(PPI / Fetch-Write / Web API) ===
-  if (variant === "ppi") {
-    setNotice("info", "连接中", `${host}:${port} (PPI,站 2)`);
-    try {
-      await callBackend("open_ppi_tcp", { connectionId: S7_CONN_ID, host, port, station: 2 });
-      s7Connected = true;
-      s7SetState(`PPI 已连接 ${host}:${port}(站 2)`, true);
-      setNotice("success", "PPI 已连接", "双拍确认;V 区=DB1");
-    } catch (error) {
-      s7SetState("连接失败");
-      setNotice("error", "PPI 连接失败", error.message || String(error));
-    } finally { s7SyncButtons(); }
-    return;
-  }
-  if (variant === "fw") {
-    setNotice("info", "连接中", `${host}:${port} (Fetch/Write)`);
-    try {
-      await callBackend("open_fw_tcp", { connectionId: S7_CONN_ID, host, port: port || 2000 });
-      s7Connected = true;
-      s7SetState(`FW 已连接 ${host}:${port}`, true);
-      setNotice("success", "Fetch/Write 已连接", "S5 兼容通道(DB/M/I/Q 直读)");
-    } catch (error) {
-      s7SetState("连接失败");
-      setNotice("error", "FW 连接失败", error.message || String(error));
-    } finally { s7SyncButtons(); }
-    return;
-  }
-  if (variant === "webapi") {
-    const user = document.querySelector("#s7-webapi-user")?.value?.trim() || "";
-    const password = document.querySelector("#s7-webapi-pass")?.value || "";
-    if (!user) { setNotice("error", "Web 用户名为空", "CPU 属性 → 防护与安全 → 用户与权限里设置的 Web 账户"); return; }
-    setNotice("info", "连接中", `${host}:443 (Web API)`);
-    try {
-      await callBackend("s7web_connect", { host, port: 443, user, password });
-      s7Connected = true; s7FxWebApi = true;
-      s7SetState(`Web API 已登录 ${host}`, true);
-      setNotice("success", "Web API 已连接", "JSON-RPC 符号寻址(可读优化块)");
-    } catch (error) {
-      s7SetState("Web API 登录失败");
-      setNotice("error", "Web API 登录失败", error.message || String(error));
-    } finally { s7SyncButtons(); }
-    return;
-  }
-
-  // === 默认:S7comm ===
-  setNotice("info", "连接中", `${host}:${port} (rack ${rack}/slot ${slot}, ${model.toUpperCase()})`);
-  try {
-    const def = S7_MODEL_DEFAULTS[model] || {};
-    const r = await callBackend("open_s7_connection", {
-      connectionId: S7_CONN_ID, host, port, rack, slot,
-      connType: Number(document.querySelector("#s7-conn-type")?.value) || 1,
-      localTsap: document.querySelector("#s7-custom-localtsap")?.value?.trim() || def.localTsap || null,
-      remoteTsap: document.querySelector("#s7-custom-remotetsap")?.value?.trim() || def.remoteTsap || null,
-    });
-    s7Connected = true;
-    s7SetState(`已连接 · PDU ${r.pduSize}B`, true);
-    setNotice("success", "S7 已连接", `协商 PDU ${r.pduSize} 字节(单次最多读 ${r.maxReadBytes}B/写 ${r.maxWriteBytes}B)`);
-  } catch (error) {
-    s7SetState("连接失败");
-    const msg = error.message || String(error);
-    if (msg.includes("rack") || msg.includes("拒绝")) {
-      setNotice("error", "CPU 拒绝连接", msg + " · 点「连接检查清单」核对型号参数");
-    } else {
-      setNotice("error", "S7 连接失败", msg);
-    }
-  } finally {
+  const serialStation = Number(document.querySelector("#s7-serial-station")?.value);
+  const stationMax = variant === "uss" ? 30 : 126;
+  if (["ppi", "ppi-serial", "uss"].includes(variant) && (!Number.isInteger(serialStation) || serialStation < 0 || serialStation > stationMax)) {
+    s7SetState("站号无效");
+    setNotice("error", variant === "uss" ? "USS 站号无效" : "PPI 站号无效", `请输入 0 到 ${stationMax} 的整数`);
     s7SyncButtons();
+    return;
+  }
+  s7FxWebApi = false;
+  s7ActiveVariant = null;
+
+  if (!route.online) {
+    s7SetState("未接通");
+    setNotice("error", route.label + " 暂不可在线连接", route.reason);
+    s7SyncButtons();
+    return;
+  }
+
+  switch (route.kind) {
+    case "ppi-serial": {
+      setNotice("info", "检查串口", "PPI 原生 COM 只读将复用主站页串口");
+      try {
+        const status = await callBackend(route.connectCommand, {});
+        if (!status?.isOpen) throw new Error("请先在主站页打开 PPI 使用的 COM 串口(常见 9600 8E1)");
+        s7Connected = true; s7ActiveVariant = variant;
+        const cfg = status.config || {};
+        s7SetState(`PPI COM 已就绪 ${cfg.portName || "串口"}(站 ${serialStation})`, true);
+        setNotice("success", "PPI 原生串口已就绪", `${cfg.portName || "COM"} · 软件只读双拍;站 ${serialStation}`);
+      } catch (error) {
+        s7SetState("串口未就绪");
+        setNotice("error", "PPI 串口不可用", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "ppi": {
+      setNotice("info", "连接中", `${host}:${port} (PPI,站 ${serialStation})`);
+      try {
+        await callBackend(route.connectCommand, { connectionId: S7_CONN_ID, host, port, station: serialStation });
+        s7Connected = true; s7ActiveVariant = variant;
+        s7SetState("PPI 已连接 " + host + ":" + port + `(站 ${serialStation})`, true);
+        setNotice("success", "PPI 已连接", `双拍确认;V 区=DB1;站 ${serialStation}`);
+      } catch (error) {
+        s7SetState("连接失败");
+        setNotice("error", "PPI 连接失败", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "fetchwrite": {
+      setNotice("info", "连接中", `${host}:${port} (Fetch/Write)`);
+      try {
+        await callBackend(route.connectCommand, { connectionId: S7_CONN_ID, host, port: port || 2000 });
+        s7Connected = true; s7ActiveVariant = variant;
+        const portInputEl = document.querySelector("#s7-port");
+        if (portInputEl) portInputEl.value = String(port);
+        s7SetState("FW 已连接 " + host + ":" + port, true);
+        setNotice("success", "Fetch/Write 已连接", "S5 兼容通道(DB/M/I/Q 直读)");
+      } catch (error) {
+        s7SetState("连接失败");
+        setNotice("error", "FW 连接失败", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "webapi": {
+      const user = document.querySelector("#s7-webapi-user")?.value?.trim() || "";
+      const password = document.querySelector("#s7-webapi-pass")?.value || "";
+      if (!user) { setNotice("error", "Web 用户名为空", "CPU 属性 → 防护与安全 → 用户与权限里设置的 Web 账户"); return; }
+      setNotice("info", "连接中", `${host}:443 (Web API)`);
+      try {
+        await callBackend(route.connectCommand, { host, port: 443, user, password });
+        s7Connected = true; s7FxWebApi = true; s7ActiveVariant = variant;
+        s7SetState(`Web API 已登录 ${host}`, true);
+        setNotice("success", "Web API 已连接", "JSON-RPC 符号寻址(可读优化块)");
+      } catch (error) {
+        s7SetState("Web API 登录失败");
+        setNotice("error", "Web API 登录失败", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "uss-serial": {
+      setNotice("info", "检查串口", "USS 参数只读将复用主站页串口");
+      try {
+        const status = await callBackend(route.connectCommand, {});
+        if (!status?.isOpen) throw new Error("请先在主站页打开 USS 使用的 COM 串口(常见 9600 8N1)");
+        s7Connected = true; s7ActiveVariant = variant;
+        const cfg = status.config || {};
+        s7SetState(`USS COM 已就绪 ${cfg.portName || "串口"}(站 ${serialStation})`, true);
+        setNotice("success", "USS 串口已就绪", `${cfg.portName || "COM"} · 参数只读;站 ${serialStation}`);
+      } catch (error) {
+        s7SetState("串口未就绪");
+        setNotice("error", "USS 串口不可用", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "rk512-serial": {
+      setNotice("info", "检查串口", "3964R/RK512 只读将复用主站页串口");
+      try {
+        const status = await callBackend(route.connectCommand, {});
+        if (!status?.isOpen) throw new Error("请先在主站页打开 RK512 使用的 COM 串口，并核对 CP341/441 参数");
+        s7Connected = true; s7ActiveVariant = variant;
+        const cfg = status.config || {};
+        s7SetState(`RK512 COM 已就绪 ${cfg.portName || "串口"}`, true);
+        setNotice("success", "RK512 串口已就绪", `${cfg.portName || "COM"} · 3964R 链路只读`);
+      } catch (error) {
+        s7SetState("串口未就绪");
+        setNotice("error", "RK512 串口不可用", error.message || String(error));
+      } finally { s7SyncButtons(); }
+      return;
+    }
+    case "s7comm": {
+      setNotice("info", "连接中", `${host}:${port} (rack ${rack}/slot ${slot}, ${model.toUpperCase()})`);
+      try {
+        const def = S7_MODEL_DEFAULTS[model] || {};
+        const connType = Number(document.querySelector("#s7-conn-type")?.value) || 1;
+        const localTsap = document.querySelector("#s7-custom-localtsap")?.value?.trim() || def.localTsap || null;
+        const remoteTsap = document.querySelector("#s7-custom-remotetsap")?.value?.trim() || def.remoteTsap || null;
+        const attemptSlots = model === "smart" && !remoteTsap
+          ? [...new Set([slot, slot === 0 ? 1 : 0])]
+          : [slot];
+        const errors = [];
+        let r = null;
+        let connectedSlot = slot;
+        for (const attemptSlot of attemptSlots) {
+          try {
+            r = await callBackend(route.connectCommand, {
+              connectionId: S7_CONN_ID, host, port, rack, slot: attemptSlot,
+              connType, localTsap, remoteTsap,
+            });
+            connectedSlot = attemptSlot;
+            break;
+          } catch (error) {
+            errors.push(`slot ${attemptSlot}: ${error.message || String(error)}`);
+          }
+        }
+        if (!r) throw new Error(errors.join(" | "));
+        if (connectedSlot !== slot) {
+          const slotInput = document.querySelector("#s7-slot");
+          if (slotInput) slotInput.value = connectedSlot;
+        }
+        s7Connected = true; s7ActiveVariant = variant;
+        s7SetState(`已连接 · rack ${rack}/slot ${connectedSlot} · PDU ${r.pduSize}B`, true);
+        const fallback = connectedSlot !== slot ? `；slot ${slot} 失败后自动改用 ${connectedSlot}` : "";
+        setNotice("success", "S7 已连接", `协商 PDU ${r.pduSize} 字节(单次最多读 ${r.maxReadBytes}B/写 ${r.maxWriteBytes}B)${fallback}`);
+      } catch (error) {
+        s7SetState("连接失败");
+        const msg = error.message || String(error);
+        if (msg.includes("rack") || msg.includes("拒绝")) {
+          setNotice("error", "CPU 拒绝连接", msg + " · 点「连接检查清单」核对型号参数");
+        } else {
+          setNotice("error", "S7 连接失败", msg);
+        }
+      } finally {
+        s7SyncButtons();
+      }
+      return;
+    }
+    default: {
+      s7SetState("未接通");
+      setNotice("error", route.label + " 不能走 S7comm", route.reason || "未知西门子变体已 fail-closed");
+      s7SyncButtons();
+    }
   }
 }
 
 async function s7Disconnect() {
   if (!s7Connected) return;
+  const route = s7ActiveRoute();
   try {
-    await callBackend("close_connection", { connectionId: S7_CONN_ID });
+    if (route.disconnectCommand === "s7web_disconnect") {
+      await callBackend(route.disconnectCommand);
+    } else if (route.disconnectCommand) {
+      await callBackend(route.disconnectCommand, { connectionId: S7_CONN_ID });
+    }
   } catch { /* 忽略 */ }
   s7Connected = false;
+  s7FxWebApi = false;
+  s7ActiveVariant = null;
   s7SetState("未连接");
   setNotice("info", "S7 已断开", "");
   s7SyncButtons();
@@ -2770,7 +6463,7 @@ function s7RenderRows(address, data, rc, rcMsg) {
   if (!tbody) return;
   tbody.replaceChildren();
   if (!data || data.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">${rcMsg || "无数据"}</td></tr>`;
+    renderEmptyTableRow(tbody, 5, rcMsg || "无数据");
     return;
   }
   const width = s7ElemBytes(address);
@@ -2796,13 +6489,114 @@ function s7RenderRows(address, data, rc, rcMsg) {
   }
 }
 
+function s7RenderWebApiValue(address, value) {
+  const tbody = document.querySelector("#s7-results");
+  if (!tbody) return;
+  tbody.replaceChildren();
+  const rendered = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const row = document.createElement("tr");
+  for (const cell of ["1", address, "Web API ✓", rendered ?? "null", rendered ?? "null"]) {
+    const td = document.createElement("td");
+    td.textContent = cell;
+    row.append(td);
+  }
+  tbody.append(row);
+}
+
 async function s7Read() {
   if (!s7Connected) return;
   const address = document.querySelector("#s7-address")?.value?.trim();
   const count = Number(document.querySelector("#s7-points")?.value) || 1;
   if (!address) { setNotice("error", "地址无效", "请输入 S7 地址(如 DB1.DBW20 / M10.3 / VW100)"); return; }
+  const route = s7ActiveRoute();
+  if (!route.online || !route.readCommand) {
+    setNotice("error", route.label + " 未接入在线读取", route.reason || "请先选择已接通的协议变体");
+    return;
+  }
   try {
-    const r = await callBackend("s7_read", { connectionId: S7_CONN_ID, items: [{ address, count }] });
+    if (route.kind === "webapi") {
+      const value = await callBackend(route.readCommand, { varName: address, mode: "simple" });
+      s7RenderWebApiValue(address, value);
+      setNotice("success", "Web API 读取成功", address + "（符号变量结果已保留原始 JSON）");
+      return;
+    }
+    if (route.kind === "ppi") {
+      const r = await callBackend(route.readCommand, { connectionId: S7_CONN_ID, address, count });
+      const item = r.items?.[0];
+      if (!item) { setNotice("error", "PPI 读取失败", "无返回项"); return; }
+      if (item.returnCode !== 0xFF) {
+        s7RenderRows(address, item.data || [], item.returnCode, item.returnCodeMessage);
+        setNotice("error", "PPI 返回码 0x" + item.returnCode.toString(16).toUpperCase().padStart(2, "0"), item.returnCodeMessage || "");
+        return;
+      }
+      s7RenderRows(address, item.data || [], 0xFF, "");
+      setNotice("success", "PPI 读取成功", address + " × " + count + "（" + (item.data?.length || 0) + " 字节）");
+      return;
+    }
+    if (route.kind === "ppi-serial") {
+      const r = await callBackend(route.readCommand, {
+        station: Number(document.querySelector("#s7-ppi-station")?.value) || 2,
+        master: 0,
+        address,
+        count,
+        timeoutMs: 1500,
+      });
+      if (r?.ok === false) throw new Error(r.error?.message || "PPI 串口读取失败");
+      const item = r.items?.[0];
+      if (!item) { setNotice("error", "PPI 串口读取失败", "无返回项"); return; }
+      if (item.returnCode !== 0xFF) {
+        s7RenderRows(address, item.data || [], item.returnCode, item.returnCodeMessage);
+        setNotice("error", "PPI 返回码 0x" + item.returnCode.toString(16).toUpperCase().padStart(2, "0"), item.returnCodeMessage || "");
+        return;
+      }
+      s7RenderRows(address, item.data || [], 0xFF, "");
+      const profileWarning = r.serialWarnings?.length ? `；参数提示：${r.serialWarnings.join("；")}` : "";
+      setNotice("success", "PPI 原生串口读取成功", `${address} × ${count}（${item.data?.length || 0} 字节；双拍${r.attempts > 1 ? `；第 ${r.attempts} 次成功` : ""}）${profileWarning}`);
+      return;
+    }
+    if (route.kind === "uss-serial") {
+      const info = s7ParseUssAddress(address);
+      const r = await callBackend(route.readCommand, {
+        station: Number(document.querySelector("#s7-serial-station")?.value) || 1,
+        param: info.param,
+        pzdBytes: 4,
+        timeoutMs: 1500,
+      });
+      if (r?.ok === false) throw new Error(r.error?.message || "USS 串口读取失败");
+      const pzd = r.pzd || [];
+      s7RenderRows(address, pzd, 0xFF, "");
+      setNotice("success", "USS 参数读取成功", `${address} · AK ${r.pkeAkMessage || r.pkeAk || "响应"}（${pzd.length} 字节）`);
+      return;
+    }
+    if (route.kind === "rk512-serial") {
+      const r = await callBackend(route.readCommand, { address, count, timeoutMs: 1500 });
+      if (r?.ok === false) throw new Error(r.error?.message || "RK512 串口读取失败");
+      s7RenderRows(address, r.data || [], 0xFF, "");
+      setNotice("success", "RK512 读取成功", `${address} × ${count}（${r.data?.length || 0} 字节；3964R 双向握手）`);
+      return;
+    }
+    if (route.kind === "fetchwrite") {
+      const info = s7ParseFetchWriteAddress(address);
+      const length = info.elementBytes * count;
+      if (!Number.isSafeInteger(length) || length < 1 || length > 0xFFFF) {
+        throw new Error("Fetch/Write 单次读取长度必须在 1-65535 字节内");
+      }
+      const r = await callBackend(route.readCommand, {
+        connectionId: S7_CONN_ID,
+        area: info.area,
+        db: info.db,
+        address: info.address,
+        length,
+      });
+      s7RenderRows(address, r.data || [], 0xFF, "");
+      setNotice("success", "Fetch/Write 读取成功", address + " × " + count + "（" + (r.data?.length || 0) + " 字节）");
+      return;
+    }
+    if (route.kind !== "s7comm") {
+      setNotice("error", route.label + " 读取路径未知", route.reason || "未实现的西门子读取路由，已阻止回退到 S7comm");
+      return;
+    }
+    const r = await callBackend(route.readCommand, { connectionId: S7_CONN_ID, items: [{ address, count }] });
     const item = r.items?.[0];
     if (!item) { setNotice("error", "读取失败", "无返回项"); return; }
     if (item.returnCode !== 0xFF) {
@@ -2822,6 +6616,28 @@ async function s7Write() {
   const address = document.querySelector("#s7-address")?.value?.trim();
   const raw = document.querySelector("#s7-write-values")?.value?.trim() || "";
   if (!address) { setNotice("error", "地址无效", ""); return; }
+  const route = s7ActiveRoute();
+  if (!route.online || !route.writeCommand) {
+    setNotice("error", route.label + " 未接入在线写入", route.reason || "请先选择已接通的协议变体");
+    return;
+  }
+  if (route.kind === "webapi") {
+    let value;
+    try {
+      value = s7ParseWebApiValue(raw);
+    } catch (error) {
+      setNotice("error", "Web API 写入值无效", error.message || String(error));
+      return;
+    }
+    if (!confirm("将通过 Web API 写入变量 " + address + "，值为 " + JSON.stringify(value) + "。确认?")) return;
+    try {
+      await callBackend(route.writeCommand, { varName: address, value, mode: "simple" });
+      setNotice("success", "Web API 写入成功", address + " 已提交并获得服务确认");
+    } catch (error) {
+      setNotice("error", "Web API 写入失败", error.message || String(error));
+    }
+    return;
+  }
   let values = null;
   if (/^hex:/i.test(raw)) {
     values = raw.slice(4).trim().split(/[\s,]+/).filter(Boolean).map((h) => parseInt(h, 16));
@@ -2832,9 +6648,45 @@ async function s7Write() {
     setNotice("error", "写入值无效", "格式:十进制字节列表(1,2,3,4)或 hex: 12 34 56 78");
     return;
   }
-  if (values.length > 32 && !confirm(`将写入 ${values.length} 字节到 ${address},确认?`)) return;
+  if (!confirm("将通过 " + route.label + " 写入 " + values.length + " 字节到 " + address + "，确认?")) return;
   try {
-    const r = await callBackend("s7_write", { connectionId: S7_CONN_ID, items: [{ address, values }] });
+    if (route.kind === "ppi") {
+      const count = Number(document.querySelector("#s7-points")?.value) || 1;
+      const r = await callBackend(route.writeCommand, { connectionId: S7_CONN_ID, address, count, values });
+      const codes = r.returnCodes || [];
+      const msgs = r.returnCodeMessages || [];
+      if (codes.length && codes[0] !== 0xFF) {
+        setNotice("error", "PPI 写入失败 0x" + codes[0].toString(16).toUpperCase().padStart(2, "0"), msgs[0] || "");
+        return;
+      }
+      setNotice("success", "PPI 写入成功", address + " ← " + values.length + " 字节");
+      return;
+    }
+    if (route.kind === "fetchwrite") {
+      const info = s7ParseFetchWriteAddress(address);
+      if (values.length % info.elementBytes !== 0) {
+        setNotice("error", "Fetch/Write 写入长度无效", "当前地址元素宽度为 " + info.elementBytes + " 字节，写入数据必须整除该宽度");
+        return;
+      }
+      const r = await callBackend(route.writeCommand, {
+        connectionId: S7_CONN_ID,
+        area: info.area,
+        db: info.db,
+        address: info.address,
+        values,
+      });
+      if (r?.ok === false) {
+        setNotice("error", "Fetch/Write 写入失败", "设备未确认写入");
+        return;
+      }
+      setNotice("success", "Fetch/Write 写入成功", address + " ← " + values.length + " 字节");
+      return;
+    }
+    if (route.kind !== "s7comm") {
+      setNotice("error", route.label + " 写入路径未知", route.reason || "未实现的西门子写入路由，已阻止回退到 S7comm");
+      return;
+    }
+    const r = await callBackend(route.writeCommand, { connectionId: S7_CONN_ID, items: [{ address, values }] });
     const codes = r.returnCodes || [];
     const msgs = r.returnCodeMessages || [];
     if (codes.length && codes[0] !== 0xFF) {
@@ -2857,10 +6709,39 @@ async function s7Diag(cmd, args, fmt) {
     setNotice("error", "诊断失败", error.message || String(error));
   }
 }
-function s7Control(action, label) {
-  if (!confirm(`确认对 CPU 执行「${label}」?
-远程控制属高危操作,请确认设备安全。`)) return;
-  s7Diag("s7_cpu_control", { action }, (r) => `控制结果:${r.message}`);
+async function s7Control(action, label) {
+  const expectedWord = { hot: "HOT-START", cold: "COLD-START", stop: "STOP" }[action] ?? "CONFIRM";
+  const auditBase = {
+    protocol: "s7comm",
+    transport: "tcp",
+    connectionId: S7_CONN_ID,
+    functionCode: null,
+    address: label,
+    quantity: null,
+    oldValue: null,
+    newValue: null,
+  };
+  if (!confirmHighRiskControl(`S7 CPU ${label}`, expectedWord)) {
+    await recordWriteAudit({ ...auditBase, result: "cancelled", message: "用户取消或输入不一致" });
+    setNotice("info", "已取消", "未发送 S7 CPU 控制命令。");
+    return;
+  }
+  try {
+    const result = await callBackend("s7_cpu_control", { connectionId: S7_CONN_ID, action });
+    const message = `控制结果:${result.message}`;
+    const output = document.querySelector("#s7-diag-result");
+    if (output) output.textContent = message;
+    setNotice("success", "S7 CPU 控制完成", message);
+    await recordWriteAudit({ ...auditBase, result: "write-succeeded", message });
+  } catch (error) {
+    await recordWriteAudit({
+      ...auditBase,
+      result: "write-failed",
+      errorCode: error.code ?? "S7_CPU_CONTROL_FAILED",
+      message: error.message ?? String(error),
+    });
+    setNotice("error", "S7 CPU 控制失败", error.message || String(error));
+  }
 }
 function initSiemensUi() {
   const q = (id, fn, ev = "click") => {
@@ -2927,9 +6808,9 @@ function initMelsecUi() {
   const variantSel = document.querySelector("#mc-frame-type");
   if (variantSel) {
     variantSel.addEventListener("change", () => {
-      const isFx = variantSel.value === "fx-links" || variantSel.value === "fx-prog";
-      document.querySelector("#mc-net-row")?.classList.toggle("hidden", isFx);
-      document.querySelector("#mc-serial-row")?.classList.toggle("hidden", !isFx);
+      const isSerial = ["fx-links", "fx-prog", "mc-c24"].includes(variantSel.value);
+      document.querySelector("#mc-net-row")?.classList.toggle("hidden", isSerial);
+      document.querySelector("#mc-serial-row")?.classList.toggle("hidden", !isSerial);
     });
   }
   // M2:诊断与控制
@@ -2987,13 +6868,40 @@ async function mcRandomRead() {
 /** 远程控制(高危,二次确认) */
 async function mcRemoteConfirm(cmd, name, warning) {
   if (!mcConnected) return;
-  if (!window.confirm(`${name}\n\n${warning}`)) return;
+  const expectedWord = { mc_remote_run: "RUN", mc_remote_stop: "STOP", mc_remote_reset: "RESET" }[cmd] ?? "CONFIRM";
+  const auditBase = {
+    protocol: "melsec",
+    transport: document.querySelector("#mc-frame-type")?.value ?? "3e",
+    connectionId: MC_CONN_ID,
+    functionCode: null,
+    address: name,
+    quantity: null,
+    oldValue: null,
+    newValue: null,
+  };
+  if (!confirmHighRiskControl(`${name}（${warning}）`, expectedWord)) {
+    await recordWriteAudit({ ...auditBase, result: "cancelled", message: "用户取消或输入不一致" });
+    setNotice("info", "已取消", `未发送 ${name} 命令。`);
+    return;
+  }
   try {
     const r = await callBackend(cmd, { connectionId: MC_CONN_ID });
     const ok = r.endCode === 0;
     setNotice(ok ? "success" : "error", name, ok ? "已执行" : `错误 ${r.endCode?.toString(16).toUpperCase()}: ${r.endCodeMessage}`);
+    await recordWriteAudit({
+      ...auditBase,
+      result: ok ? "write-succeeded" : "write-failed",
+      errorCode: ok ? null : `MC_END_CODE_${r.endCode?.toString(16).toUpperCase()}`,
+      message: ok ? "已执行" : r.endCodeMessage,
+    });
   } catch (error) {
     setNotice("error", `${name} 失败`, error.message || String(error));
+    await recordWriteAudit({
+      ...auditBase,
+      result: "write-failed",
+      errorCode: error.code ?? "MC_REMOTE_CONTROL_FAILED",
+      message: error.message ?? String(error),
+    });
   }
 }
 
@@ -3134,6 +7042,7 @@ function saveCurrentSessionData() {
   if (tab) {
     tab.rowsHtml = elements.registerResults.innerHTML;
     tab.pointTable = pointTable.map((p) => ({ ...p }));
+    tab.trendSelection = [...trendSeries.keys()];
   }
 }
 
@@ -3145,29 +7054,36 @@ function restoreSessionData(name) {
   pointTable.length = 0;
   pointTable.push(...(tab?.pointTable ?? []).map((p) => ({ ...p })));
   activeSession = name;
+  if (!tab?.rowsHtml) renderPointRows();
+  restoreTrendSelection(tab?.trendSelection ?? []);
   // 刷新计数显示
   const rowCount = elements.registerResults.querySelectorAll("tr:not(.empty-row)").length;
   elements.pointCount.textContent = `点位 ${rowCount}`;
 }
 
-function addSessionTab() {
-  const name = `会话${sessionTabs.size}`;
-  if (sessionTabs.has(name)) return;
-  // 先保存当前标签数据
-  saveCurrentSessionData();
-  // 创建标签按钮
+function createSessionTabButton(name) {
   const btn = document.createElement("button");
   btn.className = "session-tab-btn";
   btn.dataset.session = name;
-  btn.textContent = `${name} ×`;
-  btn.title = `切换到 ${name}（点击 × 关闭）`;
+  btn.textContent = name === "default" ? "默认" : `${name} ×`;
+  btn.title = name === "default" ? "切换到默认会话" : `切换到 ${name}（点击 × 关闭）`;
   btn.addEventListener("click", (e) => {
-    if (e.offsetX > btn.offsetWidth - 20) {
+    if (name !== "default" && e.offsetX > btn.offsetWidth - 20) {
       closeSessionTab(name, btn);
     } else {
       activateSessionTab(name);
     }
   });
+  return btn;
+}
+
+function addSessionTab() {
+  let index = sessionTabs.size;
+  while (sessionTabs.has(`会话${index}`)) index += 1;
+  const name = `会话${index}`;
+  // 先保存当前标签数据
+  saveCurrentSessionData();
+  const btn = createSessionTabButton(name);
   elements.sessionTabsBar?.append(btn);
   // 新标签:空表格 + 空点表
   sessionTabs.set(name, { rowsHtml: "", pointTable: [], btn });
@@ -3176,14 +7092,14 @@ function addSessionTab() {
 }
 
 function closeSessionTab(name, btn) {
-  if (name === "default") {
-    setNotice("error", "不允许", "默认标签不可关闭。");
+  if (name === "default" || sessionTabs.size === 1) {
+    setNotice("error", "不允许", name === "default" ? "默认标签不可关闭。" : "项目至少需要保留一个会话。");
     return;
   }
   const switchingAway = activeSession === name;
   sessionTabs.delete(name);
   btn.remove();
-  if (switchingAway) activateSessionTab("default");
+  if (switchingAway) activateSessionTab(sessionTabs.has("default") ? "default" : sessionTabs.keys().next().value);
 }
 
 function activateSessionTab(name) {
@@ -3201,6 +7117,265 @@ function activateSessionTab(name) {
   setNotice("info", "切换标签", `当前: ${name}（${pointTable.length} 个点位）`);
 }
 
+let currentProjectName = "未命名项目";
+let projectHasPath = false;
+
+function collectSimulatorWorkspace() {
+  return {
+    modbus: {
+      mode: elements.slaveMode?.value === "serial" ? "serial" : "tcp",
+      port: String(Number(elements.slavePort?.value) || 502),
+      allowedStations: String(elements.slaveStations?.value ?? "").trim().slice(0, 128),
+    },
+    melsec: {
+      port: String(Number(document.querySelector("#mc-port")?.value) || 5000),
+    },
+    s7: {
+      port: String(Number(document.querySelector("#s7-port")?.value) || 102),
+    },
+  };
+}
+
+function restoreSimulatorWorkspace(simulators = {}) {
+  const modbus = simulators.modbus ?? {};
+  const melsec = simulators.melsec ?? {};
+  const s7 = simulators.s7 ?? {};
+  if (elements.slaveMode && ["tcp", "serial"].includes(modbus.mode)) {
+    elements.slaveMode.value = modbus.mode;
+  }
+  if (elements.slavePort && Number(modbus.port) >= 1 && Number(modbus.port) <= 65_535) {
+    elements.slavePort.value = String(Number(modbus.port));
+  }
+  if (elements.slaveStations && typeof modbus.allowedStations === "string") {
+    elements.slaveStations.value = modbus.allowedStations;
+  }
+  const mcPort = document.querySelector("#mc-port");
+  if (mcPort && Number(melsec.port) >= 1 && Number(melsec.port) <= 65_535) {
+    mcPort.value = String(Number(melsec.port));
+  }
+  const s7Port = document.querySelector("#s7-port");
+  if (s7Port && Number(s7.port) >= 1 && Number(s7.port) <= 65_535) {
+    s7Port.value = String(Number(s7.port));
+  }
+  updateSlaveModeVisibility();
+}
+
+function restoreHelpReference(reference) {
+  if (!reference || typeof reference !== "object") {
+    savedProtocolGuideReference = null;
+    return;
+  }
+  const source = String(reference.source ?? "");
+  const variant = String(reference.variant ?? "").slice(0, 64);
+  savedProtocolGuideReference = variant ? { source, variant } : null;
+}
+
+function setProjectIdentity(name, filePath = "") {
+  currentProjectName = String(name || "未命名项目").trim().slice(0, 128) || "未命名项目";
+  projectHasPath = Boolean(filePath);
+  if (elements.projectName) {
+    elements.projectName.textContent = currentProjectName;
+    elements.projectName.title = filePath || "当前项目尚未保存";
+  }
+}
+
+function projectNameFromPath(filePath) {
+  const filename = String(filePath || "").split(/[\\/]/).pop() || "";
+  return filename.replace(/\.nexus\.json$/i, "") || currentProjectName;
+}
+
+function projectMigrationNotice(result) {
+  const migration = result?.migration;
+  if (!migration || migration.sourceSchemaVersion === migration.targetSchemaVersion) return "";
+  return `；检测到旧格式 v${migration.sourceSchemaVersion}，已按 v${migration.targetSchemaVersion} 只读兼容打开，原文件未修改，显式保存后才升级。`;
+}
+
+function buildProjectDocument() {
+  saveCurrentSessionData();
+  return {
+    format: "nexus-project",
+    schemaVersion: 1,
+    product: "Nexus 2.0",
+    projectName: currentProjectName,
+    savedAt: null,
+    activeView,
+    activeSession,
+    config: collectPersistentConfig(),
+    sessions: [...sessionTabs.entries()].map(([name, tab]) => ({
+      name,
+      pointTable: tab.pointTable.map((point) => ({ ...point })),
+      trendSelection: [...(tab.trendSelection ?? [])],
+    })),
+    workspace: {
+      commandList: commandList.map((command) => ({ ...command })),
+      simulators: collectSimulatorWorkspace(),
+      lastHelpReference: savedProtocolGuideReference ? { ...savedProtocolGuideReference } : null,
+    },
+  };
+}
+
+function hasActiveProjectRuntime() {
+  return busy || isConnected() || Boolean(activePollId) || Boolean(pointPollTimer)
+    || slaveRunning || mcConnected || mcSlaveRunning || omConnected || omSlaveRunning
+    || s7Connected || s7SlaveRunning || sseRunning;
+}
+
+function ensureProjectSwitchIsSafe() {
+  if (!hasActiveProjectRuntime()) return true;
+  setNotice("error", "请先停止通信", "新建或打开项目前，请关闭连接、轮询、从站模拟和实时推送。当前运行状态不会被强制中断。");
+  return false;
+}
+
+function replaceProjectSessions(sessions, requestedActiveSession) {
+  sessionTabs.clear();
+  elements.sessionTabsBar?.replaceChildren();
+  for (const session of sessions) {
+    const btn = createSessionTabButton(session.name);
+    elements.sessionTabsBar?.append(btn);
+    sessionTabs.set(session.name, {
+      rowsHtml: "",
+      pointTable: session.pointTable.map((point) => ({ ...point })),
+      trendSelection: [...(session.trendSelection ?? [])],
+      btn,
+    });
+  }
+  const nextSession = sessionTabs.has(requestedActiveSession)
+    ? requestedActiveSession
+    : sessionTabs.keys().next().value;
+  activeSession = nextSession;
+  restoreSessionData(nextSession);
+  for (const tab of elements.sessionTabsBar?.querySelectorAll(".session-tab-btn") ?? []) {
+    tab.classList.toggle("is-active", tab.dataset.session === nextSession);
+  }
+  persistPointTable();
+}
+
+function askProjectName() {
+  const entered = window.prompt("项目名称", currentProjectName === "未命名项目" ? "Nexus项目" : currentProjectName);
+  if (entered === null) return null;
+  return entered.trim().slice(0, 128) || "Nexus项目";
+}
+
+async function saveProject(saveAs = false) {
+  try {
+    if (saveAs || !projectHasPath) {
+      const name = askProjectName();
+      if (name === null) return;
+      setProjectIdentity(name);
+    }
+    const result = await callBackend(saveAs ? "project_save_as" : "project_save", { document: buildProjectDocument() });
+    if (result?.canceled) return;
+    const savedName = result.document?.projectName || projectNameFromPath(result.path);
+    setProjectIdentity(savedName, result.path);
+    persistConfig();
+    setNotice("success", "项目已保存", `${savedName} · ${result.bytes} 字节`);
+  } catch (error) {
+    setNotice("error", "项目保存失败", error.message || String(error));
+  }
+}
+
+async function openProject() {
+  if (!ensureProjectSwitchIsSafe()) return;
+  try {
+    const result = await callBackend("project_open");
+    if (result?.canceled) return;
+    const project = result.document;
+    applyPersistentConfig(project.config);
+    replaceProjectSessions(project.sessions, project.activeSession);
+    replaceCommandList(project.workspace?.commandList ?? []);
+    restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
+    restoreHelpReference(project.workspace?.lastHelpReference ?? null);
+    activateView(project.activeView);
+    setProjectIdentity(project.projectName || projectNameFromPath(result.path), result.path);
+    persistConfig();
+    setNotice("success", "项目已打开", `${currentProjectName} · 已恢复 ${project.sessions.length} 个会话、模拟器配置和帮助引用；未自动连接、启动模拟器或执行写入。${projectMigrationNotice(result)}`);
+  } catch (error) {
+    setNotice("error", "项目打开失败", error.message || String(error));
+  }
+}
+
+async function exportSanitizedProject() {
+  try {
+    const result = await callBackend("project_export_sanitized", { document: buildProjectDocument() });
+    if (result?.canceled) return;
+    setNotice(
+      "success",
+      "脱敏项目已导出",
+      `${result.path} · ${result.bytes} 字节；已移除项目名、会话/点位名、主机、串口名和写入值，当前工作区未切换。`,
+    );
+  } catch (error) {
+    setNotice("error", "脱敏项目导出失败", error.message || String(error));
+  }
+}
+
+async function newProject() {
+  if (!ensureProjectSwitchIsSafe()) return;
+  if (!window.confirm("新建项目将清空当前会话和点表。尚未保存的内容会丢失，是否继续？")) return;
+  try {
+    await callBackend("project_new");
+    applyPersistentConfig({
+      transport: "rtu",
+      serial: { portName: "", baudRate: "9600", parity: "none", dataBits: "8", stopBits: "1" },
+      tcp: { host: "127.0.0.1", port: "502" },
+      command: { unitId: "1", functionCode: "3", startAddress: "0", quantity: "1", displayType: "Unsigned16", pollInterval: "1000" },
+    });
+    replaceProjectSessions([{ name: "default", pointTable: [] }], "default");
+    replaceCommandList([]);
+    restoreTrendSelection([]);
+    restoreSimulatorWorkspace({
+      modbus: { mode: "tcp", port: "502", allowedStations: "" },
+      melsec: { port: "5000" },
+      s7: { port: "102" },
+    });
+    restoreHelpReference(null);
+    activateView("master");
+    setProjectIdentity("未命名项目");
+    persistConfig();
+    setNotice("success", "已新建项目", "已建立空白项目；未连接任何设备。 ");
+  } catch (error) {
+    setNotice("error", "新建项目失败", error.message || String(error));
+  }
+}
+
+/**
+ * 启动时的一次性只读恢复：
+ * - 恢复项目配置、点表、趋势选择、任务清单和显示视图；
+ * - 不打开串口/TCP，不启动轮询/从站/实时推送，不执行指令；
+ * - 恢复失败只提示，不阻塞应用启动。
+ */
+async function restoreLastProject() {
+  if (!window.nexusDesktop) return;
+  try {
+    const result = await callBackend("project_restore_last");
+    if (result?.canceled) {
+      if (result?.reason === "restore-failed") {
+        setNotice(
+          "error",
+          "上次项目恢复失败",
+          `${result?.error?.message ?? "项目文件不可读取"}；已继续使用本地配置，未连接任何设备。`,
+        );
+      }
+      return;
+    }
+    const project = result.document;
+    applyPersistentConfig(project.config);
+    replaceProjectSessions(project.sessions, project.activeSession);
+    replaceCommandList(project.workspace?.commandList ?? []);
+    restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
+    restoreHelpReference(project.workspace?.lastHelpReference ?? null);
+    activateView(project.activeView);
+    setProjectIdentity(project.projectName || projectNameFromPath(result.path), result.path);
+    persistConfig();
+    setNotice(
+      "info",
+      "已按只读方式恢复上次项目",
+      `${currentProjectName} · 已恢复配置、点表、趋势选择、任务清单、模拟器配置和帮助引用；不自动连接、启动模拟器或执行指令。${projectMigrationNotice(result)}`,
+    );
+  } catch (error) {
+    setNotice("error", "上次项目恢复失败", `${error.message ?? String(error)}；已继续使用本地配置，未连接任何设备。`);
+  }
+}
+
 
 
 async function parseFrame() {
@@ -3212,7 +7387,7 @@ async function parseFrame() {
     renderParseResult(result);
   } catch (error) {
     if (elements.parserResult) {
-      elements.parserResult.innerHTML = `<div style="color:var(--danger)">解析失败: ${error.message || error}</div>`;
+      renderParserMessage(`解析失败: ${error.message || error}`);
     }
   }
 }
@@ -3220,7 +7395,7 @@ async function parseFrame() {
 function renderParseResult(info) {
   if (!elements.parserResult) return;
   if (!info || !info.isValid) {
-    elements.parserResult.innerHTML = `<div style="color:var(--danger)">无效报文: ${info?.error || "解析失败"}</div>`;
+    renderParserMessage(`无效报文: ${info?.error || "解析失败"}`);
     return;
   }
   const fields = [
@@ -3240,12 +7415,348 @@ function renderParseResult(info) {
     ["校验码", info.checksum ?? "—"],
     ["摘要", info.summary],
   ];
-  elements.parserResult.innerHTML = fields
-    .map(
-      ([label, value]) =>
-        `<div class="field"><span class="field-label">${label}</span><span class="field-value">${value ?? "—"}</span></div>`,
-    )
-    .join("");
+  elements.parserResult.replaceChildren();
+  for (const [label, value] of fields) {
+    const field = document.createElement("div");
+    field.className = "field";
+    const labelNode = document.createElement("span");
+    labelNode.className = "field-label";
+    labelNode.textContent = label;
+    const valueNode = document.createElement("span");
+    valueNode.className = "field-value";
+    valueNode.textContent = String(value ?? "—");
+    field.append(labelNode, valueNode);
+    elements.parserResult.append(field);
+  }
+}
+
+function renderParserMessage(message) {
+  if (!elements.parserResult) return;
+  const node = document.createElement("div");
+  node.style.color = "var(--danger)";
+  node.textContent = String(message);
+  elements.parserResult.replaceChildren(node);
+}
+
+function syncGx3Controls() {
+  if (elements.gx3SelectProject) elements.gx3SelectProject.disabled = gx3Busy;
+  if (elements.gx3AnalyzeProject) {
+    elements.gx3AnalyzeProject.disabled = gx3Busy || !gx3Available || !elements.gx3ProjectPath?.value;
+  }
+  if (elements.gx3QueryDevice) {
+    elements.gx3QueryDevice.disabled = gx3Busy || !activeGx3Analysis;
+  }
+  if (elements.gx3Device) elements.gx3Device.disabled = gx3Busy || !activeGx3Analysis;
+}
+
+function setGx3Busy(value, stateText) {
+  gx3Busy = Boolean(value);
+  if (stateText && elements.gx3AnalysisState) elements.gx3AnalysisState.textContent = stateText;
+  syncGx3Controls();
+}
+
+function createGx3Node(tagName, className, text) {
+  const node = document.createElement(tagName);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = String(text);
+  return node;
+}
+
+function createGx3Section(title) {
+  const section = createGx3Node("section", "gx3-report-section");
+  section.append(createGx3Node("h3", "", title));
+  return section;
+}
+
+function appendGx3Table(container, headers, rows) {
+  const wrap = createGx3Node("div", "gx3-table-wrap");
+  const table = createGx3Node("table", "gx3-readable-table");
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const header of headers) headRow.append(createGx3Node("th", "", header));
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    for (const value of row) tr.append(createGx3Node("td", "", value));
+    body.append(tr);
+  }
+  table.append(head, body);
+  wrap.append(table);
+  container.append(wrap);
+}
+
+function renderGx3Summary(result) {
+  if (!elements.gx3AnalysisSummary) return;
+  const view = buildGx3Presentation(result);
+  const fields = [
+    ["当前工程", view.projectName, result.sourcePath],
+    ["原始文件", view.sourceUnchanged ? "已验证未修改" : "需要复核", "解析前后进行 SHA-256 校验"],
+    ["解析方式", "本机离线只读", result.cliVersion || result.cliPath],
+  ];
+  elements.gx3AnalysisSummary.replaceChildren();
+  const grid = createGx3Node("div", "gx3-overview-grid");
+  for (const [label, value, title] of fields) {
+    const item = createGx3Node("div", "gx3-overview-item");
+    item.append(createGx3Node("span", "gx3-overview-label", label));
+    const valueNode = createGx3Node("span", "gx3-overview-value", value ?? "—");
+    if (title) valueNode.title = String(title);
+    item.append(valueNode);
+    grid.append(item);
+  }
+  elements.gx3AnalysisSummary.append(grid);
+}
+
+function renderGx3HumanReport(result) {
+  if (!elements.gx3HumanReport) return;
+  const view = buildGx3Presentation(result);
+  elements.gx3HumanReport.replaceChildren();
+
+  const metrics = createGx3Node("section", "gx3-metric-grid");
+  for (const metric of view.metrics) {
+    const item = createGx3Node("div", "gx3-metric");
+    item.append(
+      createGx3Node("span", "gx3-metric-label", metric.label),
+      createGx3Node("strong", "gx3-metric-value", metric.value),
+      createGx3Node("span", "gx3-metric-detail", metric.detail),
+    );
+    metrics.append(item);
+  }
+  elements.gx3HumanReport.append(metrics);
+
+  const purposeSection = createGx3Section("程序可能在做什么");
+  for (const hint of view.purposeHints) {
+    const card = createGx3Node("article", "gx3-purpose-card");
+    card.append(
+      createGx3Node("div", "gx3-purpose-title", hint.title),
+      createGx3Node("p", "", hint.description),
+      createGx3Node("small", "", `判断依据：${hint.evidence}`),
+      createGx3Node("small", "", hint.caution),
+    );
+    purposeSection.append(card);
+  }
+  elements.gx3HumanReport.append(purposeSection);
+
+  const qualitySection = createGx3Section("解析完整度");
+  const qualityTitle = createGx3Node("div", "gx3-inline-note", `记录覆盖率 ${view.quality.coverageLabel}`);
+  qualityTitle.append(createGx3Node("span", `gx3-badge ${view.quality.tone}`, view.quality.tone === "good" ? "完整" : "需要复核"));
+  const qualityBar = createGx3Node("div", "gx3-quality-bar");
+  const qualityFill = createGx3Node("div", `gx3-quality-fill ${view.quality.tone}`);
+  qualityFill.style.width = `${Math.round(view.quality.coverageRate * 10000) / 100}%`;
+  qualityBar.append(qualityFill);
+  qualitySection.append(
+    qualityTitle,
+    qualityBar,
+    createGx3Node("div", "gx3-inline-note", view.quality.summary),
+    createGx3Node("div", "gx3-evidence", "覆盖率表示记录是否被保留，不代表所有指令参数都已完整解码，也不构成程序安全认证。"),
+  );
+  elements.gx3HumanReport.append(qualitySection);
+
+  const structureSection = createGx3Section("程序结构");
+  const structureRows = view.pous.length
+    ? view.pous.map((pou) => [pou.displayName, pou.programFile, pou.decoded ? "名称已解码" : "名称未解码"])
+    : [["未识别到 POU", "—", "请查看技术原始结果"]];
+  appendGx3Table(structureSection, ["POU", "关联程序文件", "状态"], structureRows);
+  if (view.programFiles.length) {
+    structureSection.append(createGx3Node("div", "gx3-evidence", `程序文件：${view.programFiles.join("、")}`));
+  }
+  elements.gx3HumanReport.append(structureSection);
+
+  if (view.deviceTypes.length) {
+    const deviceSection = createGx3Section("软元件使用概况");
+    appendGx3Table(
+      deviceSection,
+      ["类型", "用途分类", "引用数量", "识别状态"],
+      view.deviceTypes.map((entry) => [entry.deviceType, entry.category, String(entry.count), entry.known ? "已识别" : "未知"]),
+    );
+    elements.gx3HumanReport.append(deviceSection);
+  }
+
+  if (view.unsupported.length || view.warnings.length) {
+    const issueSection = createGx3Section("需要回到 GX Works3 复核的内容");
+    const list = createGx3Node("ul", "gx3-plain-list");
+    for (const instruction of view.unsupported) {
+      const item = document.createElement("li");
+      item.append(
+        createGx3Node("span", "gx3-list-title", `${instruction.opcode} · ${instruction.name}（${instruction.count} 处）`),
+        createGx3Node("span", "gx3-evidence", `${instruction.description} 当前有 ${instruction.partialRows} 条记录仅部分解析。`),
+      );
+      list.append(item);
+    }
+    for (const warning of view.warnings) list.append(createGx3Node("li", "", warning));
+    issueSection.append(list);
+    elements.gx3HumanReport.append(issueSection);
+  }
+}
+
+function renderGx3DeviceSummary(result) {
+  if (!elements.gx3DeviceSummary) return;
+  const view = parseGx3DevicePresentation(result);
+  elements.gx3DeviceSummary.replaceChildren();
+  const header = createGx3Section(`${view.device} · ${view.description}`);
+  const metrics = createGx3Node("div", "gx3-metric-grid");
+  for (const metric of [
+    ["总引用", view.occurrences, "索引记录"],
+    ["写入位置", view.writers.length, "会改变该软元件"],
+    ["读取位置", view.readers.length, "把该软元件作为条件或数据使用"],
+    ["驱动行", view.driverRows, `条件使用 ${view.conditionUses} 处`],
+  ]) {
+    const item = createGx3Node("div", "gx3-metric");
+    item.append(
+      createGx3Node("span", "gx3-metric-label", metric[0]),
+      createGx3Node("strong", "gx3-metric-value", metric[1]),
+      createGx3Node("span", "gx3-metric-detail", metric[2]),
+    );
+    metrics.append(item);
+  }
+  header.append(metrics);
+  elements.gx3DeviceSummary.append(header);
+
+  const relationSection = createGx3Section("程序中的读写关系");
+  const relations = [...view.writers, ...view.readers];
+  if (relations.length) {
+    appendGx3Table(
+      relationSection,
+      ["方向", "位置", "语句", "引用方式"],
+      relations.map((entry) => [entry.direction, entry.location, String(entry.statement), entry.detail]),
+    );
+  } else {
+    relationSection.append(createGx3Node("div", "empty-guide", "没有解析到可结构化展示的写入或读取位置，请展开原始结果核对。"));
+  }
+  elements.gx3DeviceSummary.append(relationSection);
+}
+
+async function refreshGx3Status() {
+  if (!elements.gx3ToolState) return;
+  if (!window.nexusDesktop) {
+    gx3Available = false;
+    elements.gx3ToolState.textContent = "仅桌面版可用";
+    syncGx3Controls();
+    return;
+  }
+  elements.gx3ToolState.textContent = "正在检查解析器…";
+  try {
+    const status = await callBackend("gx3_status");
+    gx3Available = Boolean(status?.available);
+    elements.gx3ToolState.textContent = gx3Available
+      ? `可用 · ${status.version || "gx3-cli"}`
+      : `不可用 · ${status?.error?.message || "未找到 gx3-cli"}`;
+  } catch (error) {
+    gx3Available = false;
+    elements.gx3ToolState.textContent = `检查失败 · ${error.message || error}`;
+  }
+  syncGx3Controls();
+}
+
+async function selectGx3Project() {
+  if (gx3Busy) return;
+  try {
+    const result = await callBackend("gx3_select_project");
+    if (result?.canceled) return;
+    elements.gx3ProjectPath.value = result.path || "";
+    activeGx3Analysis = null;
+    if (elements.gx3AnalysisState) elements.gx3AnalysisState.textContent = "等待解析";
+    if (elements.gx3HumanReport) {
+      const guide = createGx3Node("div", "empty-guide", "项目已选择。点击“开始只读解析”，Nexus 会生成中文程序概览。");
+      elements.gx3HumanReport.replaceChildren(guide);
+    }
+    if (elements.gx3AnalysisOutput) elements.gx3AnalysisOutput.textContent = "已选择项目，尚未生成技术原始结果。";
+    if (elements.gx3TechnicalDetails) elements.gx3TechnicalDetails.open = false;
+    if (elements.gx3DeviceSummary) {
+      const guide = createGx3Node("div", "empty-guide", "完成项目解析后，可查询软元件的中文说明和读写位置。");
+      elements.gx3DeviceSummary.replaceChildren(guide);
+    }
+    if (elements.gx3DeviceOutput) elements.gx3DeviceOutput.textContent = "尚未查询软元件。";
+    if (elements.gx3DeviceTechnical) {
+      elements.gx3DeviceTechnical.open = false;
+      elements.gx3DeviceTechnical.classList.remove("has-result");
+    }
+    if (elements.gx3AnalysisSummary) {
+      const guide = document.createElement("div");
+      guide.className = "empty-guide";
+      guide.textContent = `已选择：${result.path}`;
+      elements.gx3AnalysisSummary.replaceChildren(guide);
+    }
+    syncGx3Controls();
+  } catch (error) {
+    setNotice("error", "GX3 项目选择失败", error.message || String(error));
+  }
+}
+
+async function analyzeGx3Project() {
+  const sourcePath = elements.gx3ProjectPath?.value?.trim();
+  if (!sourcePath || gx3Busy || !gx3Available) return;
+  activeGx3Analysis = null;
+  setGx3Busy(true, "正在复制并解析…");
+  if (elements.gx3HumanReport) {
+    const guide = createGx3Node("div", "empty-guide", "正在读取程序结构、软元件类型和交叉引用，请稍候…");
+    elements.gx3HumanReport.replaceChildren(guide);
+  }
+  if (elements.gx3AnalysisOutput) {
+    elements.gx3AnalysisOutput.textContent = "正在建立私有工作副本并运行 doctor、index-lite、xref…\n复杂项目可能需要几十秒。";
+  }
+  try {
+    const result = await callBackend("gx3_analyze_project", { sourcePath });
+    activeGx3Analysis = result;
+    renderGx3Summary(result);
+    renderGx3HumanReport(result);
+    if (elements.gx3AnalysisOutput) elements.gx3AnalysisOutput.textContent = formatGx3TechnicalReport(result);
+    if (elements.gx3TechnicalDetails) elements.gx3TechnicalDetails.open = false;
+    if (elements.gx3AnalysisState) elements.gx3AnalysisState.textContent = "只读解析完成";
+    setNotice("success", "GX3 项目解析完成", `识别到 ${result.programMap?.pous?.length ?? 0} 个 POU；原始 .gx3 未修改。`);
+  } catch (error) {
+    if (elements.gx3AnalysisState) elements.gx3AnalysisState.textContent = "解析失败";
+    if (elements.gx3HumanReport) {
+      const guide = createGx3Node("div", "empty-guide", `解析失败：${error.message || error}`);
+      elements.gx3HumanReport.replaceChildren(guide);
+    }
+    if (elements.gx3AnalysisOutput) elements.gx3AnalysisOutput.textContent = `解析失败：${error.message || error}`;
+    setNotice("error", "GX3 项目解析失败", error.message || String(error));
+  } finally {
+    setGx3Busy(false);
+  }
+}
+
+async function queryGx3Device() {
+  const device = elements.gx3Device?.value?.trim();
+  if (!device || !activeGx3Analysis || gx3Busy) return;
+  setGx3Busy(true, `正在查询 ${device.toUpperCase()}…`);
+  if (elements.gx3DeviceSummary) {
+    const guide = createGx3Node("div", "empty-guide", `正在整理 ${device.toUpperCase()} 的说明和程序读写关系…`);
+    elements.gx3DeviceSummary.replaceChildren(guide);
+  }
+  if (elements.gx3DeviceOutput) elements.gx3DeviceOutput.textContent = "正在查询索引和交叉引用…";
+  try {
+    const result = await callBackend("gx3_query_device", {
+      analysisId: activeGx3Analysis.analysisId,
+      device,
+    });
+    if (elements.gx3Device) elements.gx3Device.value = result.device;
+    renderGx3DeviceSummary(result);
+    if (elements.gx3DeviceOutput) {
+      elements.gx3DeviceOutput.textContent = [
+        `[${result.device} · 索引查询]`,
+        result.index || "没有索引结果。",
+        "",
+        `[${result.device} · 写入/读取交叉引用]`,
+        result.xref || "没有交叉引用结果。",
+      ].join("\n");
+    }
+    if (elements.gx3DeviceTechnical) {
+      elements.gx3DeviceTechnical.classList.add("has-result");
+      elements.gx3DeviceTechnical.open = false;
+    }
+    if (elements.gx3AnalysisState) elements.gx3AnalysisState.textContent = `已查询 ${result.device}`;
+  } catch (error) {
+    if (elements.gx3DeviceSummary) {
+      const guide = createGx3Node("div", "empty-guide", `查询失败：${error.message || error}`);
+      elements.gx3DeviceSummary.replaceChildren(guide);
+    }
+    if (elements.gx3DeviceOutput) elements.gx3DeviceOutput.textContent = `查询失败：${error.message || error}`;
+    setNotice("error", "GX3 软元件查询失败", error.message || String(error));
+  } finally {
+    setGx3Busy(false);
+  }
 }
 
 function syncPollState() {
@@ -3472,9 +7983,20 @@ function clearEmptyRow(body) {
 function appendCells(row, values) {
   for (const value of values) {
     const cell = document.createElement("td");
-    cell.textContent = String(value ?? "—");
+    if (value instanceof Node) cell.append(value);
+    else cell.textContent = String(value ?? "—");
     row.append(cell);
   }
+}
+
+function renderEmptyTableRow(body, columnCount, message) {
+  const row = document.createElement("tr");
+  row.className = "empty-row";
+  const cell = document.createElement("td");
+  cell.colSpan = columnCount;
+  cell.textContent = String(message);
+  row.append(cell);
+  body.replaceChildren(row);
 }
 
 function refreshStats() {
@@ -3652,6 +8174,95 @@ function getRegPerElem(dataType) {
   return 1;
 }
 
+function renderCoils(command, coils) {
+  elements.registerResults.replaceChildren();
+  const updatedAt = clockTime();
+  const discrete = command.functionCode === 2;
+  const prefix = discrete ? "DI" : "C";
+  const area = discrete ? "离散输入" : "线圈";
+  for (let i = 0; i < coils.length; i++) {
+    const address = command.startAddress + i;
+    const row = document.createElement("tr");
+    appendCells(row, [
+      "●",
+      `${prefix} ${address}`,
+      area,
+      address,
+      "Bool",
+      "—",
+      "1",
+      "—",
+      coils[i] ? "ON" : "OFF",
+      "Good",
+      updatedAt,
+    ]);
+    row.lastElementChild.previousElementSibling.classList.add("quality-good");
+    elements.registerResults.append(row);
+  }
+  elements.pointCount.textContent = `点位 ${coils.length}`;
+}
+
+async function invokeModbusRead(command) {
+  const backendCommand = resolveModbusReadCommand(command.transport, command.functionCode);
+  if (!backendCommand) {
+    throw new Error(`不支持的 Modbus 读组合：${command.transport} FC${command.functionCode}`);
+  }
+  const isBits = command.functionCode === 1 || command.functionCode === 2;
+  if (modbusNetworkPrefix(command.transport)) {
+    const result = await callBackend(backendCommand, {
+      connectionId: "default",
+      startAddress: command.startAddress,
+      quantity: command.quantity,
+    });
+    return {
+      ok: !result.exceptionCode,
+      registers: result.registers || [],
+      coils: result.coils || [],
+      values: (isBits ? result.coils : result.registers) || [],
+      tx: null,
+      rx: null,
+      elapsedMs: result.elapsedMs ?? null,
+      crcValid: null,
+      error: result.exceptionCode ? { message: `异常码 ${result.exceptionCode}` } : null,
+    };
+  }
+  const result = await callBackend(backendCommand, command);
+  return {
+    ...result,
+    values: (isBits ? result.coils : result.registers) || [],
+  };
+}
+
+async function invokeModbusWrite(command, writePayload) {
+  const backendCommand = resolveModbusWriteCommand(command.transport, command.functionCode);
+  if (!backendCommand) {
+    throw new Error(`不支持的 Modbus 写组合：${command.transport} FC${command.functionCode}`);
+  }
+  if (modbusNetworkPrefix(command.transport)) {
+    const result = await callBackend(backendCommand, {
+      connectionId: "default",
+      address: command.startAddress,
+      value: writePayload.value,
+      values: writePayload.values,
+    });
+    return {
+      ok: !result.exceptionCode,
+      tx: null,
+      rx: null,
+      elapsedMs: result.elapsedMs ?? null,
+      crcValid: null,
+      error: result.exceptionCode ? { message: `异常码 ${result.exceptionCode}` } : null,
+    };
+  }
+  return callBackend(backendCommand, {
+    unitId: command.unitId,
+    address: command.startAddress,
+    timeoutMs: command.timeoutMs,
+    transport: command.transport,
+    ...writePayload,
+  });
+}
+
 async function readRegistersOnce() {
   if (busy || !isConnected()) return;
   let command;
@@ -3664,37 +8275,18 @@ async function readRegistersOnce() {
 
   setBusy(true);
   const functionLabel = `FC${String(command.functionCode).padStart(2, "0")}`;
-  const registerLabel = command.functionCode === 4 ? "输入寄存器" : "保持寄存器";
+  const isBits = command.functionCode === 1 || command.functionCode === 2;
+  const registerLabel = command.functionCode === 2
+    ? "离散输入"
+    : command.functionCode === 1
+      ? "线圈"
+      : command.functionCode === 4
+        ? "输入寄存器"
+        : "保持寄存器";
   elements.commandState.textContent = `正在执行 ${functionLabel}`;
   setNotice("info", "正在读取", `站号 ${command.unitId}，地址 ${command.startAddress}，数量 ${command.quantity}。`);
   try {
-    const isTcpMode = ["tcp", "rtu-over-tcp", "ascii-over-tcp", "udp"].includes(command.transport);
-    let response;
-    if (isTcpMode) {
-      // TCP/UDP 连接走 tcp_* 命令(Rust 持 socket,不经串口)
-      const tcpCmdMap = { 1: "tcp_read_coils", 2: "tcp_read_discrete_inputs", 3: "tcp_read_holding_registers", 4: "tcp_read_input_registers" };
-      const r = await callBackend(tcpCmdMap[command.functionCode] || "tcp_read_holding_registers", {
-        connectionId: "default",
-        startAddress: command.startAddress,
-        quantity: command.quantity,
-      });
-      // 归一化响应格式(与 *_once 对齐)
-      response = {
-        ok: !r.exceptionCode,
-        registers: r.registers || [],
-        coils: r.coils || [],
-        tx: null, rx: null,
-        elapsedMs: null,
-        crcValid: null,
-        error: r.exceptionCode ? { message: `异常码 ${r.exceptionCode}` } : null,
-      };
-    } else {
-      // 串口走 *_once(Electron 持 COM 口)
-      const backendCommand = command.functionCode === 4
-        ? "read_input_registers_once"
-        : "read_holding_registers_once";
-      response = await callBackend(backendCommand, command);
-    }
+    const response = await invokeModbusRead(command);
     appendTrace({
       direction: "TX",
       unitId: command.unitId,
@@ -3707,6 +8299,7 @@ async function readRegistersOnce() {
 
     const error = response.error ?? null;
     const rxCrc = response.crcValid === true ? "通过" : response.crcValid === false ? "失败" : "未校验";
+    const valueCount = (response.values || []).length;
     appendTrace({
       direction: "RX",
       unitId: command.unitId,
@@ -3714,12 +8307,13 @@ async function readRegistersOnce() {
       bytes: response.rx,
       crc: rxCrc,
       elapsedMs: response.elapsedMs,
-      result: response.ok ? `${response.registers.length} 个寄存器` : error?.message ?? "读取失败",
+      result: response.ok ? `${valueCount} 个${registerLabel}` : error?.message ?? "读取失败",
     });
 
     if (response.ok) {
-      await renderRegisters(command, response.registers);
-      setNotice("success", "读取完成", `收到 ${response.registers.length} 个${registerLabel}，CRC 校验通过。`);
+      if (isBits) renderCoils(command, response.coils || response.values || []);
+      else await renderRegisters(command, response.registers || response.values || []);
+      setNotice("success", "读取完成", `收到 ${valueCount} 个${registerLabel}${response.crcValid === true ? "，CRC 校验通过" : ""}。`);
     } else {
       const code = error?.code ?? "READ_FAILED";
       stats.errors += 1;
@@ -3740,6 +8334,91 @@ async function readRegistersOnce() {
   }
 }
 
+function writeQuantity(functionCode, writePayload) {
+  if (functionCode === 5 || functionCode === 6) return 1;
+  return (writePayload.values ?? []).length;
+}
+
+function writeNewValue(functionCode, writePayload) {
+  if (functionCode === 5 || functionCode === 6) return [writePayload.value];
+  return [...(writePayload.values ?? [])];
+}
+
+function formatWriteValue(value) {
+  const items = Array.isArray(value) ? value : [value];
+  return JSON.stringify(items.slice(0, 32)) + (items.length > 32 ? " …" : "");
+}
+
+async function readCurrentValueForWrite(command) {
+  try {
+    const response = await invokeModbusRead({
+      ...command,
+      functionCode: isModbusBitFunction(command.functionCode)
+        ? (command.functionCode === 5 || command.functionCode === 15 ? 1 : 2)
+        : (command.functionCode === 6 || command.functionCode === 16 ? 3 : 4),
+    });
+    return {
+      ok: response.ok,
+      values: response.values ?? [],
+      error: response.error,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      values: null,
+      error: { code: error.code ?? "PRE_READ_FAILED", message: error.message ?? String(error) },
+    };
+  }
+}
+
+function confirmModbusWrite(command, oldValue, newValue) {
+  const functionLabel = `FC${String(command.functionCode).padStart(2, "0")}`;
+  return window.confirm(
+    `确认执行 ${functionLabel} 写入？\n\n`
+    + `传输：${command.transport.toUpperCase()}　站号：${command.unitId}\n`
+    + `地址：${command.startAddress}..${command.startAddress + command.quantity - 1}\n`
+    + `旧值：${formatWriteValue(oldValue)}\n`
+    + `新值：${formatWriteValue(newValue)}\n\n`
+    + "写入后将按同地址回读核对；请确认现场设备与工艺安全。",
+  );
+}
+
+async function recordWriteAudit(entry) {
+  try {
+    return await callBackend("record_write_audit", {
+      protocol: "modbus",
+      timestamp: new Date().toISOString(),
+      ...entry,
+    });
+  } catch (error) {
+    appendAlarm({
+      code: "WRITE_AUDIT_FAILED",
+      message: `写入审计记录失败：${error.message ?? String(error)}`,
+    });
+    refreshStats();
+    return null;
+  }
+}
+
+async function readbackAfterWrite(command) {
+  const readback = await readCurrentValueForWrite(command);
+  return readback;
+}
+
+function valuesEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function confirmHighRiskControl(name, expectedWord) {
+  const entered = window.prompt(
+    `高危设备控制：${name}\n\n`
+    + `如确认继续，请输入 ${expectedWord}（区分大小写）。\n`
+    + "取消或输入不一致时不会发送任何控制命令。",
+  );
+  return String(entered ?? "").trim() === expectedWord;
+}
+
 async function writeRegistersOnce() {
   if (busy || !isConnected()) return;
   let command;
@@ -3757,40 +8436,66 @@ async function writeRegistersOnce() {
     setNotice("error", "写入值无效", error.message);
     return;
   }
+  command.quantity = writeQuantity(functionCode, writePayload);
+  const newValue = writeNewValue(functionCode, writePayload);
+  const auditBase = {
+    transport,
+    connectionId: ["tcp", "rtu-over-tcp", "ascii-over-tcp", "udp"].includes(transport) ? "default" : `serial:${unitId}`,
+    unitId,
+    functionCode,
+    address,
+    quantity: command.quantity,
+    newValue,
+  };
+
+  if (unitId === 0) {
+    await recordWriteAudit({
+      ...auditBase,
+      result: "pre-read-failed",
+      errorCode: "BROADCAST_WRITE_BLOCKED",
+      message: "广播写无法取得旧值或回读，安全写入门禁已阻止",
+    });
+    setNotice("error", "广播写已阻止", "当前安全写入流程要求写前旧值和写后回读；广播站号 0 无法满足。");
+    return;
+  }
 
   setBusy(true);
   const functionLabel = `FC${String(functionCode).padStart(2, "0")}`;
+  elements.commandState.textContent = `正在读取 ${functionLabel} 写入旧值`;
+  setNotice("info", "安全写入", `正在读取站号 ${unitId} 地址 ${address} 的旧值。`);
+  const oldRead = await readCurrentValueForWrite(command);
+  if (!oldRead.ok) {
+    await recordWriteAudit({
+      ...auditBase,
+      oldValue: null,
+      result: "pre-read-failed",
+      errorCode: oldRead.error?.code ?? "PRE_READ_FAILED",
+      message: oldRead.error?.message ?? "写前读取旧值失败",
+    });
+    stats.errors += 1;
+    appendAlarm({ code: "PRE_READ_FAILED", message: oldRead.error?.message ?? "写前读取旧值失败" });
+    refreshStats();
+    setNotice("error", "写入已阻止", "无法读取旧值；当前安全流程不允许盲写。");
+    setBusy(false);
+    elements.commandState.textContent = isConnected() ? commandReadyText() : "请先打开串口";
+    return;
+  }
+  const oldValue = oldRead.values;
+  if (!confirmModbusWrite(command, oldValue, newValue)) {
+    await recordWriteAudit({ ...auditBase, oldValue, result: "cancelled" });
+    setNotice("info", "已取消", "用户取消了本次写入。");
+    setBusy(false);
+    elements.commandState.textContent = isConnected() ? commandReadyText() : "请先打开串口";
+    return;
+  }
+
   elements.commandState.textContent = `正在执行 ${functionLabel} 写入`;
   setNotice("info", "正在写入", `站号 ${unitId}，地址 ${address}。`);
   try {
-    const isTcpMode = ["tcp", "rtu-over-tcp", "ascii-over-tcp", "udp"].includes(transport);
-    let response;
-    if (isTcpMode) {
-      // TCP/UDP 走 tcp_write_*(Rust 持 socket)
-      const tcpWMap = { 5: "tcp_write_single_coil", 6: "tcp_write_single_register", 15: "tcp_write_multiple_coils", 16: "tcp_write_multiple_registers" };
-      const r = await callBackend(tcpWMap[functionCode] || "tcp_write_multiple_registers", {
-        connectionId: "default",
-        address: address,
-        value: writePayload.value,
-        values: writePayload.values,
-      });
-      response = {
-        ok: !r.exceptionCode,
-        tx: null, rx: null,
-        elapsedMs: null,
-        crcValid: null,
-        error: r.exceptionCode ? { message: `异常码 ${r.exceptionCode}` } : null,
-      };
-    } else {
-      // 串口走 *_once
-      const fcMap = {
-        5: "write_single_coil_once",
-        6: "write_single_register_once",
-        15: "write_multiple_coils_once",
-        16: "write_multiple_registers_once",
-      };
-      response = await callBackend(fcMap[functionCode], { unitId, address, timeoutMs, transport, ...writePayload });
-    }
+    const response = await invokeModbusWrite({
+      ...command,
+      startAddress: address,
+    }, writePayload);
 
     appendTrace({
       direction: "TX",
@@ -3814,13 +8519,54 @@ async function writeRegistersOnce() {
     });
 
     if (response.ok) {
-      if (response.broadcast) {
-        setNotice("success", "广播发送", `已向站号 0 广播 ${functionLabel} 命令(无响应)。`);
-      } else {
-        setNotice("success", "写入完成", `${functionLabel} 地址 ${address} CRC 校验通过。`);
+      elements.commandState.textContent = `正在回读 ${functionLabel}`;
+      const readback = await readbackAfterWrite(command);
+      if (!readback.ok) {
+        await recordWriteAudit({
+          ...auditBase,
+          oldValue,
+          result: "readback-failed",
+          errorCode: readback.error?.code ?? "READBACK_FAILED",
+          message: readback.error?.message ?? "写后回读失败",
+        });
+        stats.errors += 1;
+        appendAlarm({ code: "READBACK_FAILED", message: readback.error?.message ?? "写后回读失败" });
+        refreshStats();
+        setNotice("error", "回读失败", "写入命令已被设备确认，但写后回读未完成；请手动核对当前值。");
+        return;
       }
+      if (!valuesEqual(readback.values, newValue)) {
+        await recordWriteAudit({
+          ...auditBase,
+          oldValue,
+          readbackValue: readback.values,
+          result: "readback-mismatch",
+          errorCode: "READBACK_MISMATCH",
+          message: `写入后回读不一致：${formatWriteValue(readback.values)}`,
+        });
+        stats.errors += 1;
+        appendAlarm({ code: "READBACK_MISMATCH", message: `期望 ${formatWriteValue(newValue)}，实际 ${formatWriteValue(readback.values)}` });
+        refreshStats();
+        setNotice("error", "回读不一致", `写入已确认但读回值不匹配；期望 ${formatWriteValue(newValue)}，实际 ${formatWriteValue(readback.values)}。`);
+        return;
+      }
+      await recordWriteAudit({
+        ...auditBase,
+        oldValue,
+        readbackValue: readback.values,
+        result: "write-succeeded",
+        message: "写入后回读一致",
+      });
+      setNotice("success", "写入完成并回读一致", `${functionLabel} 地址 ${address}；旧值 ${formatWriteValue(oldValue)} → 新值 ${formatWriteValue(newValue)}。`);
     } else {
       const code = error?.code ?? "WRITE_FAILED";
+      await recordWriteAudit({
+        ...auditBase,
+        oldValue,
+        result: "write-failed",
+        errorCode: code,
+        message: error?.message ?? "写入失败",
+      });
       stats.errors += 1;
       if (code.includes("TIMEOUT")) stats.timeout += 1;
       appendAlarm({ code, message: error?.message ?? "写入失败" });
@@ -3829,6 +8575,13 @@ async function writeRegistersOnce() {
     refreshStats();
   } catch (error) {
     stats.errors += 1;
+    await recordWriteAudit({
+      ...auditBase,
+      oldValue,
+      result: "write-failed",
+      errorCode: error.code ?? "IPC_ERROR",
+      message: error.message ?? String(error),
+    });
     appendAlarm({ code: error.code ?? "IPC_ERROR", message: error.message ?? String(error) });
     refreshStats();
     setNotice("error", "写入失败", error.message ?? String(error));
@@ -3896,9 +8649,12 @@ async function openPort(event) {
   setBusy(true);
   setNotice("info", "正在打开", `正在应用 ${config.portName} 的通信参数。`);
   try {
+    const t0 = performance.now();
     const status = await callBackend("open_serial_port", { config });
+    const ms = performance.now() - t0;
     renderStatus(status);
-    setNotice("success", "串口句柄已打开", `${config.portName} 已建立独占句柄；尚未验证从站通信。`);
+    elements.connectionLabel.textContent = `${config.portName} 已打开 · ${ms.toFixed(0)} ms`;
+    setNotice("success", "串口句柄已打开", `${config.portName} 已建立独占句柄 · 打开耗时 ${ms.toFixed(0)} ms；尚未验证从站通信。`);
     persistConfig(); // 保存连接配置
   } catch (error) {
     renderConnectionFault(`打开失败：${String(error)}`);
@@ -3953,6 +8709,11 @@ function toggleConsole() {
 }
 
 async function initialise() {
+  if (elements.projectNew) elements.projectNew.addEventListener("click", newProject);
+  if (elements.projectOpen) elements.projectOpen.addEventListener("click", openProject);
+  if (elements.projectSave) elements.projectSave.addEventListener("click", () => saveProject(false));
+  if (elements.projectSaveAs) elements.projectSaveAs.addEventListener("click", () => saveProject(true));
+  if (elements.projectExportSanitized) elements.projectExportSanitized.addEventListener("click", exportSanitizedProject);
   elements.refresh.addEventListener("click", () => refreshPorts());
   elements.form.addEventListener("submit", openPort);
   elements.close.addEventListener("click", closePort);
@@ -3984,6 +8745,7 @@ async function initialise() {
   if (elements.disconnectTcp) elements.disconnectTcp.addEventListener("click", disconnectTcp);
   if (elements.scanStations) elements.scanStations.addEventListener("click", scanStations);
   if (elements.scanBaud) elements.scanBaud.addEventListener("click", scanBaudRate);
+  if (elements.scanAll) elements.scanAll.addEventListener("click", scanAll);
   if (elements.startPoll) elements.startPoll.addEventListener("click", startPoll);
   if (elements.stopPoll) elements.stopPoll.addEventListener("click", stopPoll);
   if (elements.addCmd) elements.addCmd.addEventListener("click", addCurrentCommand);
@@ -4017,7 +8779,25 @@ async function initialise() {
   // 报文解析
   if (elements.parserParse) elements.parserParse.addEventListener("click", parseFrame);
   if (elements.parserClear) elements.parserClear.addEventListener("click", () => { if (elements.parserInput) elements.parserInput.value = ""; if (elements.parserResult) elements.parserResult.innerHTML = '<div class="console-empty">输入 HEX 后点"解析报文"</div>'; });
+  // GX Works3 项目只读解析
+  if (elements.gx3SelectProject) elements.gx3SelectProject.addEventListener("click", selectGx3Project);
+  if (elements.gx3AnalyzeProject) elements.gx3AnalyzeProject.addEventListener("click", analyzeGx3Project);
+  if (elements.gx3QueryDevice) elements.gx3QueryDevice.addEventListener("click", queryGx3Device);
+  if (elements.gx3Device) {
+    elements.gx3Device.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void queryGx3Device();
+      }
+    });
+  }
+  syncGx3Controls();
   // G8: 多会话标签页
+  const defaultSessionButton = elements.sessionTabsBar?.querySelector('[data-session="default"]');
+  if (defaultSessionButton) {
+    defaultSessionButton.addEventListener("click", () => activateSessionTab("default"));
+    sessionTabs.get("default").btn = defaultSessionButton;
+  }
   if (elements.addSessionTab) elements.addSessionTab.addEventListener("click", addSessionTab);
   if (elements.addPoint) elements.addPoint.addEventListener("click", addPoint);
   if (elements.importPoints) elements.importPoints.addEventListener("click", importPoints);
@@ -4123,16 +8903,48 @@ async function initialise() {
   // 恢复上次配置和点表(localStorage 持久化)
   restoreConfig();
   restorePointTable();
+  await restoreLastProject();
   // 三菱 MC 页面初始化
   initMelsecUi();
   initSiemensUi();
   initOmronUi();
+  initAllenBradleyUi();
+  initBeckhoffUi();
+  initKeyenceUi();
+  initLsXgtUi();
+  initDeltaUi();
+  initInovanceUi();
+  initXinjeUi();
+  initFatekUi();
+  initFujiUi();
+  initGeUi();
+  initPanasonicUi();
+  initMqttUi();
+  initIec104Ui();
+  initDnp3Ui();
+  initDlt645Ui();
+  initCjt188Ui();
+  initBacnetUi();
+  initKnxUi();
   initInterfacesUi();
+  initProtocolGuides();
+  initCardCollapse(document);
   const diagBtn = document.querySelector("#export-diagnostics");
   if (diagBtn) diagBtn.addEventListener("click", async () => {
     try {
-      const r = await callBackend("export_diagnostics");
-      if (r.ok) setNotice("success", "诊断报告已导出", "桌面:" + r.path);
+      const r = await callBackend("export_diagnostics", {
+        recentFrames: traceHistory.slice(-100),
+        projectSnapshot: {
+          projectName: currentProjectName,
+          hasPath: projectHasPath,
+          activeView,
+          activeSession,
+          config: collectPersistentConfig(),
+          sessionCount: sessionTabs.size,
+          pointCount: [...sessionTabs.values()].reduce((total, tab) => total + tab.pointTable.length, 0),
+        },
+      });
+      if (r.ok) setNotice("success", "诊断报告已导出", `桌面: ${r.path}（另附 TXT 摘要）`);
       else setNotice("error", "导出失败", r.message || "");
     } catch (e) { setNotice("error", "导出失败", e.message || String(e)); }
   });

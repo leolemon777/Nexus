@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "kind": "nexus-build-evidence",
+  "generatedAt": "2026-08-23T12:53:36.791Z",
+  "qualification": "candidate-dirty-source",
+  "source": {
+    "commit": "93cd0ee270db81b1a1cbe27d43022dd99a9b4a3d",
+    "dirty": true
+  },
+  "releaseManifest": null,
+  "overallOk": true,
+  "counts": {
+    "commands": 5,
+    "passed": 5,
+    "failed": 0
+  },
+  "commands": [
+    {
+      "id": "rust-jsonl-and-interop",
+      "title": "Rust JSONL, protocol interop, and R0 soak harness",
+      "program": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "E:\\Desktop\\Nexus2.0\\Nexus-Rust\\scripts\\test-rust-jsonl.ps1"
+      ],
+      "exitCode": 0,
+      "ok": true,
+      "startedAt": "2026-08-23T12:53:21.370Z",
+      "endedAt": "2026-08-23T12:53:29.847Z",
+      "durationMs": 8475,
+      "log": {
+        "path": "rust-jsonl-and-interop.log",
+        "bytes": 10639,
+        "sha256": "3fc825592005be3472f7fc4b322b5fc3c5112d3cc64e462a72b2fbbe8e5bf1cb"
+      }
+    },
+    {
+      "id": "electron-and-release-regression",
+      "title": "Electron and release tooling regression",
+      "program": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "npm.cmd run test:electron"
+      ],
+      "exitCode": 0,
+      "ok": true,
+      "startedAt": "2026-08-23T12:53:29.848Z",
+      "endedAt": "2026-08-23T12:53:31.685Z",
+      "durationMs": 1836,
+      "log": {
+        "path": "electron-and-release-regression.log",
+        "bytes": 17086,
+        "sha256": "4bdb68a81947875e422ee667c80ca47e02d7ea7196c21e3371cff5f2d10c5aff"
+      }
+    },
+    {
+      "id": "web-build",
+      "title": "Vite production build",
+      "program": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "npm.cmd run build"
+      ],
+      "exitCode": 0,
+      "ok": true,
+      "startedAt": "2026-08-23T12:53:31.685Z",
+      "endedAt": "2026-08-23T12:53:32.955Z",
+      "durationMs": 1270,
+      "log": {
+        "path": "web-build.log",
+        "bytes": 572,
+        "sha256": "7950f5d1c53c3afc6d69179f758a3dfbd185cfd1d1755aeaf7f41360ea1810ab"
+      }
+    },
+    {
+      "id": "electron-smoke",
+      "title": "Electron desktop smoke",
+      "program": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "npm.cmd run smoke:electron"
+      ],
+      "exitCode": 0,
+      "ok": true,
+      "startedAt": "2026-08-23T12:53:32.955Z",
+      "endedAt": "2026-08-23T12:53:34.099Z",
+      "durationMs": 1143,
+      "log": {
+        "path": "electron-smoke.log",
+        "bytes": 521,
+        "sha256": "79ee05c40b838485a8e3e16d6f3335c2f713fe85efdc73c9ccd7bd6c18527cfd"
+      }
+    },
+    {
+      "id": "npm-audit",
+      "title": "npm security audit",
+      "program": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "npm.cmd run audit"
+      ],
+      "exitCode": 0,
+      "ok": true,
+      "startedAt": "2026-08-23T12:53:34.099Z",
+      "endedAt": "2026-08-23T12:53:36.791Z",
+      "durationMs": 2691,
+      "log": {
+        "path": "npm-audit.log",
+        "bytes": 206,
+        "sha256": "71a252cbef2da018dad6efd8d83ac0e99d9e3240679955d617c0e61429ebac1c"
+      }
+    }
+  ]
+}

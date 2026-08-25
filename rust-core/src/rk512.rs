@@ -19,9 +19,16 @@ pub const DLE: u8 = 0x10;
 pub const STX: u8 = 0x02;
 pub const ETX: u8 = 0x03;
 pub const NAK: u8 = 0x15;
+/// 软件首轮 RK512 单次读取字数上限；设备/CP 型号限制仍需 L2 记录。
+pub const RK512_MAX_WORDS: u16 = 512;
+const RK512_MAX_BYTES: usize = 512 * 2;
 
 fn rk512_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "RK512_INVALID", message: msg.into(), details: None }
+    CoreError::Modbus {
+        code: "RK512_INVALID",
+        message: msg.into(),
+        details: None,
+    }
 }
 
 // ============ 3964R 链路层 ============
@@ -91,7 +98,9 @@ pub fn parse_3964_data_frame(frame: &[u8]) -> Result<Vec<u8>, CoreError> {
     let checksum = frame[n - 1];
     let calc = bcc_3964(stuffed, &[DLE, ETX]);
     if checksum != calc {
-        return Err(rk512_err(format!("BCC 校验失败:帧内 0x{checksum:02X},计算 0x{calc:02X}")));
+        return Err(rk512_err(format!(
+            "BCC 校验失败:帧内 0x{checksum:02X},计算 0x{calc:02X}"
+        )));
     }
     Ok(unstuff_dle(stuffed))
 }
@@ -126,7 +135,10 @@ impl Rk512Request {
 
     pub fn decode(data: &[u8]) -> Result<Self, CoreError> {
         if data.len() < 9 {
-            return Err(rk512_err(format!("RK512 请求头过短({}B,需 9B)", data.len())));
+            return Err(rk512_err(format!(
+                "RK512 请求头过短({}B,需 9B)",
+                data.len()
+            )));
         }
         Ok(Self {
             func: data[0],
@@ -187,16 +199,22 @@ pub fn rk512_error_message(code: u8) -> &'static str {
 /// RK512 区码映射:区名 → RK512 func 编码。
 pub fn rk512_area_func(area: &str) -> Option<u8> {
     match area.to_ascii_uppercase().as_str() {
-        "DB" => Some(0x01), // 读 DB
-        "M" | "FLAG" => Some(0x03), // 读标志
-        "I" | "INPUT" => Some(0x05), // 读输入
+        "DB" => Some(0x01),           // 读 DB
+        "M" | "FLAG" => Some(0x03),   // 读标志
+        "I" | "INPUT" => Some(0x05),  // 读输入
         "Q" | "OUTPUT" => Some(0x06), // 写输出
         _ => None,
     }
 }
 
 /// 构造完整的 RK512 读请求(3964R 数据帧包裹 RK512 帧头)。
-pub fn build_rk512_read(area: &str, db: u16, offset: u16, count: u16) -> Result<Vec<u8>, CoreError> {
+pub fn build_rk512_read(
+    area: &str,
+    db: u16,
+    offset: u16,
+    count: u16,
+) -> Result<Vec<u8>, CoreError> {
+    validate_window(offset, count)?;
     let func = match area.to_ascii_uppercase().as_str() {
         "DB" => 0x01,
         "M" => 0x03,
@@ -204,23 +222,63 @@ pub fn build_rk512_read(area: &str, db: u16, offset: u16, count: u16) -> Result<
         "Q" => 0x05, // 读输出也用 05(输入方向)
         _ => return Err(rk512_err(format!("未知区「{area}」(DB/M/I/Q)"))),
     };
-    let req = Rk512Request { func, count, db, offset, coordination: 0 };
+    let req = Rk512Request {
+        func,
+        count,
+        db,
+        offset,
+        coordination: 0,
+    };
     Ok(build_3964_data_frame(&req.encode()))
 }
 
 /// 构造完整的 RK512 写请求(帧头 + 数据,3964R 包裹)。
-pub fn build_rk512_write(area: &str, db: u16, offset: u16, data: &[u8]) -> Result<Vec<u8>, CoreError> {
+pub fn build_rk512_write(
+    area: &str,
+    db: u16,
+    offset: u16,
+    data: &[u8],
+) -> Result<Vec<u8>, CoreError> {
+    if data.is_empty() || data.len() > RK512_MAX_BYTES {
+        return Err(rk512_err(format!(
+            "RK512 写入数据长度必须是 1..{} 字节",
+            RK512_MAX_BYTES
+        )));
+    }
+    let count = (data.len() + 1) / 2;
+    if count > usize::from(RK512_MAX_WORDS) || usize::from(offset) + count * 2 > 0x1_0000 {
+        return Err(rk512_err("RK512 写入地址窗口超出 0..65535 字节"));
+    }
     let func = match area.to_ascii_uppercase().as_str() {
         "DB" => 0x02,
         "M" => 0x04,
         "Q" => 0x06,
         _ => return Err(rk512_err(format!("未知区「{area}」(DB/M/Q)"))),
     };
-    let count = (data.len() as u16 + 1) / 2; // 字数(向上取整)
-    let req = Rk512Request { func, count, db, offset, coordination: 0 };
+    let count = count as u16; // 字数(向上取整)
+    let req = Rk512Request {
+        func,
+        count,
+        db,
+        offset,
+        coordination: 0,
+    };
     let mut payload = req.encode();
     payload.extend_from_slice(data);
     Ok(build_3964_data_frame(&payload))
+}
+
+fn validate_window(offset: u16, count: u16) -> Result<(), CoreError> {
+    if count == 0 || count > RK512_MAX_WORDS {
+        return Err(rk512_err(format!(
+            "RK512 读取字数必须是 1..{}",
+            RK512_MAX_WORDS
+        )));
+    }
+    if usize::from(offset) + usize::from(count) * 2 > 0x1_0000 {
+        return Err(rk512_err("RK512 读取地址窗口超出 0..65535 字节"));
+    }
+    Ok(())
 }
 
 /// 解析 RK512 应答(去 3964R 封装 → RK512 帧头 + 数据)。
@@ -248,7 +306,10 @@ mod tests {
     fn dle_stuffing_roundtrip() {
         let data = vec![0x01, DLE, 0x02, DLE, DLE, 0x03];
         let stuffed = stuff_dle(&data);
-        assert_eq!(stuffed, vec![0x01, DLE, DLE, 0x02, DLE, DLE, DLE, DLE, 0x03]);
+        assert_eq!(
+            stuffed,
+            vec![0x01, DLE, DLE, 0x02, DLE, DLE, DLE, DLE, 0x03]
+        );
         assert_eq!(unstuff_dle(&stuffed), data);
     }
 
@@ -271,7 +332,13 @@ mod tests {
 
     #[test]
     fn rk512_request_encode_decode() {
-        let req = Rk512Request { func: 0x01, count: 4, db: 1, offset: 10, coordination: 0 };
+        let req = Rk512Request {
+            func: 0x01,
+            count: 4,
+            db: 1,
+            offset: 10,
+            coordination: 0,
+        };
         let enc = req.encode();
         assert_eq!(enc.len(), 9);
         assert_eq!(enc[0], 0x01); // 读 DB
@@ -298,8 +365,36 @@ mod tests {
     }
 
     #[test]
+    fn response_golden_vector_for_db1_word0() {
+        // 3964R 应答:成功、读 DB1、2 字、偏移 0、数据 12 34 56 78，BCC=19。
+        let frame = [
+            0x02, 0x00, 0x01, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56,
+            0x78, 0x10, 0x03, 0x19,
+        ];
+        let (response, data) = parse_rk512_response(&frame).unwrap();
+        assert_eq!(
+            (
+                response.error,
+                response.func,
+                response.count,
+                response.db,
+                response.offset
+            ),
+            (0, 1, 2, 1, 0)
+        );
+        assert_eq!(data, vec![0x12, 0x34, 0x56, 0x78]);
+    }
+
+    #[test]
     fn rk512_response_with_error() {
-        let resp = Rk512Response { error: 0x07, func: 0x01, count: 0, db: 1, offset: 0, coordination: 0 };
+        let resp = Rk512Response {
+            error: 0x07,
+            func: 0x01,
+            count: 0,
+            db: 1,
+            offset: 0,
+            coordination: 0,
+        };
         let frame = build_3964_data_frame(&resp.encode(&[]));
         let (parsed, data) = parse_rk512_response(&frame).unwrap();
         assert_eq!(parsed.error, 0x07); // DB 不存在
@@ -314,5 +409,15 @@ mod tests {
         let n = frame.len();
         frame[n - 1] ^= 0xFF; // 破坏 BCC
         assert!(parse_3964_data_frame(&frame).is_err());
+    }
+
+    #[test]
+    fn read_and_write_windows_fail_closed() {
+        assert!(build_rk512_read("DB", 1, 0, RK512_MAX_WORDS).is_ok());
+        assert!(build_rk512_read("DB", 1, 0, RK512_MAX_WORDS + 1).is_err());
+        assert!(build_rk512_read("DB", 1, u16::MAX, 2).is_err());
+        assert!(build_rk512_write("DB", 1, 0, &[]).is_err());
+        assert!(build_rk512_write("DB", 1, 0, &vec![0u8; RK512_MAX_BYTES + 1]).is_err());
+        assert!(build_rk512_write("DB", 1, u16::MAX, &[0x12, 0x34]).is_err());
     }
 }

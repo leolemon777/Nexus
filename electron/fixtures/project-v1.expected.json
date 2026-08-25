@@ -1,0 +1,68 @@
+{
+  "format": "nexus-project",
+  "schemaVersion": 1,
+  "product": "Nexus 2.0",
+  "projectName": "Legacy Golden Project",
+  "savedAt": "2026-08-22T00:00:00.000Z",
+  "activeView": "master",
+  "activeSession": "default",
+  "config": {
+    "transport": "tcp",
+    "serial": {
+      "portName": "",
+      "baudRate": "9600",
+      "parity": "none",
+      "dataBits": "8",
+      "stopBits": "1"
+    },
+    "tcp": {
+      "host": "192.168.10.20",
+      "port": "502"
+    },
+    "command": {
+      "unitId": "1",
+      "functionCode": "3",
+      "startAddress": "0",
+      "quantity": "1",
+      "displayType": "Unsigned16",
+      "pollInterval": "1000"
+    }
+  },
+  "sessions": [
+    {
+      "name": "default",
+      "pointTable": [
+        {
+          "name": "temperature",
+          "unitId": 1,
+          "fc": 3,
+          "address": 100,
+          "quantity": 2,
+          "dataType": "Float32",
+          "scale": "0.1",
+          "unit": "C"
+        }
+      ],
+      "trendSelection": [
+        "reg-HR-100"
+      ]
+    }
+  ],
+  "workspace": {
+    "commandList": [],
+    "simulators": {
+      "modbus": {
+        "mode": "tcp",
+        "port": "502",
+        "allowedStations": ""
+      },
+      "melsec": {
+        "port": "5000"
+      },
+      "s7": {
+        "port": "102"
+      }
+    },
+    "lastHelpReference": null
+  }
+}

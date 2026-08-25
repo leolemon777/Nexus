@@ -6,21 +6,24 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
 use crate::error::CoreError;
-use crate::ppi_frame::{build_sd2, parse_sd2, FC_READ, FC_WRITE};
-use crate::s7_pdu::{parse_ack, S7Ack};
-
-fn ppi_err(msg: impl Into<String>) -> CoreError {
-    CoreError::Modbus { code: "S7_PPI_INVALID", message: msg.into(), details: None }
-}
+use crate::ppi_frame::{FC_READ, FC_WRITE, build_sd2, parse_sd2};
+use crate::s7_pdu::{S7Ack, parse_ack};
 
 /// 处理一条 SD2 请求(已剥壳的 S7 PDU)→ 响应 S7 PDU(ack 形态,DA/SA 互换由调用方做)。
-fn handle_ppi_s7(pdu: &[u8], mem: &Arc<Mutex<crate::s7_slave::S7SlaveMemory>>) -> Result<Vec<u8>, CoreError> {
+fn handle_ppi_s7(
+    pdu: &[u8],
+    mem: &Arc<Mutex<crate::s7_slave::S7SlaveMemory>>,
+) -> Result<Vec<u8>, CoreError> {
     let resp = crate::s7_slave::handle_s7_request(pdu, mem);
     let _ = parse_ack(&resp)?; // 形态自检(顺带早失败)
     Ok(resp)
 }
 
-pub fn ppi_accept_loop(listener: TcpListener, mem: Arc<Mutex<crate::s7_slave::S7SlaveMemory>>, running: Arc<Mutex<bool>>) {
+pub fn ppi_accept_loop(
+    listener: TcpListener,
+    mem: Arc<Mutex<crate::s7_slave::S7SlaveMemory>>,
+    running: Arc<Mutex<bool>>,
+) {
     let _ = listener.set_nonblocking(true);
     while *running.lock().unwrap_or_else(|e| e.into_inner()) {
         match listener.accept() {
@@ -38,7 +41,11 @@ pub fn ppi_accept_loop(listener: TcpListener, mem: Arc<Mutex<crate::s7_slave::S7
 }
 
 /// 双拍状态机:缓冲字节 → 完整 SD2 请求 → 回 E5 → 等 10 5C 短帧 → 回 SD2 响应。
-fn ppi_serve(mut stream: TcpStream, mem: Arc<Mutex<crate::s7_slave::S7SlaveMemory>>, running: Arc<Mutex<bool>>) {
+fn ppi_serve(
+    mut stream: TcpStream,
+    mem: Arc<Mutex<crate::s7_slave::S7SlaveMemory>>,
+    running: Arc<Mutex<bool>>,
+) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(200)));
     let mut pending: Vec<u8> = Vec::new();
@@ -51,15 +58,20 @@ fn ppi_serve(mut stream: TcpStream, mem: Arc<Mutex<crate::s7_slave::S7SlaveMemor
                 if pending.len() > 64 * 1024 {
                     pending.clear(); // 缓冲上限:防恶意客户端撑爆内存
                 }
-            },
+            }
             Err(ref e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut => continue,
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue;
+            }
             Err(_) => break,
         }
         // 循环取完整请求帧
         loop {
-            let Some(frame_end) = find_sd2_end(&pending) else { continue 'outer };
+            let Some(frame_end) = find_sd2_end(&pending) else {
+                continue 'outer;
+            };
             let frame: Vec<u8> = pending.drain(..frame_end).collect();
             let (da, sa, fc, s7_pdu) = match parse_sd2(&frame) {
                 Ok(v) => v,
@@ -88,11 +100,11 @@ fn ppi_serve(mut stream: TcpStream, mem: Arc<Mutex<crate::s7_slave::S7SlaveMemor
                 match stream.read(&mut chunk) {
                     Ok(0) => break 'outer,
                     Ok(n) => {
-                pending.extend_from_slice(&chunk[..n]);
-                if pending.len() > 64 * 1024 {
-                    pending.clear(); // 缓冲上限:防恶意客户端撑爆内存
-                }
-            },
+                        pending.extend_from_slice(&chunk[..n]);
+                        if pending.len() > 64 * 1024 {
+                            pending.clear(); // 缓冲上限:防恶意客户端撑爆内存
+                        }
+                    }
                     Err(ref e)
                         if e.kind() == std::io::ErrorKind::WouldBlock
                             || e.kind() == std::io::ErrorKind::TimedOut => {}
@@ -133,7 +145,7 @@ fn _unused(_: &S7Ack) {}
 mod tests {
     use super::*;
     use crate::ppi_frame::{build_sa_confirm, build_sd2};
-    use crate::s7_pdu::{build_read_request, parse_read_response, S7Item};
+    use crate::s7_pdu::{S7Item, build_read_request, parse_read_response};
 
     /// TCP 双拍回环:请求 → E5 → 短帧 → 数据帧(在同一内存上模拟)
     #[test]
@@ -157,6 +169,9 @@ mod tests {
         let items = parse_read_response(&ack).unwrap();
         assert_eq!(items[0].data, vec![0x12, 0x34, 0x56, 0x78]);
         // 短帧确认 golden
-        assert_eq!(build_sa_confirm(2, 0)[..], [0x10, 0x02, 0x00, 0x5C, 0x5E, 0x16]);
+        assert_eq!(
+            build_sa_confirm(2, 0)[..],
+            [0x10, 0x02, 0x00, 0x5C, 0x5E, 0x16]
+        );
     }
 }

@@ -27,12 +27,14 @@ function parseFxLinksData(dataAscii, points, isBit) {
   return out;
 }
 
-/** FX 编程口读数据(STX..ETX 之间的 ASCII hex,每字 4 字符) → 数值数组。 */
+/** FX 编程口读数据(STX..ETX 之间的 ASCII hex,每字 4 字符,低字节在前) → 数值数组。 */
 function parseFxProgData(dataBytes, words) {
   const ascii = Buffer.from(dataBytes).toString("ascii");
   const out = [];
   for (let i = 0; i < words; i++) {
-    out.push(parseInt(ascii.slice(i * 4, i * 4 + 4), 16) || 0);
+    const hex = ascii.slice(i * 4, i * 4 + 4);
+    // "3412" = 低字节 0x34 在前 → 0x1234(§3.3.3 低字节在前;与 FX Links 的高字节在前相反)
+    out.push(((parseInt(hex.slice(2, 4), 16) || 0) << 8) | (parseInt(hex.slice(0, 2), 16) || 0));
   }
   return out;
 }
@@ -87,11 +89,13 @@ function createFxSerialService({ request, transact }) {
   async function progRead({ device, address, words, timeoutMs }) {
     const frame = (await request("fx_prog_build_read", { device, address, words })).frame;
     const rx = await transact({ request: frame, timeoutMs: timeoutMs ?? 1000, framing: "fx" });
-    const r = await request("fx_prog_parse", { response: rx.rx });
+    // fx_prog_parse 的信封字段是 frame(与 fx_links_parse 的 response 不同,Rust 端 deny_unknown_fields)
+    const r = await request("fx_prog_parse", { frame: rx.rx });
     if (r.status === "nak") {
       return { ok: false, errorCode: r.errorCode, errorMessage: r.errorMessage };
     }
-    return { ok: true, status: r.status, values: r.status === "data" ? parseFxProgData(r.data, words) : [] };
+    // 编程口字数据低字节在前("3412"→0x1234),Rust 端 decode 已按序解码,直接取 words,勿用原始 data 朴素重解析
+    return { ok: true, status: r.status, values: r.status === "data" && Array.isArray(r.words) ? r.words : [] };
   }
 
   /**
@@ -100,7 +104,7 @@ function createFxSerialService({ request, transact }) {
   async function progWrite({ device, address, values, timeoutMs }) {
     const frame = (await request("fx_prog_build_write", { device, address, values })).frame;
     const rx = await transact({ request: frame, timeoutMs: timeoutMs ?? 1000, framing: "fx" });
-    const r = await request("fx_prog_parse", { response: rx.rx });
+    const r = await request("fx_prog_parse", { frame: rx.rx });
     if (r.status === "nak") {
       return { ok: false, errorCode: r.errorCode, errorMessage: r.errorMessage };
     }

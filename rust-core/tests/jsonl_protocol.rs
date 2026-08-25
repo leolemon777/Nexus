@@ -611,7 +611,11 @@ fn slave_set_value_and_get_memory() {
     assert_eq!(values[0], 100);
     assert_eq!(values[1], 200);
 
-    sidecar.send_json(&request("slave-stop2", "stop_slave", json!({ "slaveId": "mem-test" })));
+    sidecar.send_json(&request(
+        "slave-stop2",
+        "stop_slave",
+        json!({ "slaveId": "mem-test" }),
+    ));
 }
 
 #[test]
@@ -653,7 +657,11 @@ fn serial_slave_handle_bytes_responds_to_fc03() {
     assert_eq!(response_bytes[3], 0x12);
     assert_eq!(response_bytes[4], 0x34);
 
-    sidecar.send_json(&request("ss-stop", "stop_serial_slave", json!({ "slaveId": "ss1" })));
+    sidecar.send_json(&request(
+        "ss-stop",
+        "stop_serial_slave",
+        json!({ "slaveId": "ss1" }),
+    ));
 }
 
 #[test]
@@ -680,17 +688,17 @@ fn serial_slave_does_not_respond_to_broadcast() {
     // 广播不应该响应
     assert_eq!(resp["result"]["shouldRespond"], false);
 
-    sidecar.send_json(&request("ss-bc-stop", "stop_serial_slave", json!({ "slaveId": "ss-bc" })));
+    sidecar.send_json(&request(
+        "ss-bc-stop",
+        "stop_serial_slave",
+        json!({ "slaveId": "ss-bc" }),
+    ));
 }
 
 #[test]
 fn hello_reports_v2_features_and_extended_capabilities() {
     let mut sidecar = Sidecar::spawn();
-    let response = sidecar.send_json(&request(
-        "hello-v2",
-        "hello",
-        json!({ "clientVersion": 2 }),
-    ));
+    let response = sidecar.send_json(&request("hello-v2", "hello", json!({ "clientVersion": 2 })));
     assert_success(&response, "hello-v2");
     assert!(response["result"]["supportedVersions"].is_array());
     assert!(response["result"]["features"].is_array());

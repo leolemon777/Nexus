@@ -9,7 +9,7 @@
 //! ⚠️ 全部多字节字段**小端**——与 Modbus 的 to_be_bytes 物理隔离,禁止混用。
 
 use crate::error::CoreError;
-use crate::mc_address::{encode_head_number, McAddress};
+use crate::mc_address::{McAddress, encode_head_number};
 
 /// 成批读取(§7)
 pub const CMD_READ_BATCH: u16 = 0x0401;
@@ -84,12 +84,10 @@ pub fn build_write_batch_pdu(
     addr: &McAddress,
     values: &[u16], // 位单位时每项取 0/1
 ) -> Result<Vec<u8>, CoreError> {
-    let count = u16::try_from(values.len()).map_err(|_| {
-        CoreError::Modbus {
-            code: "MC_TOO_MANY_VALUES",
-            message: format!("写入数量 {} 超出 u16 范围", values.len()),
-            details: None,
-        }
+    let count = u16::try_from(values.len()).map_err(|_| CoreError::Modbus {
+        code: "MC_TOO_MANY_VALUES",
+        message: format!("写入数量 {} 超出 u16 范围", values.len()),
+        details: None,
     })?;
     if count == 0 {
         return Err(CoreError::Modbus {
@@ -132,8 +130,16 @@ pub fn build_write_batch_pdu(
 ///
 /// 位单位:每字节 1 个位(00/01)。
 /// 字单位:每 2 字节 1 个字(小端)。
-pub fn parse_read_batch_response(data: &[u8], points: u16, is_bit: bool) -> Result<Vec<u16>, CoreError> {
-    let expected = if is_bit { points as usize } else { points as usize * 2 };
+pub fn parse_read_batch_response(
+    data: &[u8],
+    points: u16,
+    is_bit: bool,
+) -> Result<Vec<u16>, CoreError> {
+    let expected = if is_bit {
+        points as usize
+    } else {
+        points as usize * 2
+    };
     if data.len() < expected {
         return Err(CoreError::Modbus {
             code: "MC_RESPONSE_TOO_SHORT",
@@ -142,7 +148,10 @@ pub fn parse_read_batch_response(data: &[u8], points: u16, is_bit: bool) -> Resu
         });
     }
     if is_bit {
-        Ok(data[..points as usize].iter().map(|&b| u16::from(b)).collect())
+        Ok(data[..points as usize]
+            .iter()
+            .map(|&b| u16::from(b))
+            .collect())
     } else {
         let mut words = Vec::with_capacity(points as usize);
         for i in 0..points as usize {
@@ -170,12 +179,10 @@ pub fn build_read_random_pdu(addrs: &[McAddress]) -> Result<Vec<u8>, CoreError> 
             details: None,
         });
     }
-    let count = u16::try_from(addrs.len()).map_err(|_| {
-        CoreError::Modbus {
-            code: "MC_TOO_MANY_VALUES",
-            message: format!("随机读点数 {} 超出 u16", addrs.len()),
-            details: None,
-        }
+    let count = u16::try_from(addrs.len()).map_err(|_| CoreError::Modbus {
+        code: "MC_TOO_MANY_VALUES",
+        message: format!("随机读点数 {} 超出 u16", addrs.len()),
+        details: None,
     })?;
     // 0403 子命令:所有元件须同为位或同为字
     let is_bit = addrs[0].is_bit;
@@ -199,7 +206,11 @@ pub fn build_read_random_pdu(addrs: &[McAddress]) -> Result<Vec<u8>, CoreError> 
 }
 
 /// 解析 0403 随机读响应(每元件 1 字/位)。
-pub fn parse_read_random_response(data: &[u8], count: usize, is_bit: bool) -> Result<Vec<u16>, CoreError> {
+pub fn parse_read_random_response(
+    data: &[u8],
+    count: usize,
+    is_bit: bool,
+) -> Result<Vec<u16>, CoreError> {
     let expected = if is_bit { count } else { count * 2 };
     if data.len() < expected {
         return Err(CoreError::Modbus {
@@ -226,12 +237,10 @@ pub fn build_write_random_word_pdu(entries: &[(McAddress, u16)]) -> Result<Vec<u
             details: None,
         });
     }
-    let count = u16::try_from(entries.len()).map_err(|_| {
-        CoreError::Modbus {
-            code: "MC_TOO_MANY_VALUES",
-            message: format!("随机写点数 {} 超出 u16", entries.len()),
-            details: None,
-        }
+    let count = u16::try_from(entries.len()).map_err(|_| CoreError::Modbus {
+        code: "MC_TOO_MANY_VALUES",
+        message: format!("随机写点数 {} 超出 u16", entries.len()),
+        details: None,
     })?;
     let mut buf = Vec::with_capacity(8 + entries.len() * 6);
     buf.extend_from_slice(&CMD_WRITE_RANDOM_WORD.to_le_bytes());
@@ -263,12 +272,10 @@ pub fn build_read_blocks_pdu(blocks: &[McBlock]) -> Result<Vec<u8>, CoreError> {
             details: None,
         });
     }
-    let block_count = u16::try_from(blocks.len()).map_err(|_| {
-        CoreError::Modbus {
-            code: "MC_TOO_MANY_BLOCKS",
-            message: format!("块数 {} 超出 u16", blocks.len()),
-            details: None,
-        }
+    let block_count = u16::try_from(blocks.len()).map_err(|_| CoreError::Modbus {
+        code: "MC_TOO_MANY_BLOCKS",
+        message: format!("块数 {} 超出 u16", blocks.len()),
+        details: None,
     })?;
     let is_bit = blocks[0].address.is_bit;
     if blocks.iter().any(|b| b.address.is_bit != is_bit) {
@@ -309,12 +316,19 @@ pub fn parse_read_blocks_response(
         if offset + need > data.len() {
             return Err(CoreError::Modbus {
                 code: "MC_RESPONSE_TOO_SHORT",
-                message: format!("多块读响应在第 {} 块不足(偏移 {offset},需 {need},共 {})", blocks.len(), data.len()),
+                message: format!(
+                    "多块读响应在第 {} 块不足(偏移 {offset},需 {need},共 {})",
+                    blocks.len(),
+                    data.len()
+                ),
                 details: None,
             });
         }
         let chunk = if b.address.is_bit {
-            data[offset..offset + need].iter().map(|&x| u16::from(x)).collect()
+            data[offset..offset + need]
+                .iter()
+                .map(|&x| u16::from(x))
+                .collect()
         } else {
             (0..b.points as usize)
                 .map(|i| u16::from_le_bytes([data[offset + i * 2], data[offset + i * 2 + 1]]))
@@ -337,7 +351,8 @@ pub fn build_remote_control_pdu(cmd: u16) -> Result<Vec<u8>, CoreError> {
             Ok(vec![
                 (cmd & 0xFF) as u8,
                 (cmd >> 8) as u8,
-                0x00, 0x00, // 子命令 0000
+                0x00,
+                0x00, // 子命令 0000
             ])
         }
         other => Err(CoreError::Modbus {
@@ -392,7 +407,13 @@ pub fn build_write_clock_pdu(clock: &McClock) -> Vec<u8> {
     buf.extend_from_slice(&CMD_WRITE_CLOCK.to_le_bytes());
     buf.extend_from_slice(&0x0000u16.to_le_bytes());
     buf.extend_from_slice(&[
-        clock.year, clock.month, clock.day, clock.hour, clock.minute, clock.second, clock.weekday,
+        clock.year,
+        clock.month,
+        clock.day,
+        clock.hour,
+        clock.minute,
+        clock.second,
+        clock.weekday,
     ]);
     buf
 }
@@ -470,7 +491,11 @@ fn validate_points(
             details: None,
         });
     }
-    let (max, kind) = if addr.is_bit { (max_bits, "位") } else { (max_words, "字") };
+    let (max, kind) = if addr.is_bit {
+        (max_bits, "位")
+    } else {
+        (max_words, "字")
+    };
     if points > max {
         return Err(CoreError::Modbus {
             code: "MC_POINTS_EXCEEDED",
@@ -491,7 +516,10 @@ mod tests {
     fn read_batch_d100_matches_doc_vector() {
         let addr = parse_mc_address("D100").unwrap();
         let pdu = build_read_batch_pdu(&addr, 1).unwrap();
-        assert_eq!(pdu, [0x01, 0x04, 0x01, 0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00]);
+        assert_eq!(
+            pdu,
+            [0x01, 0x04, 0x01, 0x00, 0x64, 0x00, 0x00, 0xA8, 0x01, 0x00]
+        );
     }
 
     /// 文档 §2.1.4-(1) 抓包:读 D7000 5 个字(位单位子命令 0000)
@@ -501,7 +529,10 @@ mod tests {
         let pdu = build_read_batch_pdu(&addr, 5).unwrap();
         // 注意:抓包用了位单位子命令(特殊用法);标准字读子命令是 0001。
         // 这里按标准构造:01 04 01 00 | 58 1B 00 | A8 | 05 00
-        assert_eq!(pdu, [0x01, 0x04, 0x01, 0x00, 0x58, 0x1B, 0x00, 0xA8, 0x05, 0x00]);
+        assert_eq!(
+            pdu,
+            [0x01, 0x04, 0x01, 0x00, 0x58, 0x1B, 0x00, 0xA8, 0x05, 0x00]
+        );
     }
 
     /// 文档 §2.1.4-(3):写 M100 = ON
@@ -509,7 +540,12 @@ mod tests {
     fn write_batch_m100_on_matches_doc_vector() {
         let addr = parse_mc_address("M100").unwrap();
         let pdu = build_write_batch_pdu(&addr, &[1]).unwrap();
-        assert_eq!(pdu, [0x01, 0x14, 0x00, 0x00, 0x64, 0x00, 0x00, 0x90, 0x01, 0x00, 0x01]);
+        assert_eq!(
+            pdu,
+            [
+                0x01, 0x14, 0x00, 0x00, 0x64, 0x00, 0x00, 0x90, 0x01, 0x00, 0x01
+            ]
+        );
     }
 
     #[test]
@@ -577,7 +613,9 @@ mod tests {
         let pdu = build_read_random_pdu(&[d0, d10]).unwrap();
         assert_eq!(
             pdu,
-            [0x03, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x0A, 0x00, 0x00, 0xA8]
+            [
+                0x03, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x0A, 0x00, 0x00, 0xA8
+            ]
         );
     }
 
@@ -613,10 +651,22 @@ mod tests {
         let d100 = pa("D100").unwrap();
         let d200 = pa("D200").unwrap();
         let pdu = build_write_random_word_pdu(&[(d100, 0x1234), (d200, 0xBEEF)]).unwrap();
-        assert_eq!(&pdu[..4], &[0x03, 0x14, 0x00, 0x00], "指令 1403 + 子命令 0000");
+        assert_eq!(
+            &pdu[..4],
+            &[0x03, 0x14, 0x00, 0x00],
+            "指令 1403 + 子命令 0000"
+        );
         assert_eq!(&pdu[4..6], &[0x02, 0x00], "点数 2");
-        assert_eq!(&pdu[6..11], &[0x64, 0x00, 0x00, 0xA8, 0x34], "D100 地址+代码+数据低字节");
-        assert_eq!(&pdu[11..16], &[0x12, 0xC8, 0x00, 0x00, 0xA8], "数据高字节+D200 地址");
+        assert_eq!(
+            &pdu[6..11],
+            &[0x64, 0x00, 0x00, 0xA8, 0x34],
+            "D100 地址+代码+数据低字节"
+        );
+        assert_eq!(
+            &pdu[11..16],
+            &[0x12, 0xC8, 0x00, 0x00, 0xA8],
+            "数据高字节+D200 地址"
+        );
         assert_eq!(&pdu[16..18], &[0xEF, 0xBE], "D200 数据 0xBEEF 小端");
     }
 
@@ -624,15 +674,22 @@ mod tests {
     #[test]
     fn read_blocks_matches_doc_vector() {
         let b = vec![
-            McBlock { address: pa("D0").unwrap(), points: 2 },
-            McBlock { address: pa("W10").unwrap(), points: 1 },
+            McBlock {
+                address: pa("D0").unwrap(),
+                points: 2,
+            },
+            McBlock {
+                address: pa("W10").unwrap(),
+                points: 1,
+            },
         ];
         let pdu = build_read_blocks_pdu(&b).unwrap();
         assert_eq!(
             pdu,
-            [0x06, 0x04, 0x00, 0x00, 0x02, 0x00,
-             0x02, 0x00, 0x00, 0x00, 0x00, 0xA8,
-             0x01, 0x00, 0x0A, 0x00, 0x00, 0xB4]
+            [
+                0x06, 0x04, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x01, 0x00,
+                0x0A, 0x00, 0x00, 0xB4
+            ]
         );
     }
 
@@ -640,8 +697,14 @@ mod tests {
     #[test]
     fn parse_read_blocks_response_splits_by_block() {
         let blocks = vec![
-            McBlock { address: pa("D0").unwrap(), points: 2 },
-            McBlock { address: pa("W10").unwrap(), points: 1 },
+            McBlock {
+                address: pa("D0").unwrap(),
+                points: 2,
+            },
+            McBlock {
+                address: pa("W10").unwrap(),
+                points: 1,
+            },
         ];
         let data = [0x34, 0x12, 0xAB, 0xCD, 0x56, 0x78];
         let result = parse_read_blocks_response(&data, &blocks).unwrap();
@@ -652,9 +715,18 @@ mod tests {
 
     #[test]
     fn remote_run_pdu_layout() {
-        assert_eq!(build_remote_control_pdu(CMD_REMOTE_RUN).unwrap(), [0x02, 0x10, 0x00, 0x00]);
-        assert_eq!(build_remote_control_pdu(CMD_REMOTE_STOP).unwrap(), [0x06, 0x10, 0x00, 0x00]);
-        assert_eq!(build_remote_control_pdu(CMD_REMOTE_RESET).unwrap(), [0x01, 0x10, 0x00, 0x00]);
+        assert_eq!(
+            build_remote_control_pdu(CMD_REMOTE_RUN).unwrap(),
+            [0x02, 0x10, 0x00, 0x00]
+        );
+        assert_eq!(
+            build_remote_control_pdu(CMD_REMOTE_STOP).unwrap(),
+            [0x06, 0x10, 0x00, 0x00]
+        );
+        assert_eq!(
+            build_remote_control_pdu(CMD_REMOTE_RESET).unwrap(),
+            [0x01, 0x10, 0x00, 0x00]
+        );
         // 非法指令拒绝
         assert!(build_remote_control_pdu(0x0401).is_err());
     }
@@ -662,8 +734,13 @@ mod tests {
     #[test]
     fn clock_roundtrip_bcd() {
         let clock = McClock {
-            year: 0x26, month: 0x08, day: 0x15,
-            hour: 0x14, minute: 0x30, second: 0x00, weekday: 0x5,
+            year: 0x26,
+            month: 0x08,
+            day: 0x15,
+            hour: 0x14,
+            minute: 0x30,
+            second: 0x00,
+            weekday: 0x5,
         };
         let pdu = build_write_clock_pdu(&clock);
         assert_eq!(&pdu[..4], &[0x13, 0x13, 0x00, 0x00]);
@@ -694,8 +771,17 @@ mod tests {
 
     #[test]
     fn cpu_status_maps() {
-        assert_eq!(parse_read_cpu_status_response(&[0x00]).unwrap(), CpuStatus::Run);
-        assert_eq!(parse_read_cpu_status_response(&[0x01]).unwrap(), CpuStatus::Stop);
-        assert_eq!(parse_read_cpu_status_response(&[0x99]).unwrap(), CpuStatus::Other(0x99));
+        assert_eq!(
+            parse_read_cpu_status_response(&[0x00]).unwrap(),
+            CpuStatus::Run
+        );
+        assert_eq!(
+            parse_read_cpu_status_response(&[0x01]).unwrap(),
+            CpuStatus::Stop
+        );
+        assert_eq!(
+            parse_read_cpu_status_response(&[0x99]).unwrap(),
+            CpuStatus::Other(0x99)
+        );
     }
 }

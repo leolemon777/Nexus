@@ -67,7 +67,13 @@ fn build_read_bits_pdu(
 }
 
 pub fn build_read_coils_pdu(start_address: u16, quantity: u16) -> Result<Vec<u8>, RtuError> {
-    build_read_bits_pdu(start_address, quantity, READ_COILS, MIN_READ_COILS, MAX_READ_COILS)
+    build_read_bits_pdu(
+        start_address,
+        quantity,
+        READ_COILS,
+        MIN_READ_COILS,
+        MAX_READ_COILS,
+    )
 }
 
 pub fn build_read_discrete_inputs_pdu(
@@ -233,10 +239,7 @@ pub fn build_write_single_register_pdu(address: u16, value: u16) -> Result<Vec<u
 }
 
 /// FC15 写多线圈:PDU = FC + addr_be + qty_be + byte_count + packed_bits。
-pub fn build_write_multiple_coils_pdu(
-    address: u16,
-    values: &[bool],
-) -> Result<Vec<u8>, RtuError> {
+pub fn build_write_multiple_coils_pdu(address: u16, values: &[bool]) -> Result<Vec<u8>, RtuError> {
     let quantity = u16::try_from(values.len()).unwrap_or(0);
     validate_quantity(quantity, MIN_WRITE_COILS, MAX_WRITE_COILS)?;
     validate_address_range(address, quantity)?;
@@ -316,10 +319,7 @@ pub fn parse_write_single_register_response(pdu: &[u8]) -> Result<(u16, u16), Rt
 }
 
 /// FC15/FC16 写多响应:addr_be + quantity_be(4 字节,无 byte_count)。
-pub fn parse_write_multiple_response(
-    pdu: &[u8],
-    expected_fc: u8,
-) -> Result<(u16, u16), RtuError> {
+pub fn parse_write_multiple_response(pdu: &[u8], expected_fc: u8) -> Result<(u16, u16), RtuError> {
     let (fc, data) = split_fc(pdu, expected_fc)?;
     if fc & 0x80 != 0 {
         return Err(RtuError::WriteResponseQuantityMismatch {
@@ -476,7 +476,12 @@ pub fn parse_read_write_multiple_registers_response(
 
 /// FC43/14 读设备标识:PDU = FC(0x2B) + MEI(0x0E) + read_dev_id_code + object_id。
 pub fn build_read_device_id_pdu(read_device_id_code: u8, object_id: u8) -> Vec<u8> {
-    vec![READ_DEVICE_IDENTIFICATION, 0x0E, read_device_id_code, object_id]
+    vec![
+        READ_DEVICE_IDENTIFICATION,
+        0x0E,
+        read_device_id_code,
+        object_id,
+    ]
 }
 
 /// FC08 诊断:PDU = FC + sub_function_be + data_be(5 字节)。
@@ -519,10 +524,16 @@ pub fn build_read_exception_status_pdu() -> Vec<u8> {
 pub fn parse_read_exception_status_response(pdu: &[u8]) -> Result<u8, RtuError> {
     let (fc, data) = split_fc(pdu, READ_EXCEPTION_STATUS)?;
     if fc & 0x80 != 0 {
-        return Err(RtuError::ByteCountMismatch { expected: 0, received: 0 });
+        return Err(RtuError::ByteCountMismatch {
+            expected: 0,
+            received: 0,
+        });
     }
     if data.len() != 1 {
-        return Err(RtuError::ResponseDataLengthMismatch { expected: 1, received: data.len() });
+        return Err(RtuError::ResponseDataLengthMismatch {
+            expected: 1,
+            received: data.len(),
+        });
     }
     Ok(data[0])
 }
@@ -536,10 +547,16 @@ pub fn build_get_comm_event_counter_pdu() -> Vec<u8> {
 pub fn parse_get_comm_event_counter_response(pdu: &[u8]) -> Result<(u16, u16), RtuError> {
     let (fc, data) = split_fc(pdu, GET_COMM_EVENT_COUNTER)?;
     if fc & 0x80 != 0 {
-        return Err(RtuError::ByteCountMismatch { expected: 0, received: 0 });
+        return Err(RtuError::ByteCountMismatch {
+            expected: 0,
+            received: 0,
+        });
     }
     if data.len() != 4 {
-        return Err(RtuError::ResponseDataLengthMismatch { expected: 4, received: data.len() });
+        return Err(RtuError::ResponseDataLengthMismatch {
+            expected: 4,
+            received: data.len(),
+        });
     }
     let status = u16::from_be_bytes([data[0], data[1]]);
     let event_count = u16::from_be_bytes([data[2], data[3]]);
@@ -555,7 +572,10 @@ pub fn build_get_comm_event_log_pdu() -> Vec<u8> {
 pub fn parse_get_comm_event_log_response(pdu: &[u8]) -> Result<(u16, u16, u16, Vec<u8>), RtuError> {
     let (fc, data) = split_fc(pdu, GET_COMM_EVENT_LOG)?;
     if fc & 0x80 != 0 {
-        return Err(RtuError::ByteCountMismatch { expected: 0, received: 0 });
+        return Err(RtuError::ByteCountMismatch {
+            expected: 0,
+            received: 0,
+        });
     }
     let Some(&byte_count) = data.first() else {
         return Err(RtuError::MissingByteCount);
@@ -583,7 +603,10 @@ pub fn build_report_slave_id_pdu() -> Vec<u8> {
 pub fn parse_report_slave_id_response(pdu: &[u8]) -> Result<(Vec<u8>, u8), RtuError> {
     let (fc, data) = split_fc(pdu, REPORT_SLAVE_ID)?;
     if fc & 0x80 != 0 {
-        return Err(RtuError::ByteCountMismatch { expected: 0, received: 0 });
+        return Err(RtuError::ByteCountMismatch {
+            expected: 0,
+            received: 0,
+        });
     }
     let Some(&byte_count) = data.first() else {
         return Err(RtuError::MissingByteCount);
@@ -598,7 +621,10 @@ pub fn parse_report_slave_id_response(pdu: &[u8]) -> Result<(Vec<u8>, u8), RtuEr
     let payload = &data[1..];
     // 最后一个字节是 run_status_indicator (0xFF=ON, 0x00=OFF)
     let (run_status, slave_id) = if payload.len() > 1 {
-        (*payload.last().unwrap(), payload[..payload.len() - 1].to_vec())
+        (
+            *payload.last().unwrap(),
+            payload[..payload.len() - 1].to_vec(),
+        )
     } else if payload.len() == 1 {
         (payload[0], vec![])
     } else {
@@ -638,7 +664,10 @@ fn validate_quantity(quantity: u16, min: u16, max: u16) -> Result<(), RtuError> 
 }
 
 fn validate_address_range(start_address: u16, quantity: u16) -> Result<(), RtuError> {
-    if start_address.checked_add(quantity.saturating_sub(1)).is_none() {
+    if start_address
+        .checked_add(quantity.saturating_sub(1))
+        .is_none()
+    {
         return Err(RtuError::RegisterRangeOverflow {
             start_address,
             quantity,
@@ -744,7 +773,10 @@ mod tests {
     fn write_multiple_registers_pdu_encodes_big_endian() {
         let pdu = build_write_multiple_registers_pdu(0, &[0x1234, 0xABCD]).unwrap();
         // FC=0x10, addr=0x0000, qty=0x0002, byte_count=0x04, data
-        assert_eq!(pdu, [0x10, 0x00, 0x00, 0x00, 0x02, 0x04, 0x12, 0x34, 0xAB, 0xCD]);
+        assert_eq!(
+            pdu,
+            [0x10, 0x00, 0x00, 0x00, 0x02, 0x04, 0x12, 0x34, 0xAB, 0xCD]
+        );
     }
 
     #[test]
@@ -826,12 +858,13 @@ mod tests {
 
     #[test]
     fn fc23_read_write_multiple_builds_correct_pdu() {
-        let pdu =
-            build_read_write_multiple_registers_pdu(0, 2, 10, &[0x1111, 0x2222]).unwrap();
+        let pdu = build_read_write_multiple_registers_pdu(0, 2, 10, &[0x1111, 0x2222]).unwrap();
         // FC=0x17, readAddr=0x0000, readQty=0x0002, writeAddr=0x000A, writeQty=0x0002, byteCount=0x04, data
         assert_eq!(
             pdu,
-            [0x17, 0x00, 0x00, 0x00, 0x02, 0x00, 0x0A, 0x00, 0x02, 0x04, 0x11, 0x11, 0x22, 0x22]
+            [
+                0x17, 0x00, 0x00, 0x00, 0x02, 0x00, 0x0A, 0x00, 0x02, 0x04, 0x11, 0x11, 0x22, 0x22
+            ]
         );
     }
 
@@ -889,7 +922,8 @@ mod tests {
     fn fc12_get_comm_event_log_parses() {
         // FC=0x0C, byteCount=0x08, status=0x0000, eventCount=0x0001, msgCount=0x0002, events=[0x01,0x02]
         let pdu = vec![0x0C, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x01, 0x02];
-        let (status, event_count, msg_count, events) = parse_get_comm_event_log_response(&pdu).unwrap();
+        let (status, event_count, msg_count, events) =
+            parse_get_comm_event_log_response(&pdu).unwrap();
         assert_eq!(status, 0);
         assert_eq!(event_count, 1);
         assert_eq!(msg_count, 2);

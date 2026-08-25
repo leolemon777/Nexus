@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::CoreError;
 use crate::mc_address::device_spec;
-use crate::mc_frame::{build_response_frame, parse_request_frame, FrameType};
+use crate::mc_frame::{build_response_frame, parse_request_frame};
 use crate::mc_pdu::{CMD_READ_BATCH, CMD_WRITE_BATCH, SUBCMD_BIT};
 
 /// 虚拟 MC 从站内存。
@@ -25,11 +25,23 @@ impl McSlaveMemory {
         let mut blocks = HashMap::new();
         // 为常用软元件分配保守容量(§6.2 FX5U/Q 典型值)
         for (prefix, cap) in [
-            ("X", 1024), ("Y", 1024), ("M", 8192), ("L", 8192),
-            ("B", 8192), ("S", 4096), ("SM", 8192),
-            ("D", 12288), ("W", 8192), ("SD", 8192), ("R", 32768),
-            ("TS", 1024), ("TC", 1024), ("TN", 1024),
-            ("CS", 1024), ("CC", 1024), ("CN", 1024),
+            ("X", 1024),
+            ("Y", 1024),
+            ("M", 8192),
+            ("L", 8192),
+            ("B", 8192),
+            ("S", 4096),
+            ("SM", 8192),
+            ("D", 12288),
+            ("W", 8192),
+            ("SD", 8192),
+            ("R", 32768),
+            ("TS", 1024),
+            ("TC", 1024),
+            ("TN", 1024),
+            ("CS", 1024),
+            ("CC", 1024),
+            ("CN", 1024),
         ] {
             if let Some(spec) = device_spec(prefix) {
                 blocks.insert(spec.code, vec![0u16; cap]);
@@ -39,7 +51,12 @@ impl McSlaveMemory {
     }
 
     /// 写字元件值。
-    pub fn set_words(&mut self, device_code: u8, start: u32, values: &[u16]) -> Result<(), CoreError> {
+    pub fn set_words(
+        &mut self,
+        device_code: u8,
+        start: u32,
+        values: &[u16],
+    ) -> Result<(), CoreError> {
         let block = self.block_mut(device_code)?;
         let end = start as usize + values.len();
         if end > block.len() {
@@ -50,7 +67,12 @@ impl McSlaveMemory {
     }
 
     /// 读字元件值。
-    pub fn get_words(&mut self, device_code: u8, start: u32, count: u16) -> Result<Vec<u16>, CoreError> {
+    pub fn get_words(
+        &mut self,
+        device_code: u8,
+        start: u32,
+        count: u16,
+    ) -> Result<Vec<u16>, CoreError> {
         let block = self.block_mut(device_code)?;
         let end = start as usize + count as usize;
         if end > block.len() {
@@ -60,7 +82,12 @@ impl McSlaveMemory {
     }
 
     /// 写位元件(值 0/1)。
-    pub fn set_bits(&mut self, device_code: u8, start: u32, values: &[u16]) -> Result<(), CoreError> {
+    pub fn set_bits(
+        &mut self,
+        device_code: u8,
+        start: u32,
+        values: &[u16],
+    ) -> Result<(), CoreError> {
         let block = self.block_mut(device_code)?;
         let end = start as usize + values.len();
         if end > block.len() {
@@ -73,17 +100,24 @@ impl McSlaveMemory {
     }
 
     /// 读位元件(值 0/1)。
-    pub fn get_bits(&mut self, device_code: u8, start: u32, count: u16) -> Result<Vec<u16>, CoreError> {
+    pub fn get_bits(
+        &mut self,
+        device_code: u8,
+        start: u32,
+        count: u16,
+    ) -> Result<Vec<u16>, CoreError> {
         self.get_words(device_code, start, count)
             .map(|v| v.into_iter().map(|x| x & 1).collect())
     }
 
     fn block_mut(&mut self, device_code: u8) -> Result<&mut Vec<u16>, CoreError> {
-        self.blocks.get_mut(&device_code).ok_or_else(|| CoreError::Modbus {
-            code: "MC_DEVICE_UNSUPPORTED",
-            message: format!("虚拟从站未实现软元件代码 {device_code:#04x}"),
-            details: None,
-        })
+        self.blocks
+            .get_mut(&device_code)
+            .ok_or_else(|| CoreError::Modbus {
+                code: "MC_DEVICE_UNSUPPORTED",
+                message: format!("虚拟从站未实现软元件代码 {device_code:#04x}"),
+                details: None,
+            })
     }
 }
 
@@ -108,7 +142,10 @@ pub fn seed_demo(mem: &mut McSlaveMemory) {
 ///
 /// 返回 Err 仅表示**内部错误**(帧损坏等,应断开连接);
 /// PLC 业务错误(地址越界等)通过结束代码写进响应帧——与真机行为一致。
-pub fn handle_mc_request(frame: &[u8], memory: &Arc<Mutex<McSlaveMemory>>) -> Result<Vec<u8>, CoreError> {
+pub fn handle_mc_request(
+    frame: &[u8],
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> Result<Vec<u8>, CoreError> {
     // 1E 帧识别(A-1E/SLMP-1E,§3.4):命令 00~03 + PC号 FF
     if is_1e_request(frame) {
         return handle_1e_request(frame, memory);
@@ -123,21 +160,31 @@ pub fn handle_mc_request(frame: &[u8], memory: &Arc<Mutex<McSlaveMemory>>) -> Re
         crate::mc_pdu::CMD_READ_BLOCKS => handle_read_blocks(&req, memory),
         crate::mc_pdu::CMD_ECHO_TEST => (0x0000u16, req.data.clone()), // 回送:原样返回
         crate::mc_pdu::CMD_READ_CPU_TYPE => (0x0000u16, b"Nexus-Rust-VM".to_vec()),
-        crate::mc_pdu::CMD_READ_CPU_STATUS => (0x0000u16, vec![0x00]),       // RUN
+        crate::mc_pdu::CMD_READ_CPU_STATUS => (0x0000u16, vec![0x00]), // RUN
         crate::mc_pdu::CMD_READ_CLOCK => (
             0x0000u16,
             vec![0x26, 0x08, 0x15, 0x14, 0x30, 0x00, 0x05], // 2026-08-15 14:30:00 周五
         ),
-        crate::mc_pdu::CMD_REMOTE_RUN | crate::mc_pdu::CMD_REMOTE_STOP
-        | crate::mc_pdu::CMD_REMOTE_PAUSE | crate::mc_pdu::CMD_REMOTE_RESET => (0x0000u16, vec![]),
+        crate::mc_pdu::CMD_REMOTE_RUN
+        | crate::mc_pdu::CMD_REMOTE_STOP
+        | crate::mc_pdu::CMD_REMOTE_PAUSE
+        | crate::mc_pdu::CMD_REMOTE_RESET => (0x0000u16, vec![]),
         _ => (0x0007u16, Vec::new()), // 无法识别指令
     };
 
-    Ok(build_response_frame(req.frame_type, req.sequence, end_code, &data))
+    Ok(build_response_frame(
+        req.frame_type,
+        req.sequence,
+        end_code,
+        &data,
+    ))
 }
 
 /// 处理 0403 随机读:点数(2B) + [地址(3B)+代码(1B)]×n。
-fn handle_read_random(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlaveMemory>>) -> (u16, Vec<u8>) {
+fn handle_read_random(
+    req: &crate::mc_frame::McRequestFrame,
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> (u16, Vec<u8>) {
     if req.data.len() < 2 {
         return (0x0004, vec![]);
     }
@@ -150,9 +197,15 @@ fn handle_read_random(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<
     let mut mem = memory.lock().unwrap_or_else(|e| e.into_inner());
     for i in 0..count {
         let off = 2 + i * 4;
-        let head = (req.data[off] as u32) | ((req.data[off + 1] as u32) << 8) | ((req.data[off + 2] as u32) << 16);
+        let head = (req.data[off] as u32)
+            | ((req.data[off + 1] as u32) << 8)
+            | ((req.data[off + 2] as u32) << 16);
         let code = req.data[off + 3];
-        let result = if is_bit { mem.get_bits(code, head, 1) } else { mem.get_words(code, head, 1) };
+        let result = if is_bit {
+            mem.get_bits(code, head, 1)
+        } else {
+            mem.get_words(code, head, 1)
+        };
         match result {
             Ok(vals) => {
                 if is_bit {
@@ -168,7 +221,10 @@ fn handle_read_random(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<
 }
 
 /// 处理 1403 随机写(字单位):点数 + [地址+代码+字数据2B]×n。
-fn handle_write_random_word(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlaveMemory>>) -> (u16, Vec<u8>) {
+fn handle_write_random_word(
+    req: &crate::mc_frame::McRequestFrame,
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> (u16, Vec<u8>) {
     if req.data.len() < 2 {
         return (0x0004, vec![]);
     }
@@ -179,7 +235,9 @@ fn handle_write_random_word(req: &crate::mc_frame::McRequestFrame, memory: &Arc<
     let mut mem = memory.lock().unwrap_or_else(|e| e.into_inner());
     for i in 0..count {
         let off = 2 + i * 6;
-        let head = (req.data[off] as u32) | ((req.data[off + 1] as u32) << 8) | ((req.data[off + 2] as u32) << 16);
+        let head = (req.data[off] as u32)
+            | ((req.data[off + 1] as u32) << 8)
+            | ((req.data[off + 2] as u32) << 16);
         let code = req.data[off + 3];
         let value = u16::from_le_bytes([req.data[off + 4], req.data[off + 5]]);
         if mem.set_words(code, head, &[value]).is_err() {
@@ -190,7 +248,10 @@ fn handle_write_random_word(req: &crate::mc_frame::McRequestFrame, memory: &Arc<
 }
 
 /// 处理 0406 多块成批读:块数(2B) + [点数(2B)+地址(3B)+代码(1B)]×块。
-fn handle_read_blocks(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlaveMemory>>) -> (u16, Vec<u8>) {
+fn handle_read_blocks(
+    req: &crate::mc_frame::McRequestFrame,
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> (u16, Vec<u8>) {
     if req.data.len() < 2 {
         return (0x0004, vec![]);
     }
@@ -204,10 +265,16 @@ fn handle_read_blocks(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<
             return (0x0004, vec![]);
         }
         let points = u16::from_le_bytes([req.data[off], req.data[off + 1]]);
-        let head = (req.data[off + 2] as u32) | ((req.data[off + 3] as u32) << 8) | ((req.data[off + 4] as u32) << 16);
+        let head = (req.data[off + 2] as u32)
+            | ((req.data[off + 3] as u32) << 8)
+            | ((req.data[off + 4] as u32) << 16);
         let code = req.data[off + 5];
         off += 6;
-        let result = if is_bit { mem.get_bits(code, head, points) } else { mem.get_words(code, head, points) };
+        let result = if is_bit {
+            mem.get_bits(code, head, points)
+        } else {
+            mem.get_words(code, head, points)
+        };
         match result {
             Ok(vals) => {
                 if is_bit {
@@ -227,7 +294,10 @@ fn handle_read_blocks(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<
 }
 
 /// 处理 0401 成批读。
-fn handle_read(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlaveMemory>>) -> (u16, Vec<u8>) {
+fn handle_read(
+    req: &crate::mc_frame::McRequestFrame,
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> (u16, Vec<u8>) {
     // 数据区:头设备号 3B + 软元件代码 1B + 点数 2B
     if req.data.len() < 6 {
         return (0x0004, vec![]);
@@ -262,7 +332,10 @@ fn handle_read(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlave
 }
 
 /// 处理 1401 成批写。
-fn handle_write(req: &crate::mc_frame::McRequestFrame, memory: &Arc<Mutex<McSlaveMemory>>) -> (u16, Vec<u8>) {
+fn handle_write(
+    req: &crate::mc_frame::McRequestFrame,
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> (u16, Vec<u8>) {
     // 数据区:头设备号 3B + 软元件代码 1B + 点数 2B + 写数据
     if req.data.len() < 6 {
         return (0x0004, vec![]);
@@ -310,7 +383,7 @@ fn out_of_range(device_code: u8, start: u32, len: usize) -> CoreError {
 mod tests {
     use super::*;
     use crate::mc_address::parse_mc_address;
-    use crate::mc_frame::{build_request_frame, AccessRoute};
+    use crate::mc_frame::{AccessRoute, FrameType, build_request_frame};
     use crate::mc_pdu::{build_read_batch_pdu, build_write_batch_pdu};
 
     fn setup_mem() -> Arc<Mutex<McSlaveMemory>> {
@@ -325,7 +398,13 @@ mod tests {
         let mem = setup_mem();
         let addr = parse_mc_address("D100").unwrap();
         let req_data = build_read_batch_pdu(&addr, 1).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
 
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
@@ -341,7 +420,13 @@ mod tests {
 
         // 写 ON
         let req_data = build_write_batch_pdu(&addr, &[1]).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.end_code, 0x0000);
@@ -349,7 +434,13 @@ mod tests {
 
         // 读回
         let req_data = build_read_batch_pdu(&addr, 1).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.data, vec![0x01]);
@@ -361,7 +452,13 @@ mod tests {
         let mem = setup_mem();
         let addr = parse_mc_address("M0").unwrap();
         let req_data = build_read_batch_pdu(&addr, 12).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.data.len(), 12);
@@ -377,7 +474,13 @@ mod tests {
         // D16777215 远超虚拟内存 12288
         let addr = parse_mc_address("D16777215").unwrap();
         let req_data = build_read_batch_pdu(&addr, 1).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.end_code, 0x00D2);
@@ -389,7 +492,13 @@ mod tests {
         let mem = setup_mem();
         // 手工构造指令 0x0201 的请求(未实现)
         let req_data = [0x01, 0x02, 0x00, 0x00];
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.end_code, 0x0007);
@@ -402,12 +511,29 @@ mod tests {
         let addr = parse_mc_address("D500").unwrap();
 
         let req_data = build_write_batch_pdu(&addr, &[0xCAFE, 0xBABE, 0x00FF]).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
-        assert_eq!(crate::mc_frame::parse_response_frame(&resp).unwrap().end_code, 0x0000);
+        assert_eq!(
+            crate::mc_frame::parse_response_frame(&resp)
+                .unwrap()
+                .end_code,
+            0x0000
+        );
 
         let req_data = build_read_batch_pdu(&addr, 3).unwrap();
-        let frame = build_request_frame(FrameType::Type3E, &AccessRoute::default(), 0x0010, &req_data, 0);
+        let frame = build_request_frame(
+            FrameType::Type3E,
+            &AccessRoute::default(),
+            0x0010,
+            &req_data,
+            0,
+        );
         let resp = handle_mc_request(&frame, &mem).unwrap();
         let parsed = crate::mc_frame::parse_response_frame(&resp).unwrap();
         assert_eq!(parsed.data, vec![0xFE, 0xCA, 0xBE, 0xBA, 0xFF, 0x00]);
@@ -426,7 +552,10 @@ pub fn is_1e_request(frame: &[u8]) -> bool {
 
 /// 处理 1E 请求帧,生成 1E 响应帧(`81 <结束码> [数据]`)。
 /// 返回 Err = 帧损坏;业务错误写进结束代码。
-pub fn handle_1e_request(frame: &[u8], memory: &Arc<Mutex<McSlaveMemory>>) -> Result<Vec<u8>, CoreError> {
+pub fn handle_1e_request(
+    frame: &[u8],
+    memory: &Arc<Mutex<McSlaveMemory>>,
+) -> Result<Vec<u8>, CoreError> {
     use crate::mc_1e::*;
     if frame.len() < 10 {
         return Err(CoreError::Modbus {
@@ -462,7 +591,9 @@ pub fn handle_1e_request(frame: &[u8], memory: &Arc<Mutex<McSlaveMemory>>) -> Re
                     let nbytes = (points as usize + 7) / 8;
                     let mut data = vec![0u8; nbytes];
                     for (i, v) in vals.iter().enumerate() {
-                        if *v != 0 { data[i / 8] |= 1 << (i % 8); }
+                        if *v != 0 {
+                            data[i / 8] |= 1 << (i % 8);
+                        }
                     }
                     let mut resp = vec![0x81, 0x00];
                     resp.extend_from_slice(&data);
@@ -488,25 +619,37 @@ pub fn handle_1e_request(frame: &[u8], memory: &Arc<Mutex<McSlaveMemory>>) -> Re
             let payload = &frame[12..];
             let ok = if cmd == CMD1E_BIT_WRITE {
                 let expected = (points as usize + 7) / 8;
-                if payload.len() < expected { return Ok(onee_error(0x40)); }
+                if payload.len() < expected {
+                    return Ok(onee_error(0x40));
+                }
                 let vals: Vec<u16> = (0..points as usize)
                     .map(|i| ((payload[i / 8] >> (i % 8)) & 1) as u16)
                     .collect();
                 mem.set_bits(spec.code, head, &vals).is_ok()
             } else {
                 let expected = points as usize * 2;
-                if payload.len() < expected { return Ok(onee_error(0x40)); }
+                if payload.len() < expected {
+                    return Ok(onee_error(0x40));
+                }
                 let vals: Vec<u16> = (0..points as usize)
                     .map(|i| u16::from_le_bytes([payload[i * 2], payload[i * 2 + 1]]))
                     .collect();
                 mem.set_words(spec.code, head, &vals).is_ok()
             };
-            if ok { Ok(vec![0x81, 0x00]) } else { Ok(onee_error(0x5B)) }
+            if ok {
+                Ok(vec![0x81, 0x00])
+            } else {
+                Ok(onee_error(0x5B))
+            }
         }
         _ => Ok(onee_error(0x40)), // 命令错误
     }
 }
 
 fn onee_error(code: u8) -> Vec<u8> {
-    if code == 0x5B { vec![0x81, 0x5B, 0x10, 0x00] } else { vec![0x81, code] }
+    if code == 0x5B {
+        vec![0x81, 0x5B, 0x10, 0x00]
+    } else {
+        vec![0x81, code]
+    }
 }
