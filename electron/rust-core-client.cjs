@@ -84,6 +84,9 @@ const COMMANDS = Object.freeze({
   COMPUTE_LRC: "compute_lrc",
   PARSE_FRAME_ONLINE: "parse_frame_online",
   PARSE_FRAME_OFFLINE: "parse_frame_offline",
+  // 自定义帧解析(串口可视化批次 2,与 main.cjs 转发、preload 白名单一一对应)
+  CUSTOM_FRAME_PARSE: "custom_frame_parse",
+  CUSTOM_FRAME_VALIDATE: "custom_frame_validate",
   // 流式轮询(v2)
   START_POLL_STREAM: "start_poll_stream",
   STOP_POLL_STREAM: "stop_poll_stream",

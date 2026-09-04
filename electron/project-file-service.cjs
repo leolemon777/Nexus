@@ -6,7 +6,7 @@ const { randomUUID } = require("node:crypto");
 
 const PROJECT_FORMAT = "nexus-project";
 const LEGACY_PROJECT_SCHEMA_VERSION = 0;
-const PROJECT_SCHEMA_VERSION = 1;
+const PROJECT_SCHEMA_VERSION = 2;
 const MAX_PROJECT_BYTES = 5 * 1024 * 1024;
 const MAX_JSON_DEPTH = 16;
 const MAX_JSON_NODES = 120_000;
@@ -24,13 +24,27 @@ const SAFE_PROJECT_DATA_TYPES = new Set([
 const SENSITIVE_PROJECT_KEY_RE = /(password|passwd|secret|token|authorization|cookie|credential|private[_-]?key|api[_-]?key|client[_-]?secret|certificate[_-]?key)/i;
 const PROJECT_MIGRATIONS = {
   [LEGACY_PROJECT_SCHEMA_VERSION]: {
-    targetVersion: PROJECT_SCHEMA_VERSION,
+    targetVersion: 1,
     summary: "补充 schemaVersion、workspace 默认结构和 v1 字段校验",
+    migrate(raw) {
+      const output = { ...raw, schemaVersion: 1 };
+      output.workspace = output.workspace && typeof output.workspace === "object"
+        ? { ...output.workspace }
+        : {};
+      return output;
+    },
+  },
+  1: {
+    targetVersion: PROJECT_SCHEMA_VERSION,
+    summary: "workspace 增加 frameDefinitions 自定义帧定义数组(串口可视化批次 2)",
     migrate(raw) {
       const output = { ...raw, schemaVersion: PROJECT_SCHEMA_VERSION };
       output.workspace = output.workspace && typeof output.workspace === "object"
         ? { ...output.workspace }
         : {};
+      if (!Array.isArray(output.workspace.frameDefinitions)) {
+        output.workspace.frameDefinitions = [];
+      }
       return output;
     },
   },
@@ -513,8 +527,67 @@ function normalizeCurrentProjectDocument(raw) {
       commandList: normalizeCommandList(raw.workspace?.commandList),
       simulators: normalizeSimulators(raw.workspace?.simulators),
       lastHelpReference: normalizeHelpReference(raw.workspace?.lastHelpReference),
+      frameDefinitions: normalizeFrameDefinitions(raw.workspace?.frameDefinitions),
     },
   };
+}
+
+const MAX_FRAME_DEFINITIONS = 50;
+const MAX_FRAME_FIELDS = 64;
+const ALLOWED_FRAME_MODES = new Set(["binary", "ascii-delimited"]);
+const ALLOWED_FRAME_TYPES = new Set(["u8", "u16", "i16", "u32", "i32", "f32"]);
+const ALLOWED_FRAME_BYTE_ORDERS = new Set(["be", "le"]);
+const ALLOWED_FRAME_CHECKSUMS = new Set(["none", "sum8", "xor8", "crc16-modbus"]);
+const ALLOWED_FRAME_LINE_ENDINGS = new Set(["\n", "\r\n"]);
+
+/** 帧定义归一化:只保留已知字段并夹紧边界;单条非法剔除而不是整份拒绝(调试工具容忍度优先)。 */
+function normalizeFrameDefinitions(list) {
+  if (!Array.isArray(list)) return [];
+  const seenNames = new Set();
+  const result = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    if (result.length >= MAX_FRAME_DEFINITIONS) break;
+    const name = boundedString(raw.name, "", 50).trim();
+    if (!name || seenNames.has(name)) continue;
+    const mode = ALLOWED_FRAME_MODES.has(raw.mode) ? raw.mode : "binary";
+    const fieldsRaw = Array.isArray(raw.fields) ? raw.fields : [];
+    const fields = [];
+    for (const field of fieldsRaw) {
+      if (!field || typeof field !== "object") continue;
+      if (fields.length >= MAX_FRAME_FIELDS) break;
+      const fieldName = boundedString(field.name, "", 50).trim();
+      if (!fieldName) continue;
+      const offset = field.offset == null ? null : boundedInteger(field.offset, null, 0, 65_535);
+      const index = field.index == null ? null : boundedInteger(field.index, null, 0, 65_535);
+      const scale = Number(field.scale);
+      fields.push({
+        name: fieldName,
+        offset,
+        index,
+        fieldType: ALLOWED_FRAME_TYPES.has(field.fieldType) ? field.fieldType : "u16",
+        byteOrder: ALLOWED_FRAME_BYTE_ORDERS.has(field.byteOrder) ? field.byteOrder : "be",
+        scale: Number.isFinite(scale) && Math.abs(scale) >= 1e-9 && Math.abs(scale) <= 1e9 ? scale : 1,
+        unit: boundedString(field.unit, "", 16),
+      });
+    }
+    if (fields.length === 0) continue;
+    const checksumType = raw.checksum && ALLOWED_FRAME_CHECKSUMS.has(raw.checksum.type)
+      ? raw.checksum.type
+      : null;
+    seenNames.add(name);
+    result.push({
+      name,
+      mode,
+      head: mode === "binary" ? boundedString(raw.head, "", 130).trim() : "",
+      length: mode === "binary" ? boundedInteger(raw.length, null, 1, 65_535) : null,
+      checksum: checksumType ? { type: checksumType } : null,
+      lineEnding: ALLOWED_FRAME_LINE_ENDINGS.has(raw.lineEnding) ? raw.lineEnding : "\n",
+      separator: boundedString(raw.separator, ",", 8) || ",",
+      fields,
+    });
+  }
+  return result;
 }
 
 function projectSchemaVersion(raw) {

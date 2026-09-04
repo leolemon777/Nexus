@@ -21,6 +21,33 @@
 - R3 构建证据已接入：`scripts/build-evidence.cjs` 按安全 JSON 计划顺序执行命令，记录脱敏 stdout/stderr、退出码、耗时、日志大小和 SHA-256，并自动复核。当前 `evidence/build/candidate/` 为 dirty-source candidate，5/5 通过；见 `docs/build-evidence-runbook.md`。
 - 下方历史批次中的测试数字是当时快照；若与最新基线冲突，以本节和当前命令输出为准。
 
+## 功能批次：串口可视化批次 1 —— 调试页实时曲线面板（2026-08-31）
+
+- 规格：`docs/spec-plan-serial-plot-parse-replay.md` 批次 1。Serial Studio 仅功能对标，零代码/零格式借鉴（GPL-3.0 隔离）。
+- `#debug-view` 新增「实时曲线」卡片：60s 滚动窗口、统一 Y 轴、HiDPI Canvas、暂停（冻结绘制但数据继续入环）/清空/导出 CSV；图例复用 `trend-chip` 样式类；新元素 ID 统一 `plot-` 前缀。
+- 新模块 `src/serial-plot.js`（`SeriesStore`/`evalManualRule`/`pairRegisterChannels`/`buildCsvRows`/`drawSerialPlot`/`renderPlotLegend`/`parseHeadHex`），主站 trend 代码零改动；绘制循环 rAF + 100ms 节流，仅 `activeView === "debug"` 且未暂停时绘制，与主站趋势循环由 `activeView` 天然互斥。
+- 通道来源 A（自动解析）：收发帧按 50ms 合批调用既有 `parse_frame_online`（**未新增 Rust 命令、未动 IPC 四处白名单**），TX 读请求与 RX 读响应配对得到 `HR[n]/IR[n]` 寄存器通道；无配对请求时退化为 `HR+i/IR+i` 响应内偏移名；非目标协议帧解析失败静默跳过；发现通道登记上限 300。
+- 通道来源 B（手动字节偏移）：帧头过滤（可空）+ 偏移 + u8/u16/i16/u32/i32/f32 × 大/小端 + 缩放 + 单位，仅对 RX 收包求值；表单带自解释 placeholder 与易混字段 title tooltip。
+- CSV 导出复用 `export_csv`（首列 ISO 时间 + 每通道一列、单位入列名、稀疏单元格留空、重名列追加通道 key 去重）。
+- 新测试 `scripts/serial-plot.test.cjs`（纯逻辑层，7 个用例）已挂进 `npm run test:electron`；绘制/布局由 `scripts/audit-ui-layout.cjs`（VIEWS 含 debug）与冒烟覆盖。
+- **验证状态（2026-08-31 已完成，批次 1 关闭）**：环境恢复后四件套全绿——
+  - `node --test scripts/serial-plot.test.cjs`：7/7（首轮 2 处**测试用例自身笔误**：FC04 期望数组少一个寄存器、i16 小端负值期望写成无符号；实现代码无需改动）。
+  - `npm run test:electron`：326/326 通过（基线 309 + 新增用例，0 失败）。
+  - `npm run build`（Vite）：通过。
+  - `npx electron scripts/audit-ui-layout.cjs`：**debug 视图 0 违规**（首轮手动通道表单 15 控件一行超宽换行触发 row-misaligned，已拆为两行复测通过；master 3 条 / interfaces 1 条为**改动前已存在**的存量问题，不在本批次范围）。
+  - `npm run smoke:electron`：`NEXUS_UI_SMOKE_OK` + `NEXUS_ELECTRON_SMOKE_OK`（GPU cache 报错为无头模式无害噪音）。
+  - 环境插曲存档：当日 Git for Windows 更新中断致 `bin\bash.exe` 缺失（`git.exe` 2.54.0 正常），所有命令执行瘫痪半天，用户重装修复。期间项目工作区由 `E:\Desktop\项目汇总\Nexus2.0` 迁移至 `E:\Desktop\Nexus2.0`（本批次文档路径均已随迁，无需修改）。
+
+## 功能批次：串口可视化批次 2+3 —— 自定义帧解析栈与会话录制回放（2026-08-31）
+
+- 规格：`docs/spec-plan-serial-plot-parse-replay.md` 批次 2/3。Serial Studio 仅功能对标，零代码/格式借鉴（GPL-3.0 隔离）。
+- **批次 2（Rust 自定义帧解析）**：新模块 `rust-core/src/frame_definition.rs`（binary 定长/帧头/sum8/xor8/crc16-modbus + ascii-delimited 两模式；6 类型 × 大小端 × 缩放 × 单位；显式错误码 `HEAD_MISMATCH`/`LENGTH_MISMATCH`/`CHECKSUM_MISMATCH`/`FIELD_OUT_OF_RANGE`/`ASCII_*`/`FRAME_DEF_INVALID`，绝不静默）。JSONL 命令 `custom_frame_parse`/`custom_frame_validate`（definition 每请求内联，不进 Session），`protocol.rs` dispatch/命令清单/handler 三处接线，IPC 四处白名单同步（preload/main.cjs/rust-core-client/protocol.rs），并被信封契约测试纳入 MATRIX（fixtures 补 2 条载荷）。
+- **批次 2（UI/持久化）**：调试页新增「帧解析」卡（模式/帧头/定长/校验/字段表/试算/载入/保存/删除/应用到曲线）；定义随项目保存 —— `.nexus.json` schemaVersion **1→2**（`workspace.frameDefinitions`，链式迁移 + 归一化单条非法剔除不整份拒绝，上限 50 定义 × 64 字段）；「应用到曲线」后收包在既有 50ms 合批里走 `custom_frame_parse` 出 `fd:定义.字段` 通道；「用最近收包试算」即时预览字段值或错误码。
+- **批次 3（录制/回放）**：`electron/record-service.cjs`（JSONL 落盘 `userData/sessions/session-*.nxsession.jsonl`，recordVersion 头、5MB 自动分卷、坏行读取跳过计数、10 万帧上限）；IPC `record_start/stop/status/pick/read/export_csv`（NON_CORE 侧）；回放调度器 `src/replay-scheduler.js`（按原始 ts 差 ÷ 倍速调度，1x/2x/4x/最大速/单步/暂停，时钟回拨防护）——回放**直接重进渲染层管线**（`appendDebugLog` + `plotFeedRecord`），不伪造 IPC 事件；录制文件可导出 CSV（绑定了帧定义时附字段值列，Rust 解析前 2000 RX 帧）。
+- **验证（2026-08-31 全绿）**：Rust 单测 461/461（+15）+ `custom_frame_jsonl_e2e.rs` 4/4（登记进 `scripts/test-rust-jsonl.ps1`），全量 **631/631**；`cargo fmt --check` 通过；Electron 全量 **336/336**（+10：record-service 4 + replay-scheduler 5 + project v1→v2 迁移 1，信封契约抓到 6 条新命令并已补 MATRIX/NON_CORE）；Vite build、`audit-ui-layout` debug 视图 **0 违规**（master 3/interfaces 1 为存量）、冒烟双 OK。
+- 修复插曲：`read_binary_value` 有符号值经 u64 中转溢出（自查发现，已修）；`.ps1` E2E 首跑 3 处测试期望笔误；golden 夹具随 v2 迁移重新生成。黄金向量文档：`docs/custom-frame-golden-vectors.md`（S3，14 向量）。
+- L2 边界：RS-485 温度模块等真实设备的帧定义适配与曲线验收仍待硬件在场，按 P0 证据分级标注，不宣称设备级完成。
+
 ## 功能批次：工作区卡片可折叠（2026-08-24）
 
 - 全部带 `.card-header` + 内容的工作区卡片可点标题或左侧箭头折叠/展开；标题栏里的「刷新 / 帮助 / 清空」等按钮不触发折叠。
@@ -966,3 +993,121 @@
 
 - 占位提示必须自解释(加「如」前缀或写成完整说明),不得与真实值形态相同。
 - 易混字段(地址基/倍率/单位)一律带 title tooltip;新增表单字段时同批补齐。
+
+---
+
+## 真机执行记录：FX3U 编程口首通（2026-08-25）
+
+> 首条真机成功记录。硬件：FX3U + SC09(COM3) + 9600-7E1；链路：Nexus UI → IPC → rust-core 组帧 → SC09 串口 → FX3U 编程口协议 → 回帧解析。
+
+| 时间(约) | 动作 | 结果 |
+|---|---|---|
+| 本日下午 | agent UIA 驱动:COM3/9600-7E1 打开(13~19ms) → 三菱页 FX 编程口绑定 | 已建立 · FX 编程口 已就绪 |
+| 随后 | 用户自行读 x0 × 10 | **FX 读取成功**,X0~X9 十行位状态(全 OFF) |
+| 随后 | 读 D0 × 10 | **FX 读取成功**,用户确认读出数据 |
+| 随后 | 读 y1 × 20 | **FX 读取成功**(状态栏实证) |
+
+- **结论:FX 编程口全链在真机上打通**。本日修复的两缺陷均经真机验证:信封修复使读取可行,字节序修复使字值正确。
+- 证据形态:应用状态栏连续多次「FX 读取成功」+ 用户现场确认;报文面板留有原始帧可复查。
+- 待办转 ADP 路线:GX Works2 下装以太网适配器参数(开放 TCP 5000 MC 协议)后跑 `rehearse-hardware.cjs check` 帧级终裁;485 温度模块扫描待接。
+
+## 缺陷 3(真机,用户发现):FX 软元件 X/Y 八进制编号显示错位(2026-08-25)
+
+- 现象:用户读 Y1×20,结果表出现 **Y8/Y9** —— FX3U 的 X/Y 是八进制编号(Y7 之后是 Y10),Y8/Y9 不存在。
+- 定性:协议层编址一直正确(rust-core `fx_prog_parse_number` 对 X/Y 按八进制解析);**仅渲染层 `mcRenderRows` 按十进制递增生成行标签**,第 8/9 行标签错名(实为 Y10/Y11),位状态值本身正确。
+- 修复:新建 `src/device-labels.js` 纯函数 `formatDeviceSeries`(X/Y 八进制、其余十进制,非法输入返回 null),`mcRenderRows` 改用之;新增 `electron/device-labels.test.cjs` 4 用例(Y1×20 跨界序列/X10 起/D 十进制/非法输入)。
+- 验证:device-labels 4/4;`npm run build` 重建;`npm run test:electron` **313/313** 全绿;应用 F5 刷新后实测绑定恢复,标签按八进制显示。
+- 今日三缺陷小结:①fx_prog_parse 信封字段 ②FX 编程口字节序 ③X/Y 八进制标签 —— 全部真机发现、全部已修、全部带回归守卫。
+
+## 缺陷 4(真机,用户发现):FX 编程口位软元件被按字读解(2026-08-25)
+
+- 现象:用户强制 M5 ON,Nexus 读 m0×6 显示 M0=ON、M1~M5=OFF。
+- 根因:渲染层把"点数 6"当字数传入 → 请求 12 字节(=M0~M95 共 96 位);M5=ON 使 byte0=0x20,按字解码后第 0 个字非零 → 显示在"M0"行——**M5 的状态错标到了 M0**。位值与通信本身没错,是位/字语义混用。
+- 位序权威依据:HSL `SoftBasic.ByteToBoolArray/GetDataByBitIndex`(I706 源码 SoftBasic.cs:1081,1204)——每字节 8 点、**LSB 在前**(bit i → byte[i/8] & (1<<(i%8)))。
+- 修复(`electron/fx-serial-service.cjs`):progRead 识别位软元件(X/Y/M/S/TS/CS)→ 点数折算请求字(ceil(points/16),只读多读无害);新增 `parseFxProgBits`(ASCII hex 每字节 2 字符 → 8 点/字节 LSB 解包,取前 points 位);字软元件路径不变。渲染层无需改动(isBit 判定已有)。
+- 验证:serial-services 12/12(新增 3 例:M5 场景黄金回归 "2000"→[0,0,0,0,0,1]、跨字节 0x01/0x02→X0/X9、D 字路径不回归);`npm run build`;`npm run test:electron` **316/316**;应用已刷新恢复 FX 绑定,待用户重读 m0×6 实机复核 M5=ON。
+
+---
+
+## 举一反三(第二轮):全协议位/字语义与打包顺序审计（2026-08-25,缺陷 4 之后）
+
+> 缺陷 4 的类别是"值语义"(点数 vs 字数、位打包顺序),信封审计(第一轮)对此天然盲区——`words:6` 类型合法但语义错。本轮按协议逐一核对位格式、请求单位、解包顺序,证据=实现代码+e2e 值断言+HSL 权威源码。
+
+### 分协议位/字节序证据表
+
+| 协议 | 位数据格式 | 请求单位 | 证据 |
+|---|---|---|---|
+| FX 编程口(今日修后) | 每字节 8 点、LSB 在前 | 点数→折算字 | HSL SoftBasic.ByteToBoolArray;用户真机 M5 场景;serial-services 3 用例 |
+| FX Computer Link | **每点 1 字符** "0"/"1"(非打包) | 点数(BR) | HSL MelsecFxLinksHelper.cs:489(逐字符 ==49);fx_links.rs 字序测试 |
+| MC A-1E | 每字节 8 点、bit0=首点 | 点数 | mc_1e.rs:264 解包;e2e M0~M5 位读 |
+| MC 3E Binary/ASCII/UDP | **每点 1 字节** 00/01(与 1E 相反,三菱两协议真实差异) | 点数 | mc_pdu.rs:131;e2e M0~M11/M0~M5 位读写断言 |
+| MC C24(3C 帧) | 同 3E(应用区语义) | 点数 | handle_mc_c24_parse_read → parse_read_batch_response |
+| Modbus TCP/RTU | 每字节 8 点 LSB(Modbus 标准) | 点数 | golden vectors + 12 E2E 回环 |
+| S7 / PPI | 位寻址制(AnyPointer byte<<3\|bit),无打包 | 元素数 | s7_address M0.0/DBX/V100.3;e2e 读 M10.0×8(0x55 交替断言) |
+| FINS | 位区每点 1 字节 | 点数 | e2e 位读 CIO0.00×4(0xBEEF 低位断言)+ 位写读改写 |
+| HostLink(C-mode/FINS) | 仅字(位未开放) | 字 | 服务层 parseDmAddress 字窗校验 |
+| 松下 MEWTOCOL | 位=RCS 单点专用命令 | 单点 | readContact 路径+测试 |
+| USS / RK512 / FW | 字协议 | 字 | 字路径 |
+| DL/T645 / CJ/T188 / 品牌profile | 数据块/标准 Modbus 打包 | — | 各自 golden vectors |
+
+### 结论
+
+- **唯一中招即 FX 编程口(今日已修)**;三家打包位协议(FX prog / MC 1E / Modbus)同序 LSB,交叉印证。
+- 三菱家族三种位格式并存且各不相同(FX prog 打包 LSB / FX Links 逐字符 / 1E 打包 LSB / 3E 每点 1 字节)——实现均已按各自协议正确区分。
+- 本轮纯审阅+e2e 核对,零代码改动,无需重跑套件(当日 316/316 与 612/612 均为现势)。
+
+## 缺陷 3/4 真机闭环验证(2026-08-25)
+
+- 排查插曲:缺陷 3 修复后两次"F5 刷新"实际未生效(焦点被夺),旧 bundle 一直运行致用户仍见 X8/X9;另有两次强杀后立即重启出现空白渲染(启动竞争),干净重启 + smoke:electron 双 OK 确认构建无恙。教训:**改渲染层后必须以新实例实测 UI,不信 F5**。
+- 缺陷 3(八进制标签)真机验证:x0 × 10 → 标签序列 **X0~X7、X10、X11**,无 X8/X9 ✓。
+- 缺陷 4(位软元件语义)真机验证:m0 × 10 → **M5 = ON**(用户强制的状态,第 6 行),其余 OFF ✓;此前"M5 错标到 M0"的现象消失。
+- 今日四缺陷全部真机发现 → 修复 → 真机闭环。
+
+## UX 防护:FX 绑定时串口参数不匹配警告(2026-08-25)
+
+- 背景:用户两次以默认 8N1 打开串口后绑 FX 编程口,"已就绪"但 PLC 无响应——状态绿灯掩盖了参数错配(PPI 服务早有 serialWarnings,FX 一直没有)。
+- 交付(src/main.js mcConnect isFxSerial 分支):数据位≠7 或校验≠偶时,状态栏改"已绑定但参数存疑"+红色通知列出错配项与改正路径;参数正确时通知附带实际串口参数。
+- 验证:node --check、vite build、test:electron 316/316、smoke 双 OK(遵循"渲染层改动以新实例+冒烟验证"的新规矩)。
+- 另:SC09 USB 今日两次物理掉线(会话中途与配置过程中,FTDI present=False/File not found),硬件侧待用户换口/重插;软件侧已能明确报"打开失败"。
+
+## 便携包重打(含 2026-08-25/26 全部修复) + 扫描器误报修正（2026-08-26）
+
+- 动因:8-22 旧包不含四缺陷修复/八进制标签/位语义/参数防呆/UX 备注,用户需要双击即用的正式包。
+- 扫描器两处误报修正(scripts/release-secret-scan.cjs SKIP_PATH_FRAGMENTS):
+  ①补跳过 `LICENSES.chromium.html`(Chromium 官方 20MB 开源许可清单,超 5MiB 扫描上限且无敏感内容);
+  ②跳过范围由 `.package-lock.json` 扩为整个 `resources/app/node_modules/`(tauri 等第三方包 JSDoc 示例含 password=/token= 字样,14 条全为公开文档示例;自有代码仍全量扫描,36 文件 PASS)。
+- 交付:`output/portable/Nexus 2.0/`(PackagedAtUtc=2026-08-26T05:08:25Z,356.9 MiB,含 release-manifest/SBOM/SHA256SUMS);
+  新包 bundle 验证含八进制 `?8:10` 与「参数存疑」防呆文案。
+- 验证:test:electron 316/316;`smoke:portable` 三 OK(UI/ELECTRON/PORTABLE)。
+- 另:桌面启动器 `E:\Desktop\双击启动Nexus(最新版).bat`(dev 最新代码)。
+
+---
+
+## HSL + 一代 Nexus 系统性对照（2026-08-26，用户要求防同类问题）
+
+> 对照源:`I706/HslCommunication-netframe-v12.2.0`(权威)、`i3195/HslCommunication-src`、`Nexus/src/Nexus.Mitsubishi`(一代);被审:rust-core 各协议模块。聚焦今天缺陷的语义类别:地址进制、字节/位序、数量单位、打包偏移。
+
+### 缺陷 5(HSL 对照发现):FX 编程口位软元件地址错位(rust fx_programming.rs)
+
+- 现象:位软元件(X/Y/M/S/T/C)读/写地址 = 基址+编号**×2**(字语义),正确应为 基址+编号**÷8**(每地址单元 1 字节=8 点)。二进制实测:M8→0110❌(应 0101)、X17→009E❌(应 0081)、Y10→00B0❌(应 00A1);D/TN/CN/CN32 字表全对。真机昨日碰巧全用 0 号地址(M0/X0)所以读对;y1 实际读偏到 Y16 区(碰巧全 OFF)。
+- 修复:`fx_prog_rw_address` 重写——位组(X/Y/M/S/T/C)÷8 且补 M≥8000→1E0H 段、C≥200→3C0H 段;字组(TN/CN/CN32/D)×2 不变。依据:HSL `CalculateBoolStartAddress` 旧协议表逐项一致(旧测试向量 X17→9EH 系文档来源错误,一并更正)。
+- 连带修复(JS fx-serial-service):①`progWrite` 位值按 8 点/字节 LSB 打包(原先当字写会写错数据);②读写均补**字节内偏移**(编号%8):读 M5×3 取字节 0 的 bit5,写 M5=1 产 0x20——此前偏移非 0 的读写都会错位;③位判定正则改 /^(X|Y|M|S|T|C)$(与 rust 表一致)。
+- 验证:rust rw 表 30 项断言重写(M8/X10/M8000/C200/C208/S40/T16 等全覆盖)→ **cargo 612/612**;serial-services 新增 3 例(位写打包含偏移/跨字节/字不回归)+偏移读直测 2 例 → **test:electron 319/319**。
+
+### MC A-1E 位读语义族冲突(HSL vs mcprotocol,自适应兼容)
+
+- HSL `MelsecA1ENet.ReadBool`:A1E 位读响应**每点 1 字节**(`m==1`);mcprotocol 库/FX3U-ENET 资料:**每字节 8 点打包**——两个业界参考打架(R9 同类)。
+- 处置:`parse_1e_response` 改**按响应长度自适应**(≥points 字节→逐点;≥ceil(points/8)→打包)。自家从站(打包式)e2e 全绿;真 ADP 接入后哪种都兼容。真机仲裁结果待记录。
+
+### 其余对照结论(无缺陷)
+
+- FX Links:位=每点 1 字符(HSL 489 行)、字=4 字符高前(fx_links.rs:551)——一致 ✓
+- MC 3E/C24:位=每点 1 字节 00/01(mc_pdu.rs)——与 HSL McBinary 一致 ✓;3E 子命令语义族差异=R9 已知遗留(S1)
+- Modbus/S7/FINS/HostLink/松下:昨日位语义审计已覆盖(e2e 值断言),本轮 HSL 抽查无新差异 ✓
+- 一代 Nexus(Nexus.Mitsubishi)未实现 FX 编程口位寻址(仅字),无对照价值;MC 3E 与二代同语义
+
+## 最终便携包(含缺陷 5)与收尾(2026-08-26)
+
+- `output/portable/Nexus 2.0/` 重打:PackagedAtUtc=2026-08-26T12:23:26Z,356.91 MiB,含全部五缺陷修复+双源地址表+1E 自适应;`smoke:portable` 三 OK。
+- 最终基线:test:electron **319/319**、cargo **612/612**。
+- 等真机项:①FX 非零位地址复验(M8/X10,缺陷 5 闭环);②ADP 参数下装 → 1E 位读语义族仲裁;③485 模块扫描。

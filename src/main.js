@@ -2,6 +2,7 @@ import "./app.css";
 import { buildPollPlan, splitBatchResult } from "./poll-planner.js";
 import { filterTrace } from "./trace-filter.js";
 import { listProtocolGuideVariants, resolveProtocolGuide } from "./protocol-guides.js";
+import { formatDeviceSeries } from "./device-labels.js";
 import { resolveSiemensRoute } from "./siemens-route.js";
 import { resolveMelsecRoute } from "./melsec-route.js";
 import {
@@ -18,6 +19,17 @@ import {
   formatGx3TechnicalReport,
   parseGx3DevicePresentation,
 } from "./gx3-presenter.js";
+import {
+  SeriesStore,
+  evalManualRule,
+  pairRegisterChannels,
+  buildCsvRows,
+  drawSerialPlot,
+  renderPlotLegend,
+  parseHeadHex,
+  PLOT_MAX_DISCOVERED,
+} from "./serial-plot.js";
+import { ReplayScheduler, normalizeReplayRecords } from "./replay-scheduler.js";
 
 const elements = {
   form: document.querySelector("#serial-form"),
@@ -105,6 +117,49 @@ const elements = {
   dbgCalcCrc: document.querySelector("#dbg-calc-crc"),
   dbgCalcLrc: document.querySelector("#dbg-calc-lrc"),
   dbgChecksumResult: document.querySelector("#dbg-checksum-result"),
+  plotCanvas: document.querySelector("#plot-canvas"),
+  plotLegend: document.querySelector("#plot-legend"),
+  plotChannelSelect: document.querySelector("#plot-channel-select"),
+  plotAdd: document.querySelector("#plot-add"),
+  plotPause: document.querySelector("#plot-pause"),
+  plotClear: document.querySelector("#plot-clear"),
+  plotExport: document.querySelector("#plot-export"),
+  plotAutoParse: document.querySelector("#plot-auto-parse"),
+  plotParseTransport: document.querySelector("#plot-parse-transport"),
+  plotManName: document.querySelector("#plot-man-name"),
+  plotManHead: document.querySelector("#plot-man-head"),
+  plotManOffset: document.querySelector("#plot-man-offset"),
+  plotManType: document.querySelector("#plot-man-type"),
+  plotManOrder: document.querySelector("#plot-man-order"),
+  plotManScale: document.querySelector("#plot-man-scale"),
+  plotManUnit: document.querySelector("#plot-man-unit"),
+  plotManAdd: document.querySelector("#plot-man-add"),
+  recToggle: document.querySelector("#rec-toggle"),
+  recState: document.querySelector("#rec-state"),
+  replayOpen: document.querySelector("#replay-open"),
+  replayToggle: document.querySelector("#replay-toggle"),
+  replaySpeed: document.querySelector("#replay-speed"),
+  replayStep: document.querySelector("#replay-step"),
+  replayExport: document.querySelector("#replay-export"),
+  replayState: document.querySelector("#replay-state"),
+  fdList: document.querySelector("#fd-list"),
+  fdLoad: document.querySelector("#fd-load"),
+  fdSave: document.querySelector("#fd-save"),
+  fdDelete: document.querySelector("#fd-delete"),
+  fdApply: document.querySelector("#fd-apply"),
+  fdName: document.querySelector("#fd-name"),
+  fdMode: document.querySelector("#fd-mode"),
+  fdBinaryOpts: document.querySelector("#fd-binary-opts"),
+  fdAsciiOpts: document.querySelector("#fd-ascii-opts"),
+  fdHead: document.querySelector("#fd-head"),
+  fdLength: document.querySelector("#fd-length"),
+  fdChecksum: document.querySelector("#fd-checksum"),
+  fdLineEnding: document.querySelector("#fd-line-ending"),
+  fdSeparator: document.querySelector("#fd-separator"),
+  fdFieldsRows: document.querySelector("#fd-fields-rows"),
+  fdAddField: document.querySelector("#fd-add-field"),
+  fdTry: document.querySelector("#fd-try"),
+  fdPreview: document.querySelector("#fd-preview"),
   parserView: document.querySelector("#parser-view"),
   parserTransport: document.querySelector("#parser-transport"),
   parserInput: document.querySelector("#parser-input"),
@@ -879,11 +934,614 @@ function startTrendLoop() {
   trendRafId = requestAnimationFrame(trendLoop);
 }
 
+// === 串口实时曲线(调试页) ===
+
+const plotStore = new SeriesStore();
+const plotDiscovered = new Map(); // 自动解析发现的通道 key -> { key, name }
+let plotLastTxInfo = null; // 最近一次成功解析的 TX 请求(为 RX 响应提供寄存器起始地址)
+let plotFrameBatch = []; // 待解析收发帧(50ms 合批, 降低逐帧 IPC 频率)
+let plotFlushTimer = null;
+let plotParseBusy = false;
+let plotRafId = null;
+let plotLastDrawAt = 0;
+let plotCanvasW = 0;
+let plotCanvasH = 0;
+
+/** onDebugFrame 入口: 手动规则同步求值(仅收包);自动解析按 50ms 合批走 parse_frame_online */
+function plotFeedRecord(record) {
+  if (!record || !Array.isArray(record.bytes)) return;
+  if (record.direction === "RX") {
+    for (const series of plotStore.entries()) {
+      if (!series.rule) continue;
+      const value = evalManualRule(series.rule, record.bytes);
+      if (value !== null) plotStore.feed(series.key, record.timestamp, value);
+    }
+  }
+  if (!elements.plotAutoParse?.checked) return;
+  if (record.direction !== "RX" && record.direction !== "TX") return;
+  plotFrameBatch.push(record);
+  if (plotFlushTimer === null) plotFlushTimer = setTimeout(flushPlotBatch, 50);
+}
+
+async function flushPlotBatch() {
+  plotFlushTimer = null;
+  if (plotParseBusy) {
+    if (plotFrameBatch.length > 0) plotFlushTimer = setTimeout(flushPlotBatch, 50);
+    return;
+  }
+  const batch = plotFrameBatch;
+  plotFrameBatch = [];
+  plotParseBusy = true;
+  try {
+    for (const record of batch) {
+      let info = null;
+      try {
+        info = await callBackend("parse_frame_online", {
+          bytes: record.bytes,
+          transport: elements.plotParseTransport?.value || "rtu",
+        });
+      } catch {
+        info = null; // 非目标协议的帧解析失败,静默跳过
+      }
+      if (!info) continue;
+      // 自定义帧定义(批次 2): 独立于 Modbus 解析,非标协议帧也能出通道
+      if (activeFrameDef && record.direction === "RX") {
+        try {
+          const custom = await callBackend("custom_frame_parse", {
+            definition: activeFrameDef,
+            bytes: record.bytes,
+          });
+          if (custom?.status === "ok" && Array.isArray(custom.fields)) {
+            for (const field of custom.fields) {
+              const key = `fd:${activeFrameDef.name}.${field.name}`;
+              if (!plotDiscovered.has(key) && plotDiscovered.size < PLOT_MAX_DISCOVERED) {
+                plotDiscovered.set(key, {
+                  key,
+                  name: `${activeFrameDef.name}.${field.name}`,
+                  unit: field.unit || "",
+                });
+              }
+              plotStore.feed(key, record.timestamp, field.value);
+            }
+          }
+        } catch { /* 单帧解析失败静默跳过 */ }
+      }
+      if (record.direction === "TX") {
+        plotLastTxInfo = info.isValid ? info : null;
+        continue;
+      }
+      if (!info.isValid || info.isException) continue;
+      for (const channel of pairRegisterChannels(plotLastTxInfo, info)) {
+        if (!plotDiscovered.has(channel.key) && plotDiscovered.size < PLOT_MAX_DISCOVERED) {
+          plotDiscovered.set(channel.key, { key: channel.key, name: channel.name });
+        }
+        plotStore.feed(channel.key, record.timestamp, channel.value);
+      }
+    }
+  } finally {
+    plotParseBusy = false;
+    if (plotFrameBatch.length > 0 && plotFlushTimer === null) {
+      plotFlushTimer = setTimeout(flushPlotBatch, 50);
+    }
+  }
+}
+
+function plotRefreshChannelOptions() {
+  const select = elements.plotChannelSelect;
+  if (!select) return;
+  const previous = select.value;
+  select.replaceChildren(new Option("选择通道…", ""));
+  const channels = [...plotDiscovered.values()].sort((a, b) => a.key.localeCompare(b.key));
+  for (const channel of channels) {
+    const option = new Option(channel.name, channel.key);
+    option.disabled = plotStore.has(channel.key); // 已添加的置灰,防重复
+    select.append(option);
+  }
+  if ([...select.options].some((o) => o.value === previous)) select.value = previous;
+}
+
+function plotRenderLegend() {
+  renderPlotLegend(elements.plotLegend, plotStore, plotRemoveSeries);
+}
+
+function plotAddSelected() {
+  const key = elements.plotChannelSelect?.value;
+  if (!key) {
+    setNotice("error", "未选择通道", "请先从下拉框选择一个自动解析发现的通道。");
+    return;
+  }
+  const channel = plotDiscovered.get(key);
+  if (!channel) return;
+  if (plotStore.has(key)) {
+    setNotice("info", "已存在", "该通道已在曲线图中。");
+    return;
+  }
+  plotStore.add(key, { name: channel.name });
+  plotRenderLegend();
+  plotRefreshChannelOptions();
+  elements.plotChannelSelect.value = ""; // 复位占位项,避免停在已添加的 disabled 选项上
+  setNotice("success", "已添加曲线", `${channel.name}（等待收包数据…）`);
+}
+
+function plotAddManual() {
+  const name = (elements.plotManName?.value || "").trim();
+  if (!name) {
+    setNotice("error", "缺少名称", "请填写手动通道名称。");
+    return;
+  }
+  const key = `man:${name}`;
+  if (plotStore.has(key)) {
+    setNotice("info", "已存在", `手动通道「${name}」已在曲线图中。`);
+    return;
+  }
+  let head = null;
+  try {
+    head = parseHeadHex(elements.plotManHead?.value);
+  } catch (error) {
+    setNotice("error", "帧头不合法", error.message || String(error));
+    return;
+  }
+  const type = elements.plotManType?.value || "u16";
+  const order = elements.plotManOrder?.value === "le" ? "le" : "be";
+  const offset = Number(elements.plotManOffset?.value);
+  const scale = Number(elements.plotManScale?.value);
+  if (!Number.isInteger(offset) || offset < 0) {
+    setNotice("error", "偏移不合法", "偏移必须是不小于 0 的整数（帧首字节为 0）。");
+    return;
+  }
+  if (!Number.isFinite(scale) || scale === 0) {
+    setNotice("error", "缩放不合法", "缩放必须是有效数字且不为 0（不缩放填 1）。");
+    return;
+  }
+  plotStore.add(key, {
+    name,
+    unit: (elements.plotManUnit?.value || "").trim(),
+    rule: { head, offset, type, order, scale },
+  });
+  plotRenderLegend();
+  drawSerialPlot(elements.plotCanvas, plotStore, { legendHost: elements.plotLegend });
+  setNotice("success", "已添加通道", `手动通道「${name}」已生效（等待匹配收包…）`);
+}
+
+function plotRemoveSeries(key) {
+  if (!plotStore.remove(key)) return;
+  plotRenderLegend();
+  plotRefreshChannelOptions();
+  if (plotStore.size === 0) drawSerialPlot(elements.plotCanvas, plotStore, { legendHost: elements.plotLegend });
+}
+
+function plotTogglePause() {
+  plotStore.paused = !plotStore.paused;
+  if (elements.plotPause) elements.plotPause.textContent = plotStore.paused ? "继续" : "暂停";
+}
+
+function plotClearAll() {
+  if (plotStore.size === 0) return;
+  plotStore.clear();
+  plotRenderLegend();
+  plotRefreshChannelOptions();
+  drawSerialPlot(elements.plotCanvas, plotStore, { legendHost: elements.plotLegend });
+  setNotice("info", "已清空", "所有曲线通道已移除（已发现的通道列表保留）。");
+}
+
+async function plotExportCsv() {
+  const rows = buildCsvRows(plotStore);
+  if (rows.length === 0) {
+    setNotice("error", "无数据", "曲线还没有数据点，无法导出。");
+    return;
+  }
+  const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+  try {
+    const result = await callBackend("export_csv", { rows, filename: `nexus_serial_plot_${stamp}` });
+    setNotice("success", "已导出 CSV", result?.path || "桌面 nexus_serial_plot_*.csv 已生成。");
+  } catch (error) {
+    setNotice("error", "导出失败", error.message || String(error));
+  }
+}
+
+/** 绘制循环: rAF + 100ms 节流, 仅调试视图可见且未暂停时绘制(与主站 trendLoop 由 activeView 天然互斥) */
+function plotLoop(timestamp) {
+  plotRafId = requestAnimationFrame(plotLoop);
+  if (timestamp - plotLastDrawAt < 100) return;
+  plotLastDrawAt = timestamp;
+  if (activeView !== "debug" || document.hidden) return;
+  const canvas = elements.plotCanvas;
+  if (!canvas || !canvas.isConnected) return;
+  if (plotStore.paused) return;
+  // 无曲线时只在画布尺寸变化时重绘空状态
+  if (plotStore.size === 0 && canvas.clientWidth === plotCanvasW && canvas.clientHeight === plotCanvasH) return;
+  drawSerialPlot(canvas, plotStore, { legendHost: elements.plotLegend });
+  plotCanvasW = canvas.clientWidth;
+  plotCanvasH = canvas.clientHeight;
+}
+
+function startPlotLoop() {
+  if (plotRafId !== null) return;
+  plotRafId = requestAnimationFrame(plotLoop);
+}
+
+// === 帧解析(批次 2)与会话录制/回放(批次 3) ===
+
+let frameDefs = []; // 已保存的帧定义(随 .nexus.json workspace 持久化)
+let activeFrameDef = null; // 已"应用到曲线"的定义;null=未启用
+let lastDebugRxBytes = null; // 最近一个收包(帧解析试算用)
+let recRecording = false;
+let replayScheduler = null;
+let replayPath = null; // 最近加载的录制文件(导出 CSV 用)
+
+const FD_LINE_ENDING = { lf: "\n", crlf: "\r\n" };
+const FD_LINE_ENDING_REV = { "\n": "lf", "\r\n": "crlf" };
+const FD_SEPARATOR = { ",": ",", " ": " ", ";": ";", tab: "\t" };
+const FD_SEPARATOR_REV = { ",": ",", " ": " ", ";": ";", "\t": "tab" };
+
+function fdUpdateModeVisibility() {
+  const binary = elements.fdMode?.value !== "ascii-delimited";
+  if (elements.fdBinaryOpts) elements.fdBinaryOpts.style.display = binary ? "" : "none";
+  if (elements.fdAsciiOpts) elements.fdAsciiOpts.style.display = binary ? "none" : "";
+}
+
+function fdFieldRow(field = {}) {
+  const row = document.createElement("tr");
+  const cell = () => row.insertCell(-1);
+  const input = (props, width, titleText) => {
+    const el = document.createElement("input");
+    el.className = "input";
+    Object.assign(el, props);
+    el.style.width = width;
+    if (titleText) el.title = titleText;
+    return el;
+  };
+  const select = (options, value, width) => {
+    const el = document.createElement("select");
+    el.className = "input";
+    el.style.width = width;
+    for (const [val, label] of options) {
+      const option = new Option(label, val);
+      option.selected = val === value;
+      el.append(option);
+    }
+    return el;
+  };
+  const name = input({ placeholder: "temp1", value: field.name ?? "" }, "100px");
+  const offset = input({ type: "number", min: 0, max: 65535, value: field.offset ?? "" }, "52px", "binary:数据起始字节,帧首字节为 0");
+  const index = input({ type: "number", min: 0, max: 65535, value: field.index ?? "" }, "52px", "ascii:分隔后第几段,从 0 起");
+  const type = select([["u16", "u16"], ["i16", "i16"], ["u8", "u8"], ["u32", "u32"], ["i32", "i32"], ["f32", "f32"]], field.fieldType ?? "u16", "64px");
+  const order = select([["be", "大端"], ["le", "小端"]], field.byteOrder ?? "be", "68px");
+  const scale = input({ value: field.scale ?? 1 }, "56px", "原始值 × 缩放 = 曲线值");
+  const unit = input({ placeholder: "℃", value: field.unit ?? "" }, "50px");
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "btn-text";
+  remove.textContent = "×";
+  remove.setAttribute("aria-label", "删除字段");
+  remove.addEventListener("click", () => { row.remove(); });
+  cell().append(name);
+  cell().append(offset);
+  cell().append(index);
+  cell().append(type);
+  cell().append(order);
+  cell().append(scale);
+  cell().append(unit);
+  cell().append(remove);
+  return row;
+}
+
+function fdRenderFields(fields = []) {
+  const body = elements.fdFieldsRows;
+  if (!body) return;
+  body.replaceChildren();
+  if (fields.length === 0) {
+    const empty = document.createElement("tr");
+    empty.className = "empty-row";
+    const cellNode = empty.insertCell(-1);
+    cellNode.colSpan = 8;
+    cellNode.className = "console-empty";
+    cellNode.textContent = "点「+ 字段」添加要提取的数值";
+    body.append(empty);
+    return;
+  }
+  for (const field of fields) body.append(fdFieldRow(field));
+}
+
+function fdCollectFields() {
+  const fields = [];
+  const rows = elements.fdFieldsRows?.querySelectorAll("tr:not(.empty-row)") ?? [];
+  for (const row of rows) {
+    const [name, offset, index, type, order, scale, unit] = row.querySelectorAll("input,select");
+    const nameValue = (name?.value ?? "").trim();
+    if (!nameValue) continue;
+    const offsetValue = offset?.value === "" ? null : Number(offset.value);
+    const indexValue = index?.value === "" ? null : Number(index.value);
+    const scaleValue = Number(scale?.value);
+    fields.push({
+      name: nameValue,
+      offset: Number.isInteger(offsetValue) && offsetValue >= 0 ? offsetValue : null,
+      index: Number.isInteger(indexValue) && indexValue >= 0 ? indexValue : null,
+      fieldType: type?.value || "u16",
+      byteOrder: order?.value === "le" ? "le" : "be",
+      scale: Number.isFinite(scaleValue) && scaleValue !== 0 ? scaleValue : 1,
+      unit: (unit?.value ?? "").trim(),
+    });
+  }
+  return fields;
+}
+
+function fdCollectDefinition() {
+  const mode = elements.fdMode?.value === "ascii-delimited" ? "ascii-delimited" : "binary";
+  const lengthValue = Number(elements.fdLength?.value);
+  const def = {
+    schemaVersion: 1,
+    name: (elements.fdName?.value || "").trim(),
+    mode,
+    fields: fdCollectFields(),
+  };
+  if (mode === "binary") {
+    def.head = (elements.fdHead?.value || "").trim();
+    def.length = Number.isInteger(lengthValue) && lengthValue >= 1 ? lengthValue : null;
+    const checksum = elements.fdChecksum?.value || "none";
+    def.checksum = checksum === "none" ? null : { type: checksum };
+  } else {
+    def.lineEnding = FD_LINE_ENDING[elements.fdLineEnding?.value] ?? "\n";
+    def.separator = FD_SEPARATOR[elements.fdSeparator?.value] ?? ",";
+  }
+  return def;
+}
+
+function fdFillForm(def) {
+  if (elements.fdName) elements.fdName.value = def.name ?? "";
+  if (elements.fdMode) elements.fdMode.value = def.mode === "ascii-delimited" ? "ascii-delimited" : "binary";
+  if (elements.fdHead) elements.fdHead.value = def.head ?? "";
+  if (elements.fdLength) elements.fdLength.value = def.length ?? "";
+  if (elements.fdChecksum) elements.fdChecksum.value = def.checksum?.type ?? "none";
+  if (elements.fdLineEnding) elements.fdLineEnding.value = FD_LINE_ENDING_REV[def.lineEnding] ?? "lf";
+  if (elements.fdSeparator) elements.fdSeparator.value = FD_SEPARATOR_REV[def.separator] ?? ",";
+  fdRenderFields(def.fields ?? []);
+  fdUpdateModeVisibility();
+}
+
+/** 调 Rust 校验定义;返回问题数组,后端不可用返回 null。 */
+async function fdValidate(def) {
+  try {
+    const result = await callBackend("custom_frame_validate", { definition: def });
+    if (result?.status === "ok") return result.issues ?? [];
+  } catch { /* fallthrough */ }
+  return null;
+}
+
+function fdRefreshList(selectedName = "") {
+  const select = elements.fdList;
+  if (!select) return;
+  const previous = selectedName || select.value;
+  select.replaceChildren(new Option("已存定义…", ""));
+  for (const def of frameDefs) {
+    const option = new Option(def.name, def.name);
+    option.selected = def.name === previous;
+    select.append(option);
+  }
+}
+
+async function fdSaveDefinition() {
+  const def = fdCollectDefinition();
+  if (!def.name) {
+    setNotice("error", "缺少名称", "请填写帧定义名称。");
+    return;
+  }
+  const issues = await fdValidate(def);
+  if (issues === null) {
+    setNotice("error", "无法校验", "Rust 核心不可用，稍后再试。");
+    return;
+  }
+  if (issues.length > 0) {
+    setNotice("error", "定义不合法", issues.join("；"));
+    return;
+  }
+  const index = frameDefs.findIndex((d) => d.name === def.name);
+  if (index >= 0) frameDefs[index] = def;
+  else frameDefs.push(def);
+  fdRefreshList(def.name);
+  setNotice("success", "已保存定义", `「${def.name}」(${def.fields.length} 个字段) 已随项目保存。`);
+}
+
+function fdLoadSelected() {
+  const name = elements.fdList?.value;
+  const def = frameDefs.find((d) => d.name === name);
+  if (!def) {
+    setNotice("error", "未选择定义", "请先从下拉框选择一个已保存的帧定义。");
+    return;
+  }
+  fdFillForm(def);
+  setNotice("success", "已载入", `「${def.name}」已载入表单。`);
+}
+
+function fdDeleteSelected() {
+  const name = elements.fdList?.value;
+  if (!name) {
+    setNotice("error", "未选择定义", "请先从下拉框选择要删除的帧定义。");
+    return;
+  }
+  frameDefs = frameDefs.filter((d) => d.name !== name);
+  if (activeFrameDef?.name === name) activeFrameDef = null;
+  fdRefreshList("");
+  setNotice("info", "已删除", `帧定义「${name}」已删除。`);
+}
+
+async function fdApplyToCurve() {
+  const def = fdCollectDefinition();
+  if (!def.name) {
+    setNotice("error", "缺少名称", "请先填写并保存帧定义。");
+    return;
+  }
+  const issues = await fdValidate(def);
+  if (issues === null) {
+    setNotice("error", "无法校验", "Rust 核心不可用，稍后再试。");
+    return;
+  }
+  if (issues.length > 0) {
+    setNotice("error", "定义不合法", issues.join("；"));
+    return;
+  }
+  activeFrameDef = def;
+  for (const field of def.fields) {
+    const key = `fd:${def.name}.${field.name}`;
+    if (!plotDiscovered.has(key) && plotDiscovered.size < PLOT_MAX_DISCOVERED) {
+      plotDiscovered.set(key, { key, name: `${def.name}.${field.name}`, unit: field.unit || "" });
+    }
+  }
+  plotRefreshChannelOptions();
+  setNotice("success", "已应用到曲线", `收包将按「${def.name}」解析 ${def.fields.length} 个字段；去「实时曲线」卡下拉选择通道。`);
+}
+
+async function fdTryParse() {
+  if (!lastDebugRxBytes) {
+    setNotice("error", "没有收包", "尚未收到任何 RX 帧，先绑定串口收包或回放一段录制。");
+    return;
+  }
+  const def = fdCollectDefinition();
+  try {
+    const result = await callBackend("custom_frame_parse", { definition: def, bytes: lastDebugRxBytes });
+    if (result?.status === "ok") {
+      elements.fdPreview.textContent = (result.fields ?? [])
+        .map((field) => `${field.name}=${field.value}${field.unit || ""}`)
+        .join("  ") || "(无字段)";
+      elements.fdPreview.title = elements.fdPreview.textContent;
+    } else {
+      const message = `${result?.error?.code ?? "ERROR"} ${result?.error?.message ?? ""}`;
+      elements.fdPreview.textContent = `✗ ${message}`;
+      elements.fdPreview.title = message;
+    }
+  } catch (error) {
+    elements.fdPreview.textContent = `✗ ${error.message || String(error)}`;
+  }
+}
+
+// --- 会话录制(批次 3) ---
+
+async function recToggle() {
+  if (recRecording) {
+    const result = await callBackend("record_stop", {});
+    recRecording = false;
+    if (elements.recToggle) elements.recToggle.textContent = "开始录制";
+    if (elements.recState) elements.recState.textContent = `已停 · ${result?.frameCount ?? 0} 帧`;
+    setNotice("info", "录制完成", `${result?.frameCount ?? 0} 帧已落盘${result?.files?.[0] ? `：${result.files[0]}` : ""}`);
+    return;
+  }
+  const result = await callBackend("record_start", {});
+  if (result?.ok) {
+    recRecording = true;
+    if (elements.recToggle) elements.recToggle.textContent = "停止录制";
+    if (elements.recState) elements.recState.textContent = "录制中…";
+    setNotice("success", "录制开始", `文件：${result.file}`);
+  } else {
+    setNotice("error", "录制失败", result?.error || "无法开始录制。");
+  }
+}
+
+// --- 回放(批次 3): 重放进渲染层现有管线,不伪造 IPC 事件 ---
+
+function replayUpdateState() {
+  const state = elements.replayState;
+  if (!replayScheduler) {
+    if (state) state.textContent = "未加载";
+    if (elements.replayToggle) { elements.replayToggle.disabled = true; elements.replayToggle.textContent = "播放"; }
+    if (elements.replayStep) elements.replayStep.disabled = true;
+    if (elements.replayExport) elements.replayExport.disabled = !replayPath;
+    return;
+  }
+  const progress = replayScheduler.progress;
+  const stateText = progress.state === "playing" ? "播放中" : progress.state === "paused" ? "已暂停" : progress.state === "done" ? "已播完" : progress.state;
+  if (state) state.textContent = `${progress.index}/${progress.total} · ${stateText}`;
+  if (elements.replayToggle) {
+    elements.replayToggle.disabled = progress.state === "done" && progress.index >= progress.total;
+    elements.replayToggle.textContent = progress.state === "playing" ? "暂停" : progress.state === "paused" ? "继续" : "播放";
+  }
+  if (elements.replayStep) elements.replayStep.disabled = progress.index >= progress.total;
+  if (elements.replayExport) elements.replayExport.disabled = !replayPath;
+}
+
+async function replayOpenFile() {
+  try {
+    if (replayScheduler) replayScheduler.stop();
+    replayScheduler = null;
+    const picked = await callBackend("record_pick", {});
+    if (!picked?.ok) return;
+    replayPath = picked.path;
+    const loaded = await callBackend("record_read", { path: picked.path });
+    if (!loaded?.ok) {
+      setNotice("error", "读取失败", loaded?.error || "无法读取录制文件。");
+      replayUpdateState();
+      return;
+    }
+    const records = normalizeReplayRecords(loaded.records);
+    if (records.length === 0) {
+      setNotice("error", "空会话", "录制文件里没有可回放的帧。");
+      replayUpdateState();
+      return;
+    }
+    replayScheduler = new ReplayScheduler({
+      records,
+      speed: Number(elements.replaySpeed?.value) || 1,
+      onRecord: (record) => {
+        appendDebugLog(record);
+        plotFeedRecord(record);
+      },
+      onDone: replayUpdateState,
+    });
+    replayUpdateState();
+    setNotice("success", "已加载录制", `${records.length} 帧（跳过 ${loaded.skipped ?? 0} 行）就绪，点「播放」按原始时间轴回放。`);
+  } catch (error) {
+    setNotice("error", "回放加载失败", error.message || String(error));
+  }
+}
+
+function replayTogglePlay() {
+  if (!replayScheduler) return;
+  const state = replayScheduler.progress.state;
+  if (state === "playing") replayScheduler.pause();
+  else replayScheduler.start(); // idle/paused/done 都可(重新)开始;已播完则从头
+  replayUpdateState();
+}
+
+function replaySpeedChange() {
+  replayScheduler?.setSpeed(Number(elements.replaySpeed?.value) || 1);
+}
+
+function replayStepOnce() {
+  replayScheduler?.step();
+  replayUpdateState();
+}
+
+async function replayExportCsv() {
+  if (!replayPath) {
+    setNotice("error", "未加载录制", "先「打开录制文件」再导出。");
+    return;
+  }
+  try {
+    const result = await callBackend("record_export_csv", {
+      path: replayPath,
+      definition: activeFrameDef ?? undefined,
+    });
+    if (result?.ok) {
+      setNotice("success", "已导出录制 CSV", result.path || "桌面 CSV 已生成。");
+    } else {
+      setNotice("error", "导出失败", result?.error || "无法导出。");
+    }
+  } catch (error) {
+    setNotice("error", "导出失败", error.message || String(error));
+  }
+}
+
+/** 项目打开/新建时恢复帧定义(只恢复列表,不自动应用到曲线)。 */
+function restoreFrameDefinitions(defs) {
+  frameDefs = (Array.isArray(defs) ? defs : []).map((def) => ({ ...def }));
+  activeFrameDef = null;
+  fdRefreshList("");
+}
+
 // === 示例代码生成 ===
 
-let codeLang = "rust";
+let codeLang = "csharp";
 
-const CODE_LANG_LABEL = { rust: "Rust", csharp: "C#", python: "Python" };
+const CODE_LANG_LABEL = { csharp: "C#", python: "Python" };
 
 const CODE_TRANSPORT_LABEL = {
   rtu: "RTU 串口",
@@ -895,14 +1553,14 @@ const CODE_TRANSPORT_LABEL = {
 };
 
 const CODE_FC = {
-  1: { read: true, bits: true, label: "读线圈", rustBuild: "build_read_coils_pdu", rustParse: "parse_read_coils_response", csharp: "ReadCoils", python: "read_coils" },
-  2: { read: true, bits: true, label: "读离散输入", rustBuild: "build_read_discrete_inputs_pdu", rustParse: "parse_read_discrete_inputs_response", csharp: "ReadDiscreteInputs", python: "read_discrete_inputs" },
-  3: { read: true, bits: false, label: "读保持寄存器", rustBuild: "build_read_holding_registers_pdu", rustParse: "parse_read_holding_registers_response", csharp: "ReadHoldingRegisters", python: "read_holding_registers" },
-  4: { read: true, bits: false, label: "读输入寄存器", rustBuild: "build_read_input_registers_pdu", rustParse: "parse_read_input_registers_response", csharp: "ReadInputRegisters", python: "read_input_registers" },
-  5: { read: false, label: "写单线圈", rustBuild: "build_write_single_coil_pdu", rustParse: "parse_write_single_coil_response", csharp: "WriteSingleCoil", python: "write_coil" },
-  6: { read: false, label: "写单寄存器", rustBuild: "build_write_single_register_pdu", rustParse: "parse_write_single_register_response", csharp: "WriteSingleRegister", python: "write_register" },
-  15: { read: false, label: "写多线圈", rustBuild: "build_write_multiple_coils_pdu", rustParse: "parse_write_multiple_coils_response", csharp: "WriteMultipleCoils", python: "write_coils" },
-  16: { read: false, label: "写多寄存器", rustBuild: "build_write_multiple_registers_pdu", rustParse: "parse_write_multiple_registers_response", csharp: "WriteMultipleRegisters", python: "write_registers" },
+  1: { read: true, bits: true, label: "读线圈", csharp: "ReadCoils", python: "read_coils" },
+  2: { read: true, bits: true, label: "读离散输入", csharp: "ReadDiscreteInputs", python: "read_discrete_inputs" },
+  3: { read: true, bits: false, label: "读保持寄存器", csharp: "ReadHoldingRegisters", python: "read_holding_registers" },
+  4: { read: true, bits: false, label: "读输入寄存器", csharp: "ReadInputRegisters", python: "read_input_registers" },
+  5: { read: false, label: "写单线圈", csharp: "WriteSingleCoil", python: "write_coil" },
+  6: { read: false, label: "写单寄存器", csharp: "WriteSingleRegister", python: "write_register" },
+  15: { read: false, label: "写多线圈", csharp: "WriteMultipleCoils", python: "write_coils" },
+  16: { read: false, label: "写多寄存器", csharp: "WriteMultipleRegisters", python: "write_registers" },
 };
 
 /** 读取当前 UI 配置(供代码模板使用;字段引用与 readCommand 保持一致,1 基地址减 1) */
@@ -960,142 +1618,8 @@ function codeWriteValues(cfg) {
 
 function generateSampleCode(lang) {
   const cfg = codeSampleConfig();
-  if (lang === "csharp") return csharpCodeSample(cfg);
   if (lang === "python") return pythonCodeSample(cfg);
-  return rustCodeSample(cfg);
-}
-
-// ── Rust 模板(nexus-rust-core) ──
-
-const RUST_DATA_BITS = { 8: "Eight", 7: "Seven", 6: "Six", 5: "Five" };
-const RUST_PARITY = { none: "None", even: "Even", odd: "Odd" };
-const RUST_STOP_BITS = { 1: "One", 2: "Two" };
-const RUST_TCP_NOTE = {
-  tcp: "标准 Modbus TCP(MBAP 帧)",
-  udp: "标准 Modbus UDP(MBAP 帧,无连接;open_udp 仅绑定本地并设定对端)",
-  "rtu-over-tcp": "RTU over TCP(TCP 通道传输完整 RTU 帧,含 CRC16,无 MBAP 头)",
-  "ascii-over-tcp": "ASCII over TCP(TCP 通道传输 ASCII 帧,LRC 校验,无 MBAP 头)",
-};
-const RUST_FRAMING = { tcp: "Standard", udp: "Standard", "rtu-over-tcp": "RtuOverTcp", "ascii-over-tcp": "AsciiOverTcp" };
-
-function rustCodeSample(cfg) {
-  const meta = CODE_FC[cfg.fc];
-  const fcTag = `FC${String(cfg.fc).padStart(2, "0")}`;
-  const end = cfg.startAddress + cfg.quantity - 1;
-  const asciiSerial = cfg.transport === "ascii";
-  const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-
-  // PDU 构建 / 解析(各传输路径共用,响应统一收进 resp)
-  const pdu = [];
-  const parse = [];
-  if (meta.read) {
-    const typeNote = meta.bits ? "" : `,解码类型 ${cfg.displayType}`;
-    pdu.push(`// ${fcTag} ${meta.label}: 起始地址 ${cfg.startAddress},数量 ${cfg.quantity}${typeNote}`);
-    pdu.push(`let pdu = modbus_pdu::${meta.rustBuild}(${cfg.startAddress}, ${cfg.quantity})?;`);
-    parse.push(`let values = modbus_pdu::${meta.rustParse}(&resp, ${cfg.quantity})?;`);
-    parse.push(`println!("地址 ${cfg.startAddress}..${end} = {values:?}");`);
-  } else {
-    const w = codeWriteValues(cfg);
-    const note = w.placeholder ? "(界面未填写入值,以下为占位示例值)" : "";
-    if (cfg.fc === 5) {
-      pdu.push(`// ${fcTag} ${meta.label}: 地址 ${cfg.startAddress},值 ${w.bool}${note}`);
-      pdu.push(`let pdu = modbus_pdu::${meta.rustBuild}(${cfg.startAddress}, ${w.bool})?;`);
-      parse.push(`let (addr, on) = modbus_pdu::${meta.rustParse}(&resp)?;`);
-      parse.push(`println!("已写入: 地址 {addr} = {on}");`);
-    } else if (cfg.fc === 6) {
-      pdu.push(`// ${fcTag} ${meta.label}: 地址 ${cfg.startAddress},值 ${w.int}${note}`);
-      pdu.push(`let pdu = modbus_pdu::${meta.rustBuild}(${cfg.startAddress}, ${w.int})?;`);
-      parse.push(`let (addr, val) = modbus_pdu::${meta.rustParse}(&resp)?;`);
-      parse.push(`println!("已写入: 地址 {addr} = {val}");`);
-    } else if (cfg.fc === 15) {
-      pdu.push(`// ${fcTag} ${meta.label}: 起始地址 ${cfg.startAddress},共 ${w.bools.length} 个线圈${note}`);
-      pdu.push(`let values = [${w.bools.join(", ")}];`);
-      pdu.push(`let pdu = modbus_pdu::${meta.rustBuild}(${cfg.startAddress}, &values)?;`);
-      parse.push(`let (addr, qty) = modbus_pdu::${meta.rustParse}(&resp)?;`);
-      parse.push(`println!("已写入 {qty} 个线圈,起始地址 {addr}");`);
-    } else {
-      pdu.push(`// ${fcTag} ${meta.label}: 起始地址 ${cfg.startAddress},共 ${w.ints.length} 个寄存器${note}`);
-      pdu.push(`let values: [u16; ${w.ints.length}] = [${w.ints.join(", ")}];`);
-      pdu.push(`let pdu = modbus_pdu::${meta.rustBuild}(${cfg.startAddress}, &values)?;`);
-      parse.push(`let (addr, qty) = modbus_pdu::${meta.rustParse}(&resp)?;`);
-      parse.push(`println!("已写入 {qty} 个寄存器,起始地址 {addr}");`);
-    }
-  }
-
-  const L = [];
-  if (cfg.isTcp) {
-    const openFn = cfg.transport === "udp" ? "open_udp" : "open_tcp";
-    const transactFn = cfg.transport === "udp" ? "transact_udp" : "transact_tcp";
-    L.push(`// Nexus Modbus — ${fcTag} ${meta.label} (${CODE_TRANSPORT_LABEL[cfg.transport]})`);
-    L.push(`// 依赖: nexus-rust-core = { path = "../rust-core" }`);
-    L.push(`use nexus_rust_core::modbus_pdu;`);
-    L.push(`use nexus_rust_core::session::{Session, TcpFraming};`);
-    L.push(``);
-    L.push(`fn main() -> Result<(), Box<dyn std::error::Error>> {`);
-    L.push(`    let mut session = Session::new();`);
-    L.push(`    // 站号 ${cfg.unitId},${RUST_TCP_NOTE[cfg.transport]}`);
-    L.push(`    session.${openFn}("plc", "${esc(cfg.host)}", ${cfg.port}, ${cfg.unitId}, TcpFraming::${RUST_FRAMING[cfg.transport]})?;`);
-    L.push(``);
-    for (const line of pdu) L.push(`    ${line}`);
-    L.push(`    let resp = session.${transactFn}("plc", &pdu)?;`);
-    for (const line of parse) L.push(`    ${line}`);
-    L.push(``);
-    L.push(`    session.close_connection("plc")?;`);
-    L.push(`    Ok(())`);
-    L.push(`}`);
-    return L.join("\n");
-  }
-
-  const serialFormat = `${cfg.baudRate} ${cfg.dataBits}${parityLetter(cfg.parity)}${cfg.stopBits}`;
-  const formatNote = asciiSerial ? "(ASCII 从站常见 7E1 格式,请按设备规格调整)" : "";
-  L.push(`// Nexus Modbus — ${fcTag} ${meta.label} (${CODE_TRANSPORT_LABEL[cfg.transport]})`);
-  L.push(`// 依赖: nexus-rust-core = { path = "../rust-core" }, serialport = "4"`);
-  L.push(`use nexus_rust_core::modbus_pdu;`);
-  L.push(asciiSerial
-    ? `use nexus_rust_core::modbus_ascii;`
-    : `use nexus_rust_core::modbus_rtu::{RtuFrame, RtuFrameRole};`);
-  L.push(`use std::io::{Read, Write};`);
-  L.push(`use std::time::Duration;`);
-  L.push(``);
-  L.push(`fn main() -> Result<(), Box<dyn std::error::Error>> {`);
-  L.push(`    // 串口参数: ${esc(cfg.portName)} ${serialFormat}${formatNote}`);
-  L.push(`    let mut port = serialport::new("${esc(cfg.portName)}", ${cfg.baudRate})`);
-  L.push(`        .data_bits(serialport::DataBits::${RUST_DATA_BITS[cfg.dataBits] ?? "Eight"})`);
-  L.push(`        .parity(serialport::Parity::${RUST_PARITY[cfg.parity] ?? "None"})`);
-  L.push(`        .stop_bits(serialport::StopBits::${RUST_STOP_BITS[cfg.stopBits] ?? "One"})`);
-  L.push(`        .timeout(Duration::from_millis(1000))`);
-  L.push(`        .open()?;`);
-  L.push(``);
-  if (asciiSerial) {
-    L.push(`    // ASCII 帧(':' 起始 + LRC + CRLF 结尾)由 modbus_ascii 封装,经串口层收发`);
-    for (const line of pdu) L.push(`    ${line}`);
-    L.push(`    let frame = modbus_ascii::build_ascii_frame(${cfg.unitId}, &pdu);`);
-    L.push(`    port.write_all(&frame)?;`);
-    L.push(`    port.flush()?;`);
-    L.push(``);
-    L.push(`    let mut buf = [0u8; 512];`);
-    L.push(`    let n = port.read(&mut buf)?;`);
-    L.push(`    let (_unit, resp) = modbus_ascii::parse_ascii_frame(&buf[..n])?;`);
-    for (const line of parse) L.push(`    ${line}`);
-  } else {
-    L.push(`    // build_*_pdu 生成含功能码的 PDU;站号与 CRC16 由 RtuFrame 封装,经串口层收发`);
-    for (const line of pdu) L.push(`    ${line}`);
-    L.push(`    let frame = RtuFrame::request(${cfg.unitId}, pdu[0], &pdu[1..])?;`);
-    L.push(`    port.write_all(&frame.encode())?;`);
-    L.push(`    port.flush()?;`);
-    L.push(``);
-    L.push(`    // RTU 以 3.5 字符静默分帧;此处简化为单次 read,生产代码应循环拼帧`);
-    L.push(`    let mut buf = [0u8; 256];`);
-    L.push(`    let n = port.read(&mut buf)?;`);
-    L.push(`    let resp_frame = RtuFrame::decode(&buf[..n], RtuFrameRole::Response)?;`);
-    L.push(`    // 重组含功能码的响应 PDU,交给解析器`);
-    L.push(`    let mut resp = vec![resp_frame.function_code()];`);
-    L.push(`    resp.extend_from_slice(resp_frame.data());`);
-    for (const line of parse) L.push(`    ${line}`);
-  }
-  L.push(`    Ok(())`);
-  L.push(`}`);
-  return L.join("\n");
+  return csharpCodeSample(cfg);
 }
 
 // ── C# 模板(Nexus.Modbus,对标 WPF 版风格) ──
@@ -2072,6 +2596,7 @@ function formatTime(ms) {
 
 function appendDebugLog(record) {
   if (!elements.dbgLogRows) return;
+  if (record.direction === "RX") lastDebugRxBytes = record.bytes; // 帧解析"试算"用
   // 移除空行
   const empty = elements.dbgLogRows.querySelector(".console-empty");
   if (empty) empty.remove();
@@ -2473,11 +2998,20 @@ async function mcConnect() {
         setNotice("error", "串口未打开", "请先在 Modbus 主站页打开串口(FX 默认 9600 7E1),再回到本页连接");
         return;
       }
+      const cfg = status.config ?? {};
+      const mismatch = [];
+      if (Number(cfg.dataBits) !== 7) mismatch.push(`数据位 ${cfg.dataBits ?? "?"}(FX 默认 7)`);
+      if (String(cfg.parity ?? "").toLowerCase() !== "even") mismatch.push(`校验 ${cfg.parity ?? "?"}(FX 默认 偶E)`);
       mcConnected = true;
       mcIsAscii = false;
       mcFxProtocol = variant === "fx-links" ? "links" : "prog";
-      mcSetState(`FX ${mcFxProtocol === "links" ? "Computer Link" : "编程口"} 已就绪`, true);
-      setNotice("success", "FX 串口已绑定", `走主站页串口,站号 ${document.querySelector("#mc-fx-station")?.value ?? 0}`);
+      if (mismatch.length > 0) {
+        mcSetState("已绑定但参数存疑");
+        setNotice("error", "串口参数与 FX 不匹配", `当前 ${cfg.baudRate ?? "?"}·${cfg.dataBits ?? "?"}${(cfg.parity ?? "?").charAt(0).toUpperCase()}${cfg.stopBits ?? "?"},${mismatch.join(";")}——PLC 大概率无响应。请到主站页断开串口改参数后重连`);
+      } else {
+        mcSetState(`FX ${mcFxProtocol === "links" ? "Computer Link" : "编程口"} 已就绪`, true);
+        setNotice("success", "FX 串口已绑定", `走主站页串口 ${cfg.baudRate ?? ""}·${cfg.dataBits ?? ""}${(cfg.parity ?? "e").charAt(0).toUpperCase()}${cfg.stopBits ?? ""},站号 ${document.querySelector("#mc-fx-station")?.value ?? 0}`);
+      }
     } catch (error) {
       mcSetState("串口检查失败");
       setNotice("error", "串口检查失败", error.message || String(error));
@@ -2577,15 +3111,13 @@ function mcRenderRows(address, values, isBit) {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="5">无数据</td></tr>';
     return;
   }
-  // 解析地址前缀和起始号用于显示"软元件名"
+  // 解析地址前缀和起始号用于显示"软元件名";X/Y 为八进制编号(Y7 之后是 Y10),其余十进制
   const m = address.match(/^([A-Za-z]+)(\d+)(?:\.(\d+))?/);
-  const prefix = m ? m[1].toUpperCase() : "";
-  const startNo = m ? Number(m[2]) : 0;
-  const step = isBit ? 1 : 1; // 位/字软元件编号都按 1 递增显示
+  const labels = m ? formatDeviceSeries(m[1], m[2], values.length) : null;
   for (let i = 0; i < values.length; i++) {
     const row = document.createElement("tr");
     const v = values[i];
-    const name = prefix ? `${prefix}${startNo + i * step}` : String(i);
+    const name = labels ? labels[i] : String(i);
     const cells = [
       String(i + 1),
       name,
@@ -7194,7 +7726,7 @@ function buildProjectDocument() {
   saveCurrentSessionData();
   return {
     format: "nexus-project",
-    schemaVersion: 1,
+    schemaVersion: 2,
     product: "Nexus 2.0",
     projectName: currentProjectName,
     savedAt: null,
@@ -7210,6 +7742,7 @@ function buildProjectDocument() {
       commandList: commandList.map((command) => ({ ...command })),
       simulators: collectSimulatorWorkspace(),
       lastHelpReference: savedProtocolGuideReference ? { ...savedProtocolGuideReference } : null,
+      frameDefinitions: frameDefs.map((def) => ({ ...def, fields: (def.fields ?? []).map((field) => ({ ...field })) })),
     },
   };
 }
@@ -7283,6 +7816,7 @@ async function openProject() {
     applyPersistentConfig(project.config);
     replaceProjectSessions(project.sessions, project.activeSession);
     replaceCommandList(project.workspace?.commandList ?? []);
+    restoreFrameDefinitions(project.workspace?.frameDefinitions ?? []);
     restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
     restoreHelpReference(project.workspace?.lastHelpReference ?? null);
     activateView(project.activeView);
@@ -7321,6 +7855,7 @@ async function newProject() {
     });
     replaceProjectSessions([{ name: "default", pointTable: [] }], "default");
     replaceCommandList([]);
+    restoreFrameDefinitions([]);
     restoreTrendSelection([]);
     restoreSimulatorWorkspace({
       modbus: { mode: "tcp", port: "502", allowedStations: "" },
@@ -7361,6 +7896,7 @@ async function restoreLastProject() {
     applyPersistentConfig(project.config);
     replaceProjectSessions(project.sessions, project.activeSession);
     replaceCommandList(project.workspace?.commandList ?? []);
+    restoreFrameDefinitions(project.workspace?.frameDefinitions ?? []);
     restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
     restoreHelpReference(project.workspace?.lastHelpReference ?? null);
     activateView(project.activeView);
@@ -8772,9 +9308,43 @@ async function initialise() {
   if (elements.dbgAllowRx) elements.dbgAllowRx.addEventListener("change", (e) => callBackend("debug_set_receive", { enabled: e.target.checked }));
   if (elements.dbgAllowTx) elements.dbgAllowTx.addEventListener("change", (e) => callBackend("debug_set_send", { enabled: e.target.checked }));
   if (elements.dbgAppendCrc) elements.dbgAppendCrc.addEventListener("change", (e) => callBackend("debug_set_crc", { enabled: e.target.checked }));
-  // 接收 debug_frame 推送
+  // 调试页实时曲线
+  if (elements.plotAdd) elements.plotAdd.addEventListener("click", plotAddSelected);
+  if (elements.plotPause) elements.plotPause.addEventListener("click", plotTogglePause);
+  if (elements.plotClear) elements.plotClear.addEventListener("click", plotClearAll);
+  if (elements.plotExport) elements.plotExport.addEventListener("click", () => void plotExportCsv());
+  if (elements.plotManAdd) elements.plotManAdd.addEventListener("click", plotAddManual);
+  if (elements.plotChannelSelect) {
+    // 打开下拉前刷新通道列表(发现结果随收包动态变化)
+    elements.plotChannelSelect.addEventListener("focus", plotRefreshChannelOptions);
+    elements.plotChannelSelect.addEventListener("pointerdown", plotRefreshChannelOptions);
+  }
+  // 帧解析(批次 2)
+  if (elements.fdMode) elements.fdMode.addEventListener("change", fdUpdateModeVisibility);
+  if (elements.fdAddField) elements.fdAddField.addEventListener("click", () => {
+    elements.fdFieldsRows?.querySelector(".empty-row")?.remove();
+    elements.fdFieldsRows?.append(fdFieldRow({}));
+  });
+  if (elements.fdSave) elements.fdSave.addEventListener("click", () => void fdSaveDefinition());
+  if (elements.fdLoad) elements.fdLoad.addEventListener("click", fdLoadSelected);
+  if (elements.fdDelete) elements.fdDelete.addEventListener("click", fdDeleteSelected);
+  if (elements.fdApply) elements.fdApply.addEventListener("click", () => void fdApplyToCurve());
+  if (elements.fdTry) elements.fdTry.addEventListener("click", () => void fdTryParse());
+  fdRenderFields([]);
+  fdUpdateModeVisibility();
+  // 会话录制/回放(批次 3)
+  if (elements.recToggle) elements.recToggle.addEventListener("click", () => void recToggle());
+  if (elements.replayOpen) elements.replayOpen.addEventListener("click", () => void replayOpenFile());
+  if (elements.replayToggle) elements.replayToggle.addEventListener("click", replayTogglePlay);
+  if (elements.replaySpeed) elements.replaySpeed.addEventListener("change", replaySpeedChange);
+  if (elements.replayStep) elements.replayStep.addEventListener("click", replayStepOnce);
+  if (elements.replayExport) elements.replayExport.addEventListener("click", () => void replayExportCsv());
+  // 接收 debug_frame 推送(收发记录 + 实时曲线喂点)
   if (window.nexusDesktop?.onDebugFrame) {
-    window.nexusDesktop.onDebugFrame((record) => appendDebugLog(record));
+    window.nexusDesktop.onDebugFrame((record) => {
+      appendDebugLog(record);
+      plotFeedRecord(record);
+    });
   }
   // 报文解析
   if (elements.parserParse) elements.parserParse.addEventListener("click", parseFrame);
@@ -8834,6 +9404,7 @@ async function initialise() {
     elements.trendPointSelect.addEventListener("pointerdown", trendRefreshPointOptions);
   }
   startTrendLoop();
+  startPlotLoop();
 
   // 接收轮询数据推送(从 Electron 主进程)
   if (window.nexusDesktop?.onPollData) {

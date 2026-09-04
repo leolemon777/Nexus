@@ -1,6 +1,6 @@
 {
   "format": "nexus-project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "Nexus 2.0",
   "projectName": "Legacy Golden Project",
   "savedAt": "2026-08-22T00:00:00.000Z",
@@ -63,6 +63,7 @@
         "port": "102"
       }
     },
-    "lastHelpReference": null
+    "lastHelpReference": null,
+    "frameDefinitions": []
   }
 }

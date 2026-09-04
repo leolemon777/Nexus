@@ -1,591 +1,646 @@
 {
-  "ads_read": {
-    "connectionId": "audit",
-    "indexGroup": 0,
-    "indexOffset": 0,
-    "readLength": 2
-  },
-  "ads_read_device_info": {
-    "connectionId": "audit"
-  },
-  "ads_read_state": {
-    "connectionId": "audit"
-  },
-  "bacnet_ip_parse_frame": {
-    "frame": [
-      2,
-      3
-    ]
-  },
-  "close_connection": {
-    "connectionId": "audit"
-  },
-  "decode_values": {
-    "registers": [
-      1,
-      2
-    ],
-    "dataType": "uint16",
-    "offset": 0,
-    "count": 1
-  },
-  "delta_parse_address": {
-    "series": "DVP",
-    "address": "D100"
-  },
-  "dnp3_class_scan": {
-    "connectionId": "audit"
-  },
-  "dnp3_integrity_poll": {
-    "connectionId": "audit"
-  },
-  "dnp3_parse_application_response": {
-    "pdu": [
-      1,
-      2
-    ]
-  },
-  "dnp3_parse_link_frame": {
-    "frame": [
-      2,
-      3
-    ]
-  },
-  "dnp3_read": {
-    "connectionId": "audit",
-    "group": 30,
-    "variation": 0,
-    "start": 0,
-    "stop": 10
-  },
-  "enip_read_tag": {
-    "connectionId": "audit",
-    "tag": "Test",
-    "elements": 1
-  },
-  "fatek_pack_command": {
-    "station": 2,
-    "command": "D100"
-  },
-  "fatek_parse_address": {
-    "address": "D100",
-    "kind": "D100"
-  },
-  "fatek_parse_response": {
-    "station": 2,
-    "command": "D100",
-    "response": [
-      2,
-      3
-    ]
-  },
-  "fins_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "count": 2
-  },
-  "fins_write": {
-    "connectionId": "audit",
-    "address": "D100",
-    "values": [
-      1
-    ]
-  },
-  "fuji_sph_build_read": {
-    "connectionId": 254,
-    "address": "M1.0",
-    "words": 2
-  },
-  "fuji_sph_build_write": {
-    "connectionId": 254,
-    "address": "M1.0",
-    "data": [
-      1,
-      2
-    ]
-  },
-  "fuji_sph_parse_address": {
-    "address": "D100"
-  },
-  "fuji_sph_parse_response": {
-    "connectionId": 254,
-    "command": 0,
-    "expectedDataBytes": 2,
-    "response": [
-      1,
-      2
-    ]
-  },
-  "fuji_sph_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "words": 2
-  },
-  "ge_srtp_build_write": {
-    "transactionId": 1,
-    "address": "R1",
-    "data": [
-      1,
-      2
-    ],
-    "elementCount": 2,
-    "bitAccess": false
-  },
-  "ge_srtp_parse_handshake": {
-    "response": [
-      2,
-      3
-    ]
-  },
-  "ge_srtp_parse_response": {
-    "transactionId": 1,
-    "expectedDataLength": 2,
-    "response": [
-      1,
-      2
-    ]
-  },
-  "ge_srtp_read": {
-    "connectionId": "audit",
-    "address": "R1",
-    "elementCount": 2,
-    "bitAccess": false
-  },
-  "iec104_general_interrogation": {
-    "connectionId": "audit",
-    "group": 0
-  },
-  "iec104_parse_apdu": {
-    "frame": [
-      2,
-      3
-    ]
-  },
-  "iec104_parse_asdu": {
-    "asdu": [
-      1,
-      2
-    ]
-  },
-  "iec104_test_frame": {
-    "connectionId": "audit"
-  },
-  "inovance_parse_address": {
-    "series": "D100",
-    "address": "D100",
-    "kind": "D100"
-  },
-  "ls_xgt_read": {
-    "connectionId": "audit",
-    "variableName": "D100",
-    "dataType": 2
-  },
-  "ls_xgt_read_continuous": {
-    "connectionId": "audit",
-    "variableName": "x",
-    "byteCount": 2
-  },
-  "mc_1e_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "points": 2
-  },
-  "mc_1e_write": {
-    "connectionId": "audit",
-    "address": "D100",
-    "values": [
-      1
-    ]
-  },
-  "mc_ascii_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "points": 2
-  },
-  "mc_ascii_write": {
-    "connectionId": "audit",
-    "address": "D100",
-    "values": [
-      1
-    ]
-  },
-  "mc_tcp_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "points": 2
-  },
-  "mc_tcp_read_random": {
-    "connectionId": "audit",
-    "addresses": [
-      "D100",
-      "D200"
-    ]
-  },
-  "mc_tcp_write": {
-    "connectionId": "audit",
-    "address": "D100",
-    "values": [
-      1
-    ]
-  },
-  "mc_udp_read": {
-    "connectionId": "audit",
-    "address": "D100",
-    "points": 2
-  },
-  "mc_udp_write": {
-    "connectionId": "audit",
-    "address": "D100",
-    "values": [
-      1
-    ]
-  },
-  "mqtt_ping": {
-    "connectionId": "audit"
-  },
-  "mqtt_read_publish": {
-    "connectionId": "audit"
-  },
-  "mqtt_subscribe": {
-    "connectionId": "audit",
-    "topicFilter": "t",
-    "qos": 0
-  },
-  "open_ads_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
-  },
-  "open_dnp3_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "masterAddress": 1,
-    "outstationAddress": 2
-  },
-  "open_enip_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
-  },
-  "open_fatek_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "station": 2
-  },
-  "open_fuji_sph_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "connectionIdByte": 254
-  },
-  "open_ge_srtp_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
-  },
-  "open_iec104_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "commonAddress": 1,
-    "originatorAddress": 1
-  },
-  "open_keyence_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
-  },
-  "open_ls_xgt_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "cpu": 160,
-    "baseNo": 0,
-    "slotNo": 3,
-    "companyId": "LSIS-XGT"
-  },
-  "open_mc_1e_tcp": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
-  },
-  "open_mqtt_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "clientId": "audit",
-    "keepAlive": 30,
-    "cleanSession": true
-  },
-  "parse_frame_offline": {
-    "hex": "010300000001840A",
-    "transport": "rtu"
-  },
-  "parse_frame_online": {
-    "bytes": [
-      1,
-      3,
-      0,
-      0,
-      0,
-      1,
-      132,
-      10
-    ],
-    "transport": "rtu"
-  },
-  "s7_cpu_control": {
-    "connectionId": "audit",
-    "action": "x"
-  },
-  "scan_station_ids": {
-    "connectionId": "audit",
-    "rangeStart": 1,
-    "rangeEnd": 5,
-    "timeoutMs": 500
-  },
-  "serial_slave_set_value": {
-    "slaveId": "audit",
-    "area": "holding",
-    "address": 0,
-    "values": [
-      1
-    ]
-  },
-  "slave_clear": {
-    "slaveId": "audit",
-    "area": "D100"
-  },
-  "slave_get_memory": {
-    "slaveId": "audit",
-    "area": "holding",
-    "address": 0,
-    "count": 2
-  },
-  "slave_set_coil": {
-    "slaveId": "audit",
-    "area": "coil",
-    "address": 0,
-    "values": [
-      true
-    ]
-  },
-  "slave_set_value": {
-    "slaveId": "audit",
-    "area": "holding",
-    "address": 0,
-    "values": [
-      1
-    ]
-  },
-  "start_fins_slave": {
-    "slaveId": "audit",
-    "port": 1,
-    "seed": true
-  },
-  "start_mc_tcp_slave": {
-    "slaveId": "audit-mc",
-    "port": 18901,
-    "seed": true
-  },
-  "start_s7_slave": {
-    "slaveId": "audit-s7",
-    "port": 18902,
-    "seed": true
-  },
-  "start_serial_slave": {
-    "slaveId": "audit"
-  },
-  "start_tcp_slave": {
-    "slaveId": "audit2",
-    "port": 18903,
-    "allowedStationIds": [
-      1
-    ]
-  },
-  "stop_fins_slave": {
-    "slaveId": "audit"
-  },
-  "stop_mc_slave": {
-    "slaveId": "audit"
-  },
-  "stop_s7_slave": {
-    "slaveId": "audit"
-  },
-  "stop_slave": {
-    "slaveId": "audit"
-  },
-  "xinjie_parse_address": {
-    "series": "D100",
-    "address": "D100",
-    "kind": "D100"
-  },
-  "compute_crc16": {
-    "bytes": [
-      1,
-      2
-    ]
-  },
-  "compute_lrc": {
-    "bytes": [
-      1,
-      2
-    ]
-  },
-  "serial_slave_get_memory": {
-    "slaveId": "audit",
-    "area": "holding",
-    "address": 0,
-    "count": 2
-  },
-  "fx_links_read": {
-    "station": 0,
-    "device": "D",
-    "head": 100,
-    "points": 2,
-    "delay": 0
-  },
-  "fx_links_parse": {
-    "response": [
-      6
-    ]
-  },
-  "fx_prog_build_read": {
-    "device": "D",
-    "address": "0",
-    "words": 6
-  },
-  "fx_prog_build_write": {
-    "device": "D",
-    "address": "0",
-    "values": [
-      1
-    ]
-  },
-  "fx_prog_parse": {
-    "frame": [
-      6
-    ]
-  },
-  "mc_c24_read": {
-    "address": "D100",
-    "points": 2,
-    "format": "1",
-    "station": 0
-  },
-  "mc_c24_parse_read": {
-    "frame": [
-      1
-    ],
-    "points": 2,
-    "isBit": false,
-    "format": "1"
-  },
-  "uss_build_request": {
-    "station": 1,
-    "param": 1000,
-    "pzd": [
-      0
-    ]
-  },
-  "uss_parse_response": {
-    "frame": [
-      2
-    ]
-  },
-  "ppi_build_read": {
-    "station": 2,
-    "master": 0,
-    "address": "VB0",
-    "count": 2
-  },
-  "ppi_build_sa_confirm": {
-    "station": 2,
-    "master": 0
-  },
-  "ppi_parse_read_response": {
-    "response": [
-      0,
-      1,
-      2
-    ]
-  },
-  "rk512_build_read": {
-    "area": "DB",
-    "db": 1,
-    "offset": 0,
-    "count": 2
-  },
-  "rk512_parse_response": {
-    "frame": [
-      2
-    ]
-  },
-  "dlt645_build_read_request": {
-    "version": "2007",
-    "address": "000000000001",
-    "dataId": "00010000",
-    "preambleCount": 0
-  },
-  "dlt645_parse_read_response": {
-    "version": "2007",
-    "address": "000000000001",
-    "dataId": "00010000",
-    "frame": [
-      104
-    ]
-  },
-  "hostlink_build_cmode_read": {
-    "station": 0,
-    "dmStart": 0,
-    "wordCount": 2
-  },
-  "hostlink_parse_cmode_read": {
-    "frame": [
-      64
-    ]
-  },
-  "hostlink_build_fins": {
-    "station": 0,
-    "area": "DM",
-    "byte": 0,
-    "count": 2
-  },
-  "hostlink_parse_fins": {
-    "frame": [
-      64
-    ]
-  },
-  "s7_parse_address": {
-    "address": "MW0"
-  },
-  "open_s7_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1,
-    "rack": 0,
-    "slot": 0,
-    "connType": 1
-  },
-  "s7_read": {
-    "connectionId": "audit",
-    "items": [
-      "MW0"
-    ]
-  },
-  "s7_slave_set": {
-    "slaveId": "audit-s7",
-    "address": "DB1.DBB100",
-    "values": [
-      1,
-      2
-    ]
-  },
-  "open_bacnet_ip_connection": {
-    "connectionId": "audit",
-    "host": "127.0.0.1",
-    "port": 1
+ "ads_read": {
+  "connectionId": "audit",
+  "indexGroup": 0,
+  "indexOffset": 0,
+  "readLength": 2
+ },
+ "ads_read_device_info": {
+  "connectionId": "audit"
+ },
+ "ads_read_state": {
+  "connectionId": "audit"
+ },
+ "bacnet_ip_parse_frame": {
+  "frame": [
+   2,
+   3
+  ]
+ },
+ "close_connection": {
+  "connectionId": "audit"
+ },
+ "decode_values": {
+  "registers": [
+   1,
+   2
+  ],
+  "dataType": "uint16",
+  "offset": 0,
+  "count": 1
+ },
+ "delta_parse_address": {
+  "series": "DVP",
+  "address": "D100"
+ },
+ "dnp3_class_scan": {
+  "connectionId": "audit"
+ },
+ "dnp3_integrity_poll": {
+  "connectionId": "audit"
+ },
+ "dnp3_parse_application_response": {
+  "pdu": [
+   1,
+   2
+  ]
+ },
+ "dnp3_parse_link_frame": {
+  "frame": [
+   2,
+   3
+  ]
+ },
+ "dnp3_read": {
+  "connectionId": "audit",
+  "group": 30,
+  "variation": 0,
+  "start": 0,
+  "stop": 10
+ },
+ "enip_read_tag": {
+  "connectionId": "audit",
+  "tag": "Test",
+  "elements": 1
+ },
+ "fatek_pack_command": {
+  "station": 2,
+  "command": "D100"
+ },
+ "fatek_parse_address": {
+  "address": "D100",
+  "kind": "D100"
+ },
+ "fatek_parse_response": {
+  "station": 2,
+  "command": "D100",
+  "response": [
+   2,
+   3
+  ]
+ },
+ "fins_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "count": 2
+ },
+ "fins_write": {
+  "connectionId": "audit",
+  "address": "D100",
+  "values": [
+   1
+  ]
+ },
+ "fuji_sph_build_read": {
+  "connectionId": 254,
+  "address": "M1.0",
+  "words": 2
+ },
+ "fuji_sph_build_write": {
+  "connectionId": 254,
+  "address": "M1.0",
+  "data": [
+   1,
+   2
+  ]
+ },
+ "fuji_sph_parse_address": {
+  "address": "D100"
+ },
+ "fuji_sph_parse_response": {
+  "connectionId": 254,
+  "command": 0,
+  "expectedDataBytes": 2,
+  "response": [
+   1,
+   2
+  ]
+ },
+ "fuji_sph_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "words": 2
+ },
+ "ge_srtp_build_write": {
+  "transactionId": 1,
+  "address": "R1",
+  "data": [
+   1,
+   2
+  ],
+  "elementCount": 2,
+  "bitAccess": false
+ },
+ "ge_srtp_parse_handshake": {
+  "response": [
+   2,
+   3
+  ]
+ },
+ "ge_srtp_parse_response": {
+  "transactionId": 1,
+  "expectedDataLength": 2,
+  "response": [
+   1,
+   2
+  ]
+ },
+ "ge_srtp_read": {
+  "connectionId": "audit",
+  "address": "R1",
+  "elementCount": 2,
+  "bitAccess": false
+ },
+ "iec104_general_interrogation": {
+  "connectionId": "audit",
+  "group": 0
+ },
+ "iec104_parse_apdu": {
+  "frame": [
+   2,
+   3
+  ]
+ },
+ "iec104_parse_asdu": {
+  "asdu": [
+   1,
+   2
+  ]
+ },
+ "iec104_test_frame": {
+  "connectionId": "audit"
+ },
+ "inovance_parse_address": {
+  "series": "D100",
+  "address": "D100",
+  "kind": "D100"
+ },
+ "ls_xgt_read": {
+  "connectionId": "audit",
+  "variableName": "D100",
+  "dataType": 2
+ },
+ "ls_xgt_read_continuous": {
+  "connectionId": "audit",
+  "variableName": "x",
+  "byteCount": 2
+ },
+ "mc_1e_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "points": 2
+ },
+ "mc_1e_write": {
+  "connectionId": "audit",
+  "address": "D100",
+  "values": [
+   1
+  ]
+ },
+ "mc_ascii_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "points": 2
+ },
+ "mc_ascii_write": {
+  "connectionId": "audit",
+  "address": "D100",
+  "values": [
+   1
+  ]
+ },
+ "mc_tcp_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "points": 2
+ },
+ "mc_tcp_read_random": {
+  "connectionId": "audit",
+  "addresses": [
+   "D100",
+   "D200"
+  ]
+ },
+ "mc_tcp_write": {
+  "connectionId": "audit",
+  "address": "D100",
+  "values": [
+   1
+  ]
+ },
+ "mc_udp_read": {
+  "connectionId": "audit",
+  "address": "D100",
+  "points": 2
+ },
+ "mc_udp_write": {
+  "connectionId": "audit",
+  "address": "D100",
+  "values": [
+   1
+  ]
+ },
+ "mqtt_ping": {
+  "connectionId": "audit"
+ },
+ "mqtt_read_publish": {
+  "connectionId": "audit"
+ },
+ "mqtt_subscribe": {
+  "connectionId": "audit",
+  "topicFilter": "t",
+  "qos": 0
+ },
+ "open_ads_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "open_dnp3_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "masterAddress": 1,
+  "outstationAddress": 2
+ },
+ "open_enip_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "open_fatek_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "station": 2
+ },
+ "open_fuji_sph_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "connectionIdByte": 254
+ },
+ "open_ge_srtp_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "open_iec104_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "commonAddress": 1,
+  "originatorAddress": 1
+ },
+ "open_keyence_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "open_ls_xgt_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "cpu": 160,
+  "baseNo": 0,
+  "slotNo": 3,
+  "companyId": "LSIS-XGT"
+ },
+ "open_mc_1e_tcp": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "open_mqtt_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "clientId": "audit",
+  "keepAlive": 30,
+  "cleanSession": true
+ },
+ "parse_frame_offline": {
+  "hex": "010300000001840A",
+  "transport": "rtu"
+ },
+ "parse_frame_online": {
+  "bytes": [
+   1,
+   3,
+   0,
+   0,
+   0,
+   1,
+   132,
+   10
+  ],
+  "transport": "rtu"
+ },
+ "s7_cpu_control": {
+  "connectionId": "audit",
+  "action": "x"
+ },
+ "scan_station_ids": {
+  "connectionId": "audit",
+  "rangeStart": 1,
+  "rangeEnd": 5,
+  "timeoutMs": 500
+ },
+ "serial_slave_set_value": {
+  "slaveId": "audit",
+  "area": "holding",
+  "address": 0,
+  "values": [
+   1
+  ]
+ },
+ "slave_clear": {
+  "slaveId": "audit",
+  "area": "D100"
+ },
+ "slave_get_memory": {
+  "slaveId": "audit",
+  "area": "holding",
+  "address": 0,
+  "count": 2
+ },
+ "slave_set_coil": {
+  "slaveId": "audit",
+  "area": "coil",
+  "address": 0,
+  "values": [
+   true
+  ]
+ },
+ "slave_set_value": {
+  "slaveId": "audit",
+  "area": "holding",
+  "address": 0,
+  "values": [
+   1
+  ]
+ },
+ "start_fins_slave": {
+  "slaveId": "audit",
+  "port": 1,
+  "seed": true
+ },
+ "start_mc_tcp_slave": {
+  "slaveId": "audit-mc",
+  "port": 18901,
+  "seed": true
+ },
+ "start_s7_slave": {
+  "slaveId": "audit-s7",
+  "port": 18902,
+  "seed": true
+ },
+ "start_serial_slave": {
+  "slaveId": "audit"
+ },
+ "start_tcp_slave": {
+  "slaveId": "audit2",
+  "port": 18903,
+  "allowedStationIds": [
+   1
+  ]
+ },
+ "stop_fins_slave": {
+  "slaveId": "audit"
+ },
+ "stop_mc_slave": {
+  "slaveId": "audit"
+ },
+ "stop_s7_slave": {
+  "slaveId": "audit"
+ },
+ "stop_slave": {
+  "slaveId": "audit"
+ },
+ "xinjie_parse_address": {
+  "series": "D100",
+  "address": "D100",
+  "kind": "D100"
+ },
+ "compute_crc16": {
+  "bytes": [
+   1,
+   2
+  ]
+ },
+ "compute_lrc": {
+  "bytes": [
+   1,
+   2
+  ]
+ },
+ "serial_slave_get_memory": {
+  "slaveId": "audit",
+  "area": "holding",
+  "address": 0,
+  "count": 2
+ },
+ "fx_links_read": {
+  "station": 0,
+  "device": "D",
+  "head": 100,
+  "points": 2,
+  "delay": 0
+ },
+ "fx_links_parse": {
+  "response": [
+   6
+  ]
+ },
+ "fx_prog_build_read": {
+  "device": "D",
+  "address": "0",
+  "words": 6
+ },
+ "fx_prog_build_write": {
+  "device": "D",
+  "address": "0",
+  "values": [
+   1
+  ]
+ },
+ "fx_prog_parse": {
+  "frame": [
+   6
+  ]
+ },
+ "mc_c24_read": {
+  "address": "D100",
+  "points": 2,
+  "format": "1",
+  "station": 0
+ },
+ "mc_c24_parse_read": {
+  "frame": [
+   1
+  ],
+  "points": 2,
+  "isBit": false,
+  "format": "1"
+ },
+ "uss_build_request": {
+  "station": 1,
+  "param": 1000,
+  "pzd": [
+   0
+  ]
+ },
+ "uss_parse_response": {
+  "frame": [
+   2
+  ]
+ },
+ "ppi_build_read": {
+  "station": 2,
+  "master": 0,
+  "address": "VB0",
+  "count": 2
+ },
+ "ppi_build_sa_confirm": {
+  "station": 2,
+  "master": 0
+ },
+ "ppi_parse_read_response": {
+  "response": [
+   0,
+   1,
+   2
+  ]
+ },
+ "rk512_build_read": {
+  "area": "DB",
+  "db": 1,
+  "offset": 0,
+  "count": 2
+ },
+ "rk512_parse_response": {
+  "frame": [
+   2
+  ]
+ },
+ "dlt645_build_read_request": {
+  "version": "2007",
+  "address": "000000000001",
+  "dataId": "00010000",
+  "preambleCount": 0
+ },
+ "dlt645_parse_read_response": {
+  "version": "2007",
+  "address": "000000000001",
+  "dataId": "00010000",
+  "frame": [
+   104
+  ]
+ },
+ "hostlink_build_cmode_read": {
+  "station": 0,
+  "dmStart": 0,
+  "wordCount": 2
+ },
+ "hostlink_parse_cmode_read": {
+  "frame": [
+   64
+  ]
+ },
+ "hostlink_build_fins": {
+  "station": 0,
+  "area": "DM",
+  "byte": 0,
+  "count": 2
+ },
+ "hostlink_parse_fins": {
+  "frame": [
+   64
+  ]
+ },
+ "s7_parse_address": {
+  "address": "MW0"
+ },
+ "open_s7_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1,
+  "rack": 0,
+  "slot": 0,
+  "connType": 1
+ },
+ "s7_read": {
+  "connectionId": "audit",
+  "items": [
+   "MW0"
+  ]
+ },
+ "s7_slave_set": {
+  "slaveId": "audit-s7",
+  "address": "DB1.DBB100",
+  "values": [
+   1,
+   2
+  ]
+ },
+ "open_bacnet_ip_connection": {
+  "connectionId": "audit",
+  "host": "127.0.0.1",
+  "port": 1
+ },
+ "custom_frame_parse": {
+  "definition": {
+   "schemaVersion": 1,
+   "name": "RS485 温度模块",
+   "mode": "binary",
+   "head": "01 03",
+   "length": 9,
+   "checksum": {
+    "type": "crc16-modbus"
+   },
+   "fields": [
+    {
+     "name": "temp1",
+     "offset": 3,
+     "fieldType": "i16",
+     "byteOrder": "be",
+     "scale": 0.1,
+     "unit": "℃"
+    }
+   ]
+  },
+  "bytes": [
+   1,
+   3,
+   2,
+   1,
+   244,
+   1,
+   144,
+   0,
+   0
+  ]
+ },
+ "custom_frame_validate": {
+  "definition": {
+   "schemaVersion": 1,
+   "name": "RS485 温度模块",
+   "mode": "binary",
+   "head": "01 03",
+   "length": 9,
+   "checksum": {
+    "type": "crc16-modbus"
+   },
+   "fields": [
+    {
+     "name": "temp1",
+     "offset": 3,
+     "fieldType": "i16",
+     "byteOrder": "be",
+     "scale": 0.1,
+     "unit": "℃"
+    }
+   ]
   }
+ }
 }

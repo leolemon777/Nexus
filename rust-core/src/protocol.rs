@@ -1632,6 +1632,9 @@ fn dispatch(
         "parse_frame_online" => handle_parse_frame_online(request_id, payload),
         // === 离线解析器(对标 ModbusPacketParser)===
         "parse_frame_offline" => handle_parse_frame_offline(request_id, payload),
+        // === 自定义帧解析(串口可视化批次 2)===
+        "custom_frame_parse" => handle_custom_frame_parse(request_id, payload),
+        "custom_frame_validate" => handle_custom_frame_validate(request_id, payload),
         // === 流式轮询(v2 协议)===
         "start_poll_stream" => handle_start_poll_stream(session, request_id, payload),
         "stop_poll_stream" => handle_stop_poll_stream(session, request_id, payload),
@@ -1958,6 +1961,8 @@ fn all_capabilities() -> Vec<&'static str> {
         "compute_lrc",
         "parse_frame_online",
         "parse_frame_offline",
+        "custom_frame_parse",
+        "custom_frame_validate",
         "start_poll_stream",
         "stop_poll_stream",
         "shutdown",
@@ -11885,6 +11890,63 @@ fn failure(request_id: Option<String>, error: CoreError) -> CommandOutcome {
         },
         shutdown: false,
     }
+}
+
+// === 自定义帧解析(串口可视化批次 2): definition 每次随请求内联传入,不进 Session 状态 ===
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CustomFrameParsePayload {
+    definition: Value,
+    bytes: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CustomFrameValidatePayload {
+    definition: Value,
+}
+
+fn handle_custom_frame_parse(request_id: &str, payload: Value) -> CommandOutcome {
+    let payload: CustomFrameParsePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let def: crate::frame_definition::FrameDefinition =
+        match serde_json::from_value(payload.definition) {
+            Ok(d) => d,
+            Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        };
+    match crate::frame_definition::parse_custom_frame(&payload.bytes, &def) {
+        Ok(fields) => success(
+            request_id.to_string(),
+            json!({ "status": "ok", "fields": fields }),
+            false,
+        ),
+        Err(e) => success(
+            request_id.to_string(),
+            json!({ "status": "error", "error": e }),
+            false,
+        ),
+    }
+}
+
+fn handle_custom_frame_validate(request_id: &str, payload: Value) -> CommandOutcome {
+    let payload: CustomFrameValidatePayload = match serde_json::from_value(payload) {
+        Ok(p) => p,
+        Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+    };
+    let def: crate::frame_definition::FrameDefinition =
+        match serde_json::from_value(payload.definition) {
+            Ok(d) => d,
+            Err(_) => return failure(Some(request_id.to_string()), CoreError::InvalidEnvelope),
+        };
+    let issues = crate::frame_definition::validate_definition(&def);
+    success(
+        request_id.to_string(),
+        json!({ "status": "ok", "valid": issues.is_empty(), "issues": issues }),
+        false,
+    )
 }
 
 #[cfg(test)]

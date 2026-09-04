@@ -62,7 +62,7 @@ try {
   # 只修改当前 PowerShell 进程，避免把机器级 LIB 或 VS 配置改成隐式状态。
   $env:LIB = "$(Split-Path -Parent $msvcrt);$ucrt;$um"
   Push-Location $repoRoot
-  & cargo test --manifest-path rust-core/Cargo.toml --test s7_jsonl_e2e --test enip_jsonl_e2e --test ads_jsonl_e2e --test mqtt_jsonl_e2e --test iec104_jsonl_e2e --test dnp3_jsonl_e2e --test dlt645_jsonl_e2e --test cjt188_jsonl_e2e --test bacnet_ip_jsonl_e2e --test knx_jsonl_e2e --test keyence_jsonl_e2e --test ls_xgt_jsonl_e2e --test panasonic_jsonl_e2e --test delta_jsonl_e2e --test inovance_jsonl_e2e --test xinjie_jsonl_e2e --test fatek_jsonl_e2e --test fuji_sph_jsonl_e2e --test ge_srtp_jsonl_e2e @CargoArgs
+  & cargo test --manifest-path rust-core/Cargo.toml --test s7_jsonl_e2e --test enip_jsonl_e2e --test ads_jsonl_e2e --test mqtt_jsonl_e2e --test iec104_jsonl_e2e --test dnp3_jsonl_e2e --test dlt645_jsonl_e2e --test cjt188_jsonl_e2e --test bacnet_ip_jsonl_e2e --test knx_jsonl_e2e --test keyence_jsonl_e2e --test ls_xgt_jsonl_e2e --test panasonic_jsonl_e2e --test delta_jsonl_e2e --test inovance_jsonl_e2e --test xinjie_jsonl_e2e --test fatek_jsonl_e2e --test fuji_sph_jsonl_e2e --test ge_srtp_jsonl_e2e --test custom_frame_jsonl_e2e @CargoArgs
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # 独立 MQTT Broker 互操作测试需要普通 sidecar 可执行文件，而不是 cargo test harness。

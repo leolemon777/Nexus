@@ -136,6 +136,7 @@ Electron 全量 278/278 通过（2026-08-23 复测；含三族路由收口、Mod
 | `docs/research/` | 调研报告(snap7 交叉/开源对比/VOC/协议深挖) |
 | `docs/audit-*.md` | 代码+安全审查报告 |
 | `docs/PRODUCT_COMPLETION_ROADMAP.md` | 产品完成定义、发布门槛与后续批次 |
+| `docs/spec-plan-serial-plot-parse-replay.md` | 串口可视化三件套专题批次：调试页曲线面板 / 自定义帧解析 / 会话录制回放 |
 | `docs/r0-soak-runbook.md` | R0 软件长稳运行、判定与证据归档 |
 | `docs/release-metadata-runbook.md` | Formal/Candidate 便携包 SBOM、SHA-256 清单与源提交元数据 |
 | `docs/release-rollout-runbook.md` | 发布说明归档、回滚包配对校验和正式目录切换原则 |

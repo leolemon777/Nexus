@@ -27,7 +27,8 @@ const NON_CORE = new Set([
   "list_network_interfaces", "list_serial_ports", "list_usb_devices", "mc_c24_serial_read",
   "omron_hostlink_serial_read", "open_serial_port", "close_serial_port",
   "panasonic_serial_read", "ping_host", "project_export_sanitized", "project_open", "project_new",
-  "project_restore_last", "record_write_audit", "scan_all", "scan_all_cancel", "scan_baud_rate",
+  "project_restore_last", "record_write_audit", "record_start", "record_stop", "record_status",
+  "record_pick", "record_read", "record_export_csv", "scan_all", "scan_all_cancel", "scan_baud_rate",
   "scan_serial_stations", "set_interface_ip", "start_poll", "start_realtime_push", "stop_realtime_push",
   "stop_poll", "dlt645_serial_read", "delta_modbus_plan", "delta_modbus_read",
 ]);

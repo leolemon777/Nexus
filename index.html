@@ -402,8 +402,7 @@
               <div class="card-header">
                 <strong>示例代码</strong>
                 <div class="code-tabs" role="tablist" aria-label="代码语言">
-                  <button class="code-tab is-active" type="button" role="tab" aria-selected="true" data-lang="rust">Rust</button>
-                  <button class="code-tab" type="button" role="tab" aria-selected="false" data-lang="csharp">C#</button>
+                  <button class="code-tab is-active" type="button" role="tab" aria-selected="true" data-lang="csharp">C#</button>
                   <button class="code-tab" type="button" role="tab" aria-selected="false" data-lang="python">Python</button>
                 </div>
                 <span style="margin-left:auto"></span>
@@ -465,12 +464,91 @@
                   <button class="btn-primary" id="dbg-send" type="button">发送</button>
                   <button class="btn-ghost" id="dbg-clear-input" type="button">清空</button>
                 </div>
+                <div class="form-row" style="margin-top:8px">
+                  <button class="btn-ghost" id="rec-toggle" type="button" title="把当前会话的全部 TX/RX 帧录制为 JSONL 文件（超 5MB 自动分卷）">开始录制</button>
+                  <span class="field-meta" id="rec-state">未录制</span>
+                  <button class="btn-ghost" id="replay-open" type="button">打开录制文件…</button>
+                  <button class="btn-ghost" id="replay-toggle" type="button" disabled title="按原始时间轴重放进收发记录和曲线">播放</button>
+                  <select id="replay-speed" class="input" style="width:76px" title="回放速度"><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option><option value="1000000">最大</option></select>
+                  <button class="btn-text" id="replay-step" type="button" disabled>单步</button>
+                  <button class="btn-text" id="replay-export" type="button" disabled title="把录制文件导出为 CSV（时间/方向/HEX/字节数，已应用帧定义时附带字段值）">导出 CSV</button>
+                  <span class="field-meta" id="replay-state">未加载</span>
+                </div>
               </div>
             </div>
             <div class="card">
               <div class="card-header"><strong>收发记录</strong><span style="margin-left:auto"></span><button class="btn-text" id="dbg-clear-log" type="button">清空</button></div>
               <div class="card-body">
                 <div class="data-grid debug-log-grid"><table><thead><tr><th style="width:110px">时间</th><th style="width:35px">方向</th><th>HEX</th><th>解析</th></tr></thead><tbody id="dbg-log-rows"><tr class="empty-row"><td colspan="4">暂无记录</td></tr></tbody></table></div>
+              </div>
+            </div>
+            <div class="card trend-card">
+              <div class="card-header">
+                <strong>实时曲线</strong>
+                <span class="field-meta" style="font-size:11px">60s 窗口 · 统一 Y 轴</span>
+                <span style="margin-left:auto"></span>
+                <select id="plot-channel-select" class="input" style="width:150px" aria-label="选择通道"><option value="">选择通道…</option></select>
+                <button class="btn-ghost" id="plot-add" type="button">+ 添加曲线</button>
+                <button class="btn-ghost" id="plot-pause" type="button">暂停</button>
+                <button class="btn-text" id="plot-clear" type="button">清空</button>
+                <button class="btn-text" id="plot-export" type="button">导出 CSV</button>
+              </div>
+              <div class="card-body" style="padding:8px">
+                <canvas id="plot-canvas" role="img" aria-label="串口实时曲线" style="width:100%;height:220px;display:block"></canvas>
+                <div class="trend-legend" id="plot-legend"></div>
+                <div class="form-row" style="margin-top:8px">
+                  <label title="勾选后按所选传输格式自动解析收包，发现 Modbus 寄存器通道（FC03 保持/FC04 输入）"><input type="checkbox" id="plot-auto-parse" checked /> 自动解析收包</label>
+                  <label class="form-label" for="plot-parse-transport" title="自动解析所用的传输格式；RS-232/485 串口设备通常为 RTU，字符帧以冒号开头选 ASCII">解析传输</label>
+                  <select id="plot-parse-transport" class="input" style="width:88px"><option value="rtu" selected>RTU</option><option value="ascii">ASCII</option><option value="tcp">TCP</option><option value="auto">自动</option></select>
+                </div>
+                <details style="margin-top:8px">
+                  <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">手动字节偏移通道（非 Modbus 协议设备）</summary>
+                  <div class="form-row" style="margin-top:8px">
+                    <label class="form-label" for="plot-man-name">名称</label><input id="plot-man-name" class="input" style="width:88px" placeholder="温度1" />
+                    <label class="form-label" for="plot-man-head" title="只解析以该帧头开头的收包；不填则对每个收包生效">帧头HEX</label><input id="plot-man-head" class="input" style="width:118px" placeholder="01 03（可空）" />
+                    <label class="form-label" for="plot-man-offset" title="数据起始字节，从帧首字节起算，帧首字节为 0">偏移</label><input id="plot-man-offset" class="input" style="width:52px" type="number" min="0" max="65535" value="0" />
+                    <label class="form-label" for="plot-man-type">类型</label><select id="plot-man-type" class="input" style="width:70px"><option value="u16" selected>u16</option><option value="i16">i16</option><option value="u8">u8</option><option value="u32">u32</option><option value="i32">i32</option><option value="f32">f32</option></select>
+                    <label class="form-label" for="plot-man-order" title="多字节类型的高低字节顺序，按设备手册选择；单字节类型忽略此项">字节序</label><select id="plot-man-order" class="input" style="width:76px"><option value="be" selected>大端</option><option value="le">小端</option></select>
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="plot-man-scale" title="原始值 × 缩放 = 曲线值；填 1 表示不缩放">缩放</label><input id="plot-man-scale" class="input" style="width:64px" placeholder="0.1" value="1" />
+                    <label class="form-label" for="plot-man-unit">单位</label><input id="plot-man-unit" class="input" style="width:56px" placeholder="℃" />
+                    <button class="btn-ghost" id="plot-man-add" type="button">添加手动通道</button>
+                  </div>
+                </details>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <strong>帧解析</strong>
+                <span class="field-meta" style="font-size:11px">Rust 解析 · 定义随项目保存</span>
+                <span style="margin-left:auto"></span>
+                <select id="fd-list" class="input" style="width:150px" aria-label="已保存的帧定义"><option value="">已存定义…</option></select>
+                <button class="btn-ghost" id="fd-load" type="button">载入</button>
+                <button class="btn-ghost" id="fd-save" type="button">保存定义</button>
+                <button class="btn-ghost" id="fd-apply" type="button" title="激活当前定义：收包自动解析出命名字段，并在曲线通道下拉中出现">应用到曲线</button>
+                <button class="btn-text" id="fd-delete" type="button">删除</button>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <label class="form-label" for="fd-name">名称</label><input id="fd-name" class="input" style="width:118px" placeholder="RS485 温度模块" />
+                  <label class="form-label" for="fd-mode">模式</label><select id="fd-mode" class="input" style="width:118px"><option value="binary" selected>定长二进制</option><option value="ascii-delimited">分隔 ASCII</option></select>
+                  <span id="fd-binary-opts">
+                    <label class="form-label" for="fd-head" title="只解析以该帧头开头的收包；不填则对每个收包生效">帧头HEX</label><input id="fd-head" class="input" style="width:112px" placeholder="01 03（可空）" />
+                    <label class="form-label" for="fd-length" title="整帧总字节数，含校验字节">定长</label><input id="fd-length" class="input" style="width:52px" type="number" min="1" max="65535" placeholder="9" />
+                    <label class="form-label" for="fd-checksum" title="校验不通过会显式报错，不会静默">校验</label><select id="fd-checksum" class="input" style="width:128px"><option value="none" selected>无</option><option value="sum8">sum8</option><option value="xor8">xor8</option><option value="crc16-modbus">crc16-modbus</option></select>
+                  </span>
+                  <span id="fd-ascii-opts" style="display:none">
+                    <label class="form-label" for="fd-line-ending">行结束</label><select id="fd-line-ending" class="input" style="width:92px"><option value="lf" selected>LF (\n)</option><option value="crlf">CRLF (\r\n)</option></select>
+                    <label class="form-label" for="fd-separator">分隔符</label><select id="fd-separator" class="input" style="width:92px"><option value="," selected>, 逗号</option><option value=" ">空格</option><option value=";">; 分号</option><option value="tab">Tab</option></select>
+                  </span>
+                </div>
+                <div class="data-grid" style="margin-top:8px"><table><thead><tr><th style="width:110px">字段名</th><th style="width:60px" title="binary 模式：数据起始字节，帧首字节为 0">偏移</th><th style="width:60px" title="ascii 模式：分隔后第几段，从 0 起">序号</th><th style="width:70px">类型</th><th style="width:76px">字节序</th><th style="width:64px">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th></tr></thead><tbody id="fd-fields-rows"><tr class="empty-row"><td colspan="8" class="console-empty">点「+ 字段」添加要提取的数值</td></tr></tbody></table></div>
+                <div class="form-row" style="margin-top:8px">
+                  <button class="btn-ghost" id="fd-add-field" type="button">+ 字段</button>
+                  <button class="btn-ghost" id="fd-try" type="button" title="取最近一个收包，按当前表单定义调 Rust 试算">用最近收包试算</button>
+                  <span id="fd-preview" style="font-family:var(--mono);font-size:12px;color:var(--text-3);flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                </div>
               </div>
             </div>
             <div class="card">

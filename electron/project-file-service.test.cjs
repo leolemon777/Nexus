@@ -18,7 +18,7 @@ const {
 function validProject(overrides = {}) {
   return {
     format: "nexus-project",
-    schemaVersion: 1,
+    schemaVersion: 2,
     projectName: "产线调试",
     activeView: "master",
     activeSession: "default",
@@ -44,7 +44,7 @@ function validProject(overrides = {}) {
 test("normalizes a versioned project and preserves safe workspace data", () => {
   const project = normalizeProjectDocument(validProject());
   assert.equal(project.format, "nexus-project");
-  assert.equal(project.schemaVersion, 1);
+  assert.equal(project.schemaVersion, 2);
   assert.equal(project.config.tcp.host, "192.168.1.20");
   assert.equal(project.sessions[0].pointTable[0].unit, "℃");
   assert.deepEqual(project.sessions[0].trendSelection, ["reg-HR-0", "reg-IR-4"]);
@@ -290,18 +290,22 @@ test("legacy v0 project migrates to the v1 golden sample without modifying its s
 
   const migrated = migrateProjectDocument(JSON.parse(sourceBefore));
   assert.equal(migrated.sourceSchemaVersion, LEGACY_PROJECT_SCHEMA_VERSION);
-  assert.equal(migrated.targetSchemaVersion, 1);
+  assert.equal(migrated.targetSchemaVersion, 2);
   assert.deepEqual(migrated.steps, [{
     fromVersion: 0,
     toVersion: 1,
     summary: "补充 schemaVersion、workspace 默认结构和 v1 字段校验",
+  }, {
+    fromVersion: 1,
+    toVersion: 2,
+    summary: "workspace 增加 frameDefinitions 自定义帧定义数组(串口可视化批次 2)",
   }]);
   assert.deepEqual(migrated.document, expected);
 
   const preview = service.previewMigration(sourcePath);
   assert.equal(preview.previewOnly, true);
   assert.equal(preview.migration.sourceSchemaVersion, 0);
-  assert.equal(preview.migration.targetSchemaVersion, 1);
+  assert.equal(preview.migration.targetSchemaVersion, 2);
   assert.equal(preview.migration.appliedInMemoryOnly, true);
   assert.equal(preview.migration.sourceModified, false);
   assert.deepEqual(preview.document, expected);
@@ -310,8 +314,9 @@ test("legacy v0 project migrates to the v1 golden sample without modifying its s
   const currentPath = path.join(fixtureRoot, "project-v1.expected.json");
   const currentBefore = fs.readFileSync(currentPath, "utf8");
   const currentPreview = service.previewMigration(currentPath);
-  assert.equal(currentPreview.migration.sourceSchemaVersion, 1);
-  assert.equal(currentPreview.migration.targetSchemaVersion, 1);
+  // 夹具已是当前 v2: 预览应识别为无迁移
+  assert.equal(currentPreview.migration.sourceSchemaVersion, 2);
+  assert.equal(currentPreview.migration.targetSchemaVersion, 2);
   assert.deepEqual(currentPreview.migration.steps, []);
   assert.equal(fs.readFileSync(currentPath, "utf8"), currentBefore);
 });
@@ -416,9 +421,9 @@ test("explicit project migration writes a separate loadable v1 file and preserve
     const migrated = service.migrateFile(sourcePath, outputPath);
     const loaded = service.load(outputPath);
 
-    assert.equal(migrated.document.schemaVersion, 1);
+    assert.equal(migrated.document.schemaVersion, 2);
     assert.equal(loaded.migration, undefined);
-    assert.equal(loaded.document.schemaVersion, 1);
+    assert.equal(loaded.document.schemaVersion, 2);
     assert.equal(loaded.document.projectName, legacy.projectName);
     assert.equal(fs.readFileSync(sourcePath, "utf8"), sourceBefore);
     assert.equal(fs.existsSync(path.join(directory, ".current.nexus.json.tmp-migration-id")), false);
@@ -432,6 +437,60 @@ test("renderer makes legacy project migration visible and keeps the source read-
   assert.match(renderer, /function projectMigrationNotice\(result\)/);
   assert.match(renderer, /只读兼容打开，原文件未修改，显式保存后才升级/);
   assert.match(renderer, /projectMigrationNotice\(result\)/);
+});
+
+test("migrates v1 projects to v2 with empty frameDefinitions and sanitizes definitions", () => {
+  const v1 = validProject({ schemaVersion: 1, workspace: { commandList: [] } });
+  const migrated = migrateProjectDocument(v1);
+  assert.equal(migrated.sourceSchemaVersion, 1);
+  assert.equal(migrated.targetSchemaVersion, 2);
+  assert.equal(migrated.document.schemaVersion, 2);
+  assert.deepEqual(migrated.document.workspace.frameDefinitions, []);
+
+  const dirty = validProject({
+    workspace: {
+      commandList: [],
+      frameDefinitions: [
+        {
+          name: "RS485 温度模块",
+          mode: "binary",
+          head: "01 03",
+          length: 9,
+          checksum: { type: "crc16-modbus" },
+          fields: [{ name: "temp1", offset: 3, fieldType: "i16", byteOrder: "be", scale: 0.1, unit: "℃" }],
+        },
+        { name: "RS485 温度模块", mode: "binary", fields: [{ name: "dup", offset: 0 }] },
+        { name: "", mode: "binary", fields: [{ name: "x", offset: 0 }] },
+        { name: "无字段", mode: "binary", fields: [] },
+        { name: "坏模式", mode: "websocket", fields: [{ name: "a", offset: 0 }], head: "", length: 999999 },
+        {
+          name: "ascii",
+          mode: "ascii-delimited",
+          separator: "",
+          lineEnding: "\r",
+          fields: [{ name: "w", index: 1, fieldType: "f64", scale: "abc" }],
+        },
+      ],
+    },
+  });
+  const normalized = normalizeProjectDocument(dirty);
+  const defs = normalized.workspace.frameDefinitions;
+  assert.equal(defs.length, 3);
+  // 1) 合法 binary 定义原样保留
+  assert.equal(defs[0].name, "RS485 温度模块");
+  assert.equal(defs[0].checksum.type, "crc16-modbus");
+  assert.equal(defs[0].fields[0].scale, 0.1);
+  // 2) 重名被剔除
+  // 3) 坏模式回退 binary,非法长度/校验被清空,fieldType 回退 u16
+  assert.equal(defs[1].mode, "binary");
+  assert.equal(defs[1].length, null);
+  assert.equal(defs[1].checksum, null);
+  assert.equal(defs[1].fields[0].fieldType, "u16");
+  // 4) ascii:空分隔符回退逗号,非法行尾回退 \n,坏缩放回退 1
+  assert.equal(defs[2].mode, "ascii-delimited");
+  assert.equal(defs[2].separator, ",");
+  assert.equal(defs[2].lineEnding, "\n");
+  assert.equal(defs[2].fields[0].scale, 1);
 });
 
 test("rejects excessive workspace collections and deeply nested project input", () => {
@@ -448,12 +507,13 @@ test("rejects excessive workspace collections and deeply nested project input", 
   assert.throws(() => normalizeProjectDocument(validProject({ unexpected: deep })), (error) => error.code === "PROJECT_TOO_DEEP");
 });
 
-test("defaults workspace state for v1 projects and rejects unsafe command lists", () => {
+test("defaults workspace state for v2 projects and rejects unsafe command lists", () => {
   const legacy = normalizeProjectDocument(validProject({
     sessions: [{ name: "default", pointTable: [] }],
     workspace: { commandList: [] },
   }));
   assert.deepEqual(legacy.workspace.commandList, []);
+  assert.deepEqual(legacy.workspace.frameDefinitions, []);
   assert.deepEqual(legacy.workspace.simulators, {
     modbus: { mode: "tcp", port: "502", allowedStations: "" },
     melsec: { port: "5000" },

@@ -21,6 +21,7 @@ const { createDeltaModbusService } = require("./delta-modbus-service.cjs");
 const { createModbusScanService } = require("./modbus-scan-service.cjs");
 const { createPingService } = require("./ping-service.cjs");
 const { ProjectFileService } = require("./project-file-service.cjs");
+const { RecordService } = require("./record-service.cjs");
 const { Gx3AnalysisService } = require("./gx3-analysis-service.cjs");
 const { redactLogText } = require("./log-redaction-service.cjs");
 const { DiagnosticsService } = require("./diagnostics-service.cjs");
@@ -66,6 +67,7 @@ const serialService = new SerialService();
 const pollScheduler = new PollScheduler();
 const serialDebugService = new SerialDebugService();
 const dataExportService = new DataExportService();
+const recordService = new RecordService();
 const slaveSerialBridge = new SlaveSerialBridge();
 const realtimePushService = new RealtimePushService();
 const modbusScanService = createModbusScanService({ serialService, readHoldingRegistersOnce });
@@ -84,10 +86,11 @@ pollScheduler.onData((pollId, data) => {
   mainWindow?.webContents.send("nexus:poll_data", { pollId, ...data });
   realtimePushService.push({ type: "poll_data", pollId, ...data, timestamp: Date.now() });
 });
-// debug frame 同时推送到 UI + SSE
+// debug frame 同时推送到 UI + SSE + 会话录制(批次 3)
 serialDebugService.onFrame((record) => {
   mainWindow?.webContents.send("nexus:debug_frame", record);
   realtimePushService.push({ type: "debug_frame", ...record });
+  recordService.handleFrame(record);
 });
 const smokeTest = process.env.NEXUS_SMOKE_TEST === "1";
 let mainWindow;
@@ -1128,6 +1131,79 @@ function registerDesktopCommands() {
   ipcMain.handle("nexus:parse_frame_offline", async (_event, args) => {
     const core = await ensureRustCore();
     return core.request("parse_frame_offline", args);
+  });
+  // === 串口可视化: 自定义帧解析(批次 2)+ 会话录制/回放(批次 3)===
+  ipcMain.handle("nexus:custom_frame_parse", async (_event, args) => {
+    const core = await ensureRustCore();
+    return core.request("custom_frame_parse", args);
+  });
+  ipcMain.handle("nexus:custom_frame_validate", async (_event, args) => {
+    const core = await ensureRustCore();
+    return core.request("custom_frame_validate", args);
+  });
+  ipcMain.handle("nexus:record_start", async (_event, args) => {
+    try {
+      const sessionsDir = path.join(app.getPath("userData"), "sessions");
+      return { ok: true, ...recordService.start({ dir: args?.dir || sessionsDir }) };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  });
+  ipcMain.handle("nexus:record_stop", async () => {
+    const result = await recordService.stop();
+    return { ok: true, ...result };
+  });
+  ipcMain.handle("nexus:record_status", async () => recordService.status());
+  ipcMain.handle("nexus:record_pick", async () => {
+    const picked = await dialog.showOpenDialog(mainWindow, {
+      title: "选择要回放/导出的录制文件",
+      properties: ["openFile"],
+      filters: [{ name: "Nexus 会话录制 (*.nxsession.jsonl)", extensions: ["jsonl"] }],
+    });
+    if (picked.canceled || !picked.filePaths?.length) return { ok: false, canceled: true };
+    return { ok: true, path: picked.filePaths[0] };
+  });
+  ipcMain.handle("nexus:record_read", async (_event, args) => {
+    try {
+      return { ok: true, ...RecordService.readSession(String(args?.path || "")) };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  });
+  ipcMain.handle("nexus:record_export_csv", async (_event, args) => {
+    try {
+      const session = RecordService.readSession(String(args?.path || ""));
+      // 绑定帧定义时,把前 2000 个 RX 帧的字段值并成列(Rust 解析,单帧失败跳过)
+      const fieldsByTs = new Map();
+      if (args?.definition) {
+        const core = await ensureRustCore();
+        let parsedCount = 0;
+        for (const rec of session.records) {
+          if (rec.dir !== "RX" || parsedCount >= 2000) continue;
+          try {
+            const result = await core.request("custom_frame_parse", {
+              definition: args.definition,
+              bytes: rec.bytes,
+            });
+            if (result?.status === "ok" && Array.isArray(result.fields) && result.fields.length > 0) {
+              parsedCount += 1;
+              fieldsByTs.set(rec.ts, result.fields.map((f) => `${f.name}=${f.value}${f.unit || ""}`).join("; "));
+            }
+          } catch { /* 单帧解析失败跳过,不影响导出 */ }
+        }
+      }
+      const rows = session.records.map((rec) => ({
+        time: new Date(rec.ts).toISOString(),
+        direction: rec.dir,
+        hex: (rec.bytes ?? []).map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" "),
+        byteCount: (rec.bytes ?? []).length,
+        ...(fieldsByTs.has(rec.ts) ? { fields: fieldsByTs.get(rec.ts) } : {}),
+      }));
+      if (rows.length === 0) return { ok: false, error: "录制文件没有帧" };
+      return { ok: true, ...dataExportService.exportCsv({ rows, filename: args?.filename || "nexus_session_export" }) };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
   });
   // 流式轮询(v2)
   ipcMain.handle("nexus:start_poll_stream", async (_event, args) => {
