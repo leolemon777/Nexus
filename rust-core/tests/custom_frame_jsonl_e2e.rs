@@ -224,6 +224,72 @@ fn jsonl_parses_ascii_delimited_and_validates_definitions() {
     );
 }
 
+#[test]
+fn jsonl_parses_dynamic_length_and_tail_delimiter_frames() {
+    let mut sidecar = Sidecar::spawn();
+    // 帧型: AA | len(u8, raw=3) | 01 F4 | 0D 0A ;raw+adjust(2)=5? → 本例 raw=4+adjust 1=5 字节帧体
+    // 布局: AA(头) 04(len raw) 01 F4 2A(数据) | 0D 0A(tail) → 帧体 5 字节 + tail 2 字节
+    let def = json!({
+        "schemaVersion": 1,
+        "name": "动态长度模块",
+        "mode": "binary",
+        "head": "AA",
+        "lengthField": { "offset": 1, "fieldType": "u8", "byteOrder": "be", "adjust": 1 },
+        "tail": "0D 0A",
+        "fields": [ { "name": "value", "offset": 2, "fieldType": "u16", "byteOrder": "be", "scale": 0.1, "unit": "kg" } ]
+    });
+    let frame: Vec<u8> = vec![0xAA, 0x04, 0x01, 0xF4, 0x2A, 0x0D, 0x0A];
+    let result = sidecar.ok(
+        "dyn-ok",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": frame }),
+    );
+    assert_eq!(result["status"], "ok");
+    assert_eq!(result["fields"][0]["name"], "value");
+    assert_eq!(result["fields"][0]["value"], json!(50.0)); // 0x01F4=500 ×0.1
+
+    // 尾部定界不匹配
+    let bad_tail: Vec<u8> = vec![0xAA, 0x04, 0x01, 0xF4, 0x2A, 0x0D, 0x0B];
+    let result = sidecar.ok(
+        "dyn-tail",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": bad_tail }),
+    );
+    assert_eq!(result["status"], "error");
+    assert_eq!(result["error"]["code"], "TAIL_MISMATCH");
+
+    // 动态长度不符:raw=4+1=5,帧体只有 4 字节
+    let bad_len: Vec<u8> = vec![0xAA, 0x04, 0x01, 0xF4, 0x0D, 0x0A];
+    let result = sidecar.ok(
+        "dyn-len",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": bad_len }),
+    );
+    assert_eq!(result["error"]["code"], "LENGTH_MISMATCH");
+
+    // validate: 定长与长度字段互斥
+    let conflicting = json!({
+        "name": "冲突",
+        "mode": "binary",
+        "length": 5,
+        "lengthField": { "offset": 1, "fieldType": "u8" },
+        "fields": [ { "name": "a", "offset": 3, "fieldType": "u8" } ]
+    });
+    let result = sidecar.ok(
+        "dyn-conflict",
+        "custom_frame_validate",
+        json!({ "definition": conflicting }),
+    );
+    assert_eq!(result["valid"], false);
+    assert!(
+        result["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i.as_str().unwrap().contains("不能同时使用"))
+    );
+}
+
 /// 与 modbus_rtu::crc16_modbus 相同的多项式实现,测试内自证(不引 crate 私有模块)。
 fn crc16_modbus_test_helper(bytes: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;

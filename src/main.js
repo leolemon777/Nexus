@@ -150,9 +150,18 @@ const elements = {
   fdName: document.querySelector("#fd-name"),
   fdMode: document.querySelector("#fd-mode"),
   fdBinaryOpts: document.querySelector("#fd-binary-opts"),
+  fdBinaryRow2: document.querySelector("#fd-binary-row2"),
+  fdLfOpts: document.querySelector("#fd-lf-opts"),
   fdAsciiOpts: document.querySelector("#fd-ascii-opts"),
   fdHead: document.querySelector("#fd-head"),
+  fdLenSrc: document.querySelector("#fd-len-src"),
   fdLength: document.querySelector("#fd-length"),
+  fdLengthLabel: document.querySelector("#fd-length-label"),
+  fdLfOffset: document.querySelector("#fd-lf-offset"),
+  fdLfType: document.querySelector("#fd-lf-type"),
+  fdLfOrder: document.querySelector("#fd-lf-order"),
+  fdLfAdjust: document.querySelector("#fd-lf-adjust"),
+  fdTail: document.querySelector("#fd-tail"),
   fdChecksum: document.querySelector("#fd-checksum"),
   fdLineEnding: document.querySelector("#fd-line-ending"),
   fdSeparator: document.querySelector("#fd-separator"),
@@ -1177,7 +1186,12 @@ const FD_SEPARATOR_REV = { ",": ",", " ": " ", ";": ";", "\t": "tab" };
 function fdUpdateModeVisibility() {
   const binary = elements.fdMode?.value !== "ascii-delimited";
   if (elements.fdBinaryOpts) elements.fdBinaryOpts.style.display = binary ? "" : "none";
+  if (elements.fdBinaryRow2) elements.fdBinaryRow2.style.display = binary ? "" : "none";
   if (elements.fdAsciiOpts) elements.fdAsciiOpts.style.display = binary ? "none" : "";
+  const dynamic = binary && elements.fdLenSrc?.value === "field";
+  if (elements.fdLfOpts) elements.fdLfOpts.style.display = dynamic ? "" : "none";
+  if (elements.fdLengthLabel) elements.fdLengthLabel.style.visibility = dynamic ? "hidden" : "";
+  if (elements.fdLength) elements.fdLength.style.visibility = dynamic ? "hidden" : "";
 }
 
 function fdFieldRow(field = {}) {
@@ -1277,7 +1291,19 @@ function fdCollectDefinition() {
   };
   if (mode === "binary") {
     def.head = (elements.fdHead?.value || "").trim();
-    def.length = Number.isInteger(lengthValue) && lengthValue >= 1 ? lengthValue : null;
+    const dynamic = elements.fdLenSrc?.value === "field";
+    def.length = !dynamic && Number.isInteger(lengthValue) && lengthValue >= 1 ? lengthValue : null;
+    if (dynamic) {
+      const lfOffset = Number(elements.fdLfOffset?.value);
+      const lfAdjust = Number(elements.fdLfAdjust?.value);
+      def.lengthField = {
+        offset: Number.isInteger(lfOffset) && lfOffset >= 0 ? lfOffset : 0,
+        fieldType: elements.fdLfType?.value === "u16" ? "u16" : "u8",
+        byteOrder: elements.fdLfOrder?.value === "le" ? "le" : "be",
+        adjust: Number.isInteger(lfAdjust) ? lfAdjust : 0,
+      };
+    }
+    def.tail = (elements.fdTail?.value || "").trim();
     const checksum = elements.fdChecksum?.value || "none";
     def.checksum = checksum === "none" ? null : { type: checksum };
   } else {
@@ -1291,7 +1317,13 @@ function fdFillForm(def) {
   if (elements.fdName) elements.fdName.value = def.name ?? "";
   if (elements.fdMode) elements.fdMode.value = def.mode === "ascii-delimited" ? "ascii-delimited" : "binary";
   if (elements.fdHead) elements.fdHead.value = def.head ?? "";
+  if (elements.fdLenSrc) elements.fdLenSrc.value = def.lengthField ? "field" : "fixed";
   if (elements.fdLength) elements.fdLength.value = def.length ?? "";
+  if (elements.fdLfOffset) elements.fdLfOffset.value = def.lengthField?.offset ?? "";
+  if (elements.fdLfType) elements.fdLfType.value = def.lengthField?.fieldType ?? "u8";
+  if (elements.fdLfOrder) elements.fdLfOrder.value = def.lengthField?.byteOrder ?? "be";
+  if (elements.fdLfAdjust) elements.fdLfAdjust.value = def.lengthField?.adjust ?? 0;
+  if (elements.fdTail) elements.fdTail.value = def.tail ?? "";
   if (elements.fdChecksum) elements.fdChecksum.value = def.checksum?.type ?? "none";
   if (elements.fdLineEnding) elements.fdLineEnding.value = FD_LINE_ENDING_REV[def.lineEnding] ?? "lf";
   if (elements.fdSeparator) elements.fdSeparator.value = FD_SEPARATOR_REV[def.separator] ?? ",";
@@ -1532,7 +1564,12 @@ async function replayExportCsv() {
 
 /** 项目打开/新建时恢复帧定义(只恢复列表,不自动应用到曲线)。 */
 function restoreFrameDefinitions(defs) {
-  frameDefs = (Array.isArray(defs) ? defs : []).map((def) => ({ ...def }));
+  frameDefs = (Array.isArray(defs) ? defs : []).map((def) => ({
+    ...def,
+    lengthField: def.lengthField ? { ...def.lengthField } : (def.lengthField ?? null),
+    checksum: def.checksum ? { ...def.checksum } : (def.checksum ?? null),
+    fields: (def.fields ?? []).map((field) => ({ ...field })),
+  }));
   activeFrameDef = null;
   fdRefreshList("");
 }
@@ -7742,7 +7779,12 @@ function buildProjectDocument() {
       commandList: commandList.map((command) => ({ ...command })),
       simulators: collectSimulatorWorkspace(),
       lastHelpReference: savedProtocolGuideReference ? { ...savedProtocolGuideReference } : null,
-      frameDefinitions: frameDefs.map((def) => ({ ...def, fields: (def.fields ?? []).map((field) => ({ ...field })) })),
+      frameDefinitions: frameDefs.map((def) => ({
+        ...def,
+        lengthField: def.lengthField ? { ...def.lengthField } : (def.lengthField ?? null),
+        checksum: def.checksum ? { ...def.checksum } : (def.checksum ?? null),
+        fields: (def.fields ?? []).map((field) => ({ ...field })),
+      })),
     },
   };
 }
@@ -9321,6 +9363,7 @@ async function initialise() {
   }
   // 帧解析(批次 2)
   if (elements.fdMode) elements.fdMode.addEventListener("change", fdUpdateModeVisibility);
+  if (elements.fdLenSrc) elements.fdLenSrc.addEventListener("change", fdUpdateModeVisibility);
   if (elements.fdAddField) elements.fdAddField.addEventListener("click", () => {
     elements.fdFieldsRows?.querySelector(".empty-row")?.remove();
     elements.fdFieldsRows?.append(fdFieldRow({}));

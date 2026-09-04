@@ -174,9 +174,13 @@ ASCII 分隔模式：
 
 新增 `docs/custom-frame-golden-vectors.md`（头部 `日期：YYYY-MM-DD` + `证据等级：S3`），≥8 向量：定长二进制含 CRC 正/反例、长度不足、帧头不匹配、字段越界、ASCII 多分隔符、scale 换算、i16 负值、f32 字节序。Rust 内联单测对齐向量；新增 `rust-core/tests/custom_frame_jsonl_e2e.rs`（validate → parse 闭环）并登记进 `scripts/test-rust-jsonl.ps1` 清单。
 
-### B.7 后续增强（非本批）
+### B.7 后续增强
 
-lengthField 动态长度、尾部定界符、脚本解析引擎、条件着色、Y 轴缩放。
+- ✅ lengthField 动态长度（2026-09-04 交付：`lengthField {offset,fieldType u8/u16,byteOrder,adjust}`，与定长互斥，帧总长=raw+adjust、不含尾部定界）
+- ✅ 尾部定界符（2026-09-04 交付：`tail` HEX，解析前剥离，不计入长度与校验；空串=不使用）
+- ⬜ 脚本解析引擎
+- ⬜ 条件着色
+- ⬜ Y 轴缩放
 
 ## C. 批次 3：会话录制与回放
 

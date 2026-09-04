@@ -165,6 +165,7 @@ Nexus 工业通信工作台
 | 2026-08-11 | 1 | 补齐偏差 | Session 加 TcpFraming(Standard/RtuOverTcp/AsciiOverTcp)+ UDP 端到端命令(8 个)+ open_tcp/udp 接受 framing 参数 + UI 传输方式选择器(RTU/ASCII/TCP/UDP/RtuOverTcp/AsciiOverTcp 单选)+ TCP 连接/断开 UI。62+10+34=106 测试全绿。 |
 | 2026-08-11 | 2 | 数据类型 | value_codec.rs(28 显示格式 + 4 字节序 + 缩放/偏移)+ decode_values JSONL 命令 + Electron decodeValues + UI 数据类型下拉激活(16/32/64 位 + 浮点 + 字符串)。73+34=107 测试全绿。 |
 | 2026-08-30 | 专题 | 串口可视化 spec | 采纳对标 Serial Studio（功能对标、零代码借鉴，GPL-3.0 隔离）的专题批次：调试页实时曲线面板 / Rust 自定义帧解析栈 / 会话录制回放，分三批交付。详见 [spec-plan-serial-plot-parse-replay.md](./spec-plan-serial-plot-parse-replay.md)。不新增阶段号，主站侧趋势图 G4 已闭合，本 spec 补调试侧。 |
+| 2026-09-04 | 专题 | 帧解析 B.7 前两项 | 自定义帧解析 v2：`lengthField` 动态长度（u8/u16 × 大小端 × 补偿，与定长互斥）+ `tail` 尾部定界（解析前剥离，不计长度与校验）；UI 表单、`.nexus.json` 持久化、信封契约夹具同步。Rust 单测 20/20、JSONL E2E 5/5、debug 布局 0 违规。详见 [custom-frame-golden-vectors.md](./custom-frame-golden-vectors.md) V15–V22。 |
 
 ---
 

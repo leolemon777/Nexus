@@ -535,13 +535,23 @@
                   <label class="form-label" for="fd-mode">模式</label><select id="fd-mode" class="input" style="width:118px"><option value="binary" selected>定长二进制</option><option value="ascii-delimited">分隔 ASCII</option></select>
                   <span id="fd-binary-opts">
                     <label class="form-label" for="fd-head" title="只解析以该帧头开头的收包；不填则对每个收包生效">帧头HEX</label><input id="fd-head" class="input" style="width:112px" placeholder="01 03（可空）" />
-                    <label class="form-label" for="fd-length" title="整帧总字节数，含校验字节">定长</label><input id="fd-length" class="input" style="width:52px" type="number" min="1" max="65535" placeholder="9" />
+                    <label class="form-label" for="fd-len-src" title="定长=整帧字节数固定；动态=帧内某字节就是长度">长度方式</label><select id="fd-len-src" class="input" style="width:74px"><option value="fixed" selected>定长</option><option value="field">动态</option></select>
+                    <label class="form-label" id="fd-length-label" for="fd-length" title="整帧总字节数，含校验、不含尾部定界">定长</label><input id="fd-length" class="input" style="width:52px" type="number" min="1" max="65535" placeholder="9" />
                     <label class="form-label" for="fd-checksum" title="校验不通过会显式报错，不会静默">校验</label><select id="fd-checksum" class="input" style="width:128px"><option value="none" selected>无</option><option value="sum8">sum8</option><option value="xor8">xor8</option><option value="crc16-modbus">crc16-modbus</option></select>
                   </span>
                   <span id="fd-ascii-opts" style="display:none">
                     <label class="form-label" for="fd-line-ending">行结束</label><select id="fd-line-ending" class="input" style="width:92px"><option value="lf" selected>LF (\n)</option><option value="crlf">CRLF (\r\n)</option></select>
                     <label class="form-label" for="fd-separator">分隔符</label><select id="fd-separator" class="input" style="width:92px"><option value="," selected>, 逗号</option><option value=" ">空格</option><option value=";">; 分号</option><option value="tab">Tab</option></select>
                   </span>
+                </div>
+                <div class="form-row" id="fd-binary-row2" style="display:none;margin-top:8px">
+                  <span id="fd-lf-opts" style="display:none">
+                    <label class="form-label" for="fd-lf-offset" title="长度字段所在字节，帧首字节为 0">长度偏移</label><input id="fd-lf-offset" class="input" style="width:56px" type="number" min="0" max="65535" placeholder="2" />
+                    <label class="form-label" for="fd-lf-type" title="长度字段按几位读">长度类型</label><select id="fd-lf-type" class="input" style="width:62px"><option value="u8" selected>u8</option><option value="u16">u16</option></select>
+                    <label class="form-label" for="fd-lf-order" title="u16 时长度字段的高低位顺序">长度字节序</label><select id="fd-lf-order" class="input" style="width:66px"><option value="be" selected>BE</option><option value="le">LE</option></select>
+                    <label class="form-label" for="fd-lf-adjust" title="帧总长 = 长度字段原始值 + 补偿。例：长度字节值只计数据区时，补偿=帧头+长度字段本身占的字节数">补偿</label><input id="fd-lf-adjust" class="input" style="width:56px" type="number" step="1" placeholder="0" />
+                  </span>
+                  <label class="form-label" for="fd-tail" title="帧必须以这些字节结尾；解析前先剥离，不计入长度与校验">尾部HEX</label><input id="fd-tail" class="input" style="width:104px" placeholder="0D 0A（可空）" />
                 </div>
                 <div class="data-grid" style="margin-top:8px"><table><thead><tr><th style="width:110px">字段名</th><th style="width:60px" title="binary 模式：数据起始字节，帧首字节为 0">偏移</th><th style="width:60px" title="ascii 模式：分隔后第几段，从 0 起">序号</th><th style="width:70px">类型</th><th style="width:76px">字节序</th><th style="width:64px">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th></tr></thead><tbody id="fd-fields-rows"><tr class="empty-row"><td colspan="8" class="console-empty">点「+ 字段」添加要提取的数值</td></tr></tbody></table></div>
                 <div class="form-row" style="margin-top:8px">

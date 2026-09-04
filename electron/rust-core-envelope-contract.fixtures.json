@@ -594,10 +594,16 @@
    "name": "RS485 温度模块",
    "mode": "binary",
    "head": "01 03",
-   "length": 9,
+   "lengthField": {
+    "offset": 2,
+    "fieldType": "u8",
+    "byteOrder": "be",
+    "adjust": 6
+   },
    "checksum": {
     "type": "crc16-modbus"
    },
+   "tail": "0D 0A",
    "fields": [
     {
      "name": "temp1",
@@ -612,13 +618,15 @@
   "bytes": [
    1,
    3,
-   2,
+   3,
    1,
    244,
    1,
    144,
    0,
-   0
+   0,
+   13,
+   10
   ]
  },
  "custom_frame_validate": {

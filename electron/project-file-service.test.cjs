@@ -470,12 +470,27 @@ test("migrates v1 projects to v2 with empty frameDefinitions and sanitizes defin
           lineEnding: "\r",
           fields: [{ name: "w", index: 1, fieldType: "f64", scale: "abc" }],
         },
+        {
+          name: "动态长度模块",
+          mode: "binary",
+          head: "AA",
+          lengthField: { offset: 1, fieldType: "u16", byteOrder: "le", adjust: -3 },
+          tail: "0D 0A",
+          fields: [{ name: "value", offset: 4, fieldType: "u16", byteOrder: "be", scale: 0.1 }],
+        },
+        {
+          name: "坏长度字段",
+          mode: "binary",
+          lengthField: { offset: -5, fieldType: "u32", byteOrder: "weird", adjust: "abc" },
+          tail: "ZZ",
+          fields: [{ name: "x", offset: 3 }],
+        },
       ],
     },
   });
   const normalized = normalizeProjectDocument(dirty);
   const defs = normalized.workspace.frameDefinitions;
-  assert.equal(defs.length, 3);
+  assert.equal(defs.length, 5);
   // 1) 合法 binary 定义原样保留
   assert.equal(defs[0].name, "RS485 温度模块");
   assert.equal(defs[0].checksum.type, "crc16-modbus");
@@ -491,6 +506,19 @@ test("migrates v1 projects to v2 with empty frameDefinitions and sanitizes defin
   assert.equal(defs[2].separator, ",");
   assert.equal(defs[2].lineEnding, "\n");
   assert.equal(defs[2].fields[0].scale, 1);
+  // 5) 动态长度 + 尾部定界原样保留
+  assert.equal(defs[3].lengthField.offset, 1);
+  assert.equal(defs[3].lengthField.fieldType, "u16");
+  assert.equal(defs[3].lengthField.byteOrder, "le");
+  assert.equal(defs[3].lengthField.adjust, -3);
+  assert.equal(defs[3].tail, "0D 0A");
+  // 6) 非法长度字段回退默认,坏 tail hex 原样交给 Rust validate 显式报错(不静默清空)
+  const bad = defs[4];
+  assert.equal(bad.lengthField.offset, 0);
+  assert.equal(bad.lengthField.fieldType, "u8");
+  assert.equal(bad.lengthField.byteOrder, "be");
+  assert.equal(bad.lengthField.adjust, 0);
+  assert.equal(bad.tail, "ZZ");
 });
 
 test("rejects excessive workspace collections and deeply nested project input", () => {

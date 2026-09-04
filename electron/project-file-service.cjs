@@ -536,6 +536,7 @@ const MAX_FRAME_DEFINITIONS = 50;
 const MAX_FRAME_FIELDS = 64;
 const ALLOWED_FRAME_MODES = new Set(["binary", "ascii-delimited"]);
 const ALLOWED_FRAME_TYPES = new Set(["u8", "u16", "i16", "u32", "i32", "f32"]);
+const ALLOWED_FRAME_LENGTH_TYPES = new Set(["u8", "u16"]);
 const ALLOWED_FRAME_BYTE_ORDERS = new Set(["be", "le"]);
 const ALLOWED_FRAME_CHECKSUMS = new Set(["none", "sum8", "xor8", "crc16-modbus"]);
 const ALLOWED_FRAME_LINE_ENDINGS = new Set(["\n", "\r\n"]);
@@ -575,13 +576,26 @@ function normalizeFrameDefinitions(list) {
     const checksumType = raw.checksum && ALLOWED_FRAME_CHECKSUMS.has(raw.checksum.type)
       ? raw.checksum.type
       : null;
+    const rawLengthField = raw.lengthField && typeof raw.lengthField === "object" && !Array.isArray(raw.lengthField)
+      ? raw.lengthField
+      : null;
+    const lengthField = rawLengthField
+      ? {
+        offset: boundedInteger(rawLengthField.offset, 0, 0, 65_535),
+        fieldType: ALLOWED_FRAME_LENGTH_TYPES.has(rawLengthField.fieldType) ? rawLengthField.fieldType : "u8",
+        byteOrder: ALLOWED_FRAME_BYTE_ORDERS.has(rawLengthField.byteOrder) ? rawLengthField.byteOrder : "be",
+        adjust: boundedInteger(rawLengthField.adjust, 0, -65_535, 65_535),
+      }
+      : null;
     seenNames.add(name);
     result.push({
       name,
       mode,
       head: mode === "binary" ? boundedString(raw.head, "", 130).trim() : "",
       length: mode === "binary" ? boundedInteger(raw.length, null, 1, 65_535) : null,
+      lengthField: mode === "binary" ? lengthField : null,
       checksum: checksumType ? { type: checksumType } : null,
+      tail: mode === "binary" ? boundedString(raw.tail, "", 130).trim() : "",
       lineEnding: ALLOWED_FRAME_LINE_ENDINGS.has(raw.lineEnding) ? raw.lineEnding : "\n",
       separator: boundedString(raw.separator, ",", 8) || ",",
       fields,

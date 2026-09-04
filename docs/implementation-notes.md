@@ -21,6 +21,15 @@
 - R3 构建证据已接入：`scripts/build-evidence.cjs` 按安全 JSON 计划顺序执行命令，记录脱敏 stdout/stderr、退出码、耗时、日志大小和 SHA-256，并自动复核。当前 `evidence/build/candidate/` 为 dirty-source candidate，5/5 通过；见 `docs/build-evidence-runbook.md`。
 - 下方历史批次中的测试数字是当时快照；若与最新基线冲突，以本节和当前命令输出为准。
 
+## 功能批次：自定义帧解析 v2 —— 动态长度 + 尾部定界（2026-09-04）
+
+- 规格：`docs/spec-plan-serial-plot-parse-replay.md` B.7 前两项。目标设备形态：长度字节自述帧长的非标模块（常见温湿度/称重）与带 `CR/LF` 类尾界定界的帧。
+- Rust `FrameDefinition` 新增可选 `lengthField {offset,fieldType u8/u16,byteOrder,adjust}` 与 `tail`（HEX）。帧总长 = 长度字段原始值 + adjust，**不含尾部定界**；`tail` 在长度/校验/字段解析前剥离。`lengthField` 与定长 `length` 互斥；数据字段、长度字段、帧头三者字节不许重叠。空 `tail` 字符串 = 不使用（与 `head` 约定一致，保证 v1 定义与 `.nexus.json` v2 归一化输出零行为变化）。
+- 新错误码 `TAIL_MISMATCH`；`LENGTH_MISMATCH`/`FRAME_TOO_SHORT`/`FIELD_OUT_OF_RANGE` 语义扩展到动态长度路径（含读不出长度字段、折算非正/超 65535、字段与长度字段重叠），全部显式返回。
+- UI：帧解析卡「长度方式」下拉（定长/动态）联动显示长度字段参数（偏移/类型/字节序/补偿），新增「尾部HEX」输入；表单收集/回填/项目保存恢复均携带嵌套对象深拷贝。信封契约夹具改为动态长度 + tail 载荷，真实 rust-core 回放覆盖 serde 新字段。
+- 验证（2026-09-04）：Rust `frame_definition` 单测 20/20（+5）、`custom_frame_jsonl_e2e` 5/5（+1）、`project-file-service` 22/22、`cargo fmt --check`、Vite build、`audit-ui-layout` debug 视图 0 违规（master 3/interfaces 1 为存量）、Electron 冒烟双 OK；黄金向量见 `docs/custom-frame-golden-vectors.md` V15–V22。
+- L2 边界：动态长度/尾部定界的真机适配仍依赖实际设备在场，软件向量不等于设备级验收。
+
 ## 功能批次：串口可视化批次 1 —— 调试页实时曲线面板（2026-08-31）
 
 - 规格：`docs/spec-plan-serial-plot-parse-replay.md` 批次 1。Serial Studio 仅功能对标，零代码/零格式借鉴（GPL-3.0 隔离）。

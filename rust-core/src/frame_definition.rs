@@ -69,6 +69,25 @@ fn default_checksum() -> String {
     "none".to_string()
 }
 
+/// binary 模式动态长度字段(B.7):raw(offset 处读出) + adjust = 帧总长(不含尾部定界)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LengthFieldDef {
+    /// 长度字段起始字节(帧首字节为 0)
+    pub offset: u16,
+    #[serde(rename = "fieldType", default = "default_length_field_type")]
+    pub field_type_tag: String,
+    #[serde(default = "default_byte_order")]
+    pub byte_order: String,
+    /// 长度补偿:设备计数口径常不含帧头/长度字段本身,用 adjust 折算
+    #[serde(default)]
+    pub adjust: i32,
+}
+
+fn default_length_field_type() -> String {
+    "u8".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FrameDefinition {
@@ -83,8 +102,14 @@ pub struct FrameDefinition {
     /// binary: 定长(帧总字节数,含校验)
     #[serde(default)]
     pub length: Option<u16>,
+    /// binary: 动态长度字段(与 length 互斥)
+    #[serde(default)]
+    pub length_field: Option<LengthFieldDef>,
     #[serde(default)]
     pub checksum: Option<ChecksumDef>,
+    /// binary: 可选尾部定界 hex("0D 0A");存在时帧必须以它结尾,且不计入长度/校验
+    #[serde(default)]
+    pub tail: Option<String>,
     /// ascii-delimited: 行结束符,默认 "\n"
     #[serde(default = "default_line_ending")]
     pub line_ending: String,
@@ -171,6 +196,36 @@ pub fn validate_definition(def: &FrameDefinition) -> Vec<String> {
                     issues.push(format!("帧头 HEX 不合法: {e}"));
                 }
             }
+            if let Some(tail) = &def.tail {
+                match parse_hex_string(tail) {
+                    Err(e) => issues.push(format!("尾部定界 HEX 不合法: {e}")),
+                    // 空字符串 = 不使用(与帧头 head 的既有约定一致)
+                    Ok(_) => {}
+                    Ok(_) => {}
+                }
+            }
+            let length_field_range = def.length_field.as_ref().map(|lf| {
+                let size = if lf.field_type_tag == "u16" { 2 } else { 1 };
+                (lf.offset as usize, lf.offset as usize + size)
+            });
+            if def.length.is_some() && def.length_field.is_some() {
+                issues.push("定长与长度字段不能同时使用".to_string());
+            }
+            if let Some(lf) = &def.length_field {
+                if !matches!(lf.field_type_tag.as_str(), "u8" | "u16") {
+                    issues.push(format!("长度字段类型非法: {}", lf.field_type_tag));
+                }
+                if !matches!(lf.byte_order.as_str(), "be" | "le") {
+                    issues.push(format!("长度字段字节序非法: {}", lf.byte_order));
+                }
+                if let Some(head) = &def.head {
+                    if let Ok(head_bytes) = parse_hex_string(head) {
+                        if (lf.offset as usize) < head_bytes.len() {
+                            issues.push("长度字段与帧头重叠".to_string());
+                        }
+                    }
+                }
+            }
             if let Some(len) = def.length {
                 if len == 0 {
                     issues.push("定长必须大于 0".to_string());
@@ -200,6 +255,18 @@ pub fn validate_definition(def: &FrameDefinition) -> Vec<String> {
                 for field in &def.fields {
                     if field.offset.is_none() {
                         issues.push(format!("binary 模式字段 {} 缺少字节偏移", field.name));
+                    }
+                }
+            }
+            if let Some((lf_start, lf_end)) = length_field_range {
+                for field in &def.fields {
+                    let Some(offset) = field.offset else { continue };
+                    let Some(size) = field_size(&field.field_type_tag) else {
+                        continue;
+                    };
+                    let (f_start, f_end) = (offset as usize, offset as usize + size);
+                    if f_start < lf_end && lf_start < f_end {
+                        issues.push(format!("字段 {} 与长度字段重叠", field.name));
                     }
                 }
             }
@@ -391,22 +458,73 @@ fn parse_binary(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>,
             }
         }
     }
-    if let Some(len) = def.length {
-        if bytes.len() != len as usize {
+
+    // 尾部定界:帧必须以 tail 结尾;后续长度/校验/字段都以剥离 tail 后的帧为准
+    let frame: &[u8] = if let Some(tail_hex) = &def.tail {
+        let tail = parse_hex_string(tail_hex).map_err(|e| {
+            FrameDefError::new("FRAME_DEF_INVALID", format!("尾部定界 HEX 不合法: {e}"))
+        })?;
+        let matches = bytes.len() >= tail.len()
+            && !tail.is_empty()
+            && bytes[bytes.len() - tail.len()..] == tail[..];
+        if !tail.is_empty() && !matches {
             return Err(FrameDefError::new(
-                "LENGTH_MISMATCH",
-                format!("定长 {} 实际 {} 字节", len, bytes.len()),
+                "TAIL_MISMATCH",
+                format!(
+                    "尾部定界不匹配:期望 {} 实际 {}",
+                    tail.iter()
+                        .map(|b| format!("{b:02X}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    bytes
+                        .iter()
+                        .rev()
+                        .take(tail.len())
+                        .map(|b| format!("{b:02X}"))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
             ));
         }
+        &bytes[..bytes.len() - tail.len()]
+    } else {
+        bytes
+    };
+
+    // 长度:定长或长度字段动态计算(二者互斥由 validate/parse 双重把关)
+    let expected_len: usize = if let Some(len) = def.length {
+        len as usize
+    } else if let Some(lf) = &def.length_field {
+        let raw = read_length_value(frame, lf)?;
+        let total = raw as i64 + lf.adjust as i64;
+        if !(1..=u16::MAX as i64).contains(&total) {
+            return Err(FrameDefError::new(
+                "LENGTH_MISMATCH",
+                format!("长度字段折算非法: {raw}{} = {total}", lf.adjust),
+            ));
+        }
+        total as usize
+    } else {
+        frame.len()
+    };
+    if frame.len() != expected_len {
+        return Err(FrameDefError::new(
+            "LENGTH_MISMATCH",
+            format!("期望 {expected_len} 实际 {} 字节", frame.len()),
+        ));
     }
+
     let checksum_kind = def
         .checksum
         .as_ref()
         .map(|c| c.checksum_type.as_str())
         .unwrap_or("none");
-    verify_checksum(bytes, checksum_kind)?;
+    verify_checksum(frame, checksum_kind)?;
     let tail = checksum_tail_len(checksum_kind);
-    let data_end = bytes.len().saturating_sub(tail);
+    let data_end = frame.len().saturating_sub(tail);
     let mut result = Vec::with_capacity(def.fields.len());
     for field in &def.fields {
         let Some(offset) = field.offset else {
@@ -427,9 +545,20 @@ fn parse_binary(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>,
                 format!("字段 {}({}B@{}) 超出数据区", field.name, size, offset),
             ));
         }
+        if let Some(lf) = &def.length_field {
+            let lf_size = if lf.field_type_tag == "u16" { 2 } else { 1 };
+            let (lf_start, lf_end) = (lf.offset as usize, lf.offset as usize + lf_size);
+            let (f_start, f_end) = (offset as usize, offset as usize + size);
+            if f_start < lf_end && lf_start < f_end {
+                return Err(FrameDefError::new(
+                    "FIELD_OUT_OF_RANGE",
+                    format!("字段 {} 与长度字段重叠", field.name),
+                ));
+            }
+        }
         let little_endian = field.byte_order.eq_ignore_ascii_case("le");
         let Some(raw) =
-            read_binary_value(bytes, offset as usize, &field.field_type_tag, little_endian)
+            read_binary_value(frame, offset as usize, &field.field_type_tag, little_endian)
         else {
             return Err(FrameDefError::new(
                 "FIELD_OUT_OF_RANGE",
@@ -443,6 +572,38 @@ fn parse_binary(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>,
         });
     }
     Ok(result)
+}
+
+/// 从帧中读出长度字段的原始值(u8/u16,支持大小端)。
+fn read_length_value(frame: &[u8], lf: &LengthFieldDef) -> Result<u32, FrameDefError> {
+    let size = match lf.field_type_tag.as_str() {
+        "u8" => 1,
+        "u16" => 2,
+        other => {
+            return Err(FrameDefError::new(
+                "FRAME_DEF_INVALID",
+                format!("长度字段类型非法: {other}"),
+            ));
+        }
+    };
+    if lf.offset as usize + size > frame.len() {
+        return Err(FrameDefError::new(
+            "FRAME_TOO_SHORT",
+            format!("帧太短,无法读取长度字段({}B@{})", size, lf.offset),
+        ));
+    }
+    let little_endian = lf.byte_order.eq_ignore_ascii_case("le");
+    let value = match (lf.field_type_tag.as_str(), little_endian) {
+        ("u8", _) => frame[lf.offset as usize] as u32,
+        ("u16", false) => {
+            (frame[lf.offset as usize] as u32) << 8 | frame[lf.offset as usize + 1] as u32
+        }
+        ("u16", true) => {
+            (frame[lf.offset as usize] as u32) | (frame[lf.offset as usize + 1] as u32) << 8
+        }
+        _ => unreachable!(),
+    };
+    Ok(value)
 }
 
 fn parse_ascii(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>, FrameDefError> {
@@ -523,7 +684,9 @@ mod tests {
             mode: "binary".to_string(),
             head: None,
             length: None,
+            length_field: None,
             checksum: None,
+            tail: None,
             line_ending: "\n".to_string(),
             separator: ",".to_string(),
             fields,
@@ -612,6 +775,134 @@ mod tests {
         bytes[4] ^= 0xFF;
         let err = parse_custom_frame(&bytes, &def).unwrap_err();
         assert_eq!(err.code, "CHECKSUM_MISMATCH");
+    }
+
+    #[test]
+    fn binary_dynamic_length_u8_with_adjust() {
+        // 帧型: AA | len(u8)=raw | data... ; raw=3, adjust=2 → 总长 5
+        let mut def = temp_def(vec![field("a", 2, "u8"), field("b", 3, "u8")]);
+        def.head = Some("AA".to_string());
+        def.length_field = Some(LengthFieldDef {
+            offset: 1,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            adjust: 2,
+        });
+        let frame = [0xAA, 0x03, 0x2A, 0x64, 0x00];
+        let parsed = parse_custom_frame(&frame, &def).unwrap();
+        assert_eq!(parsed[0].value, 42.0);
+        assert_eq!(parsed[1].value, 100.0);
+        // raw 与帧不符 → LENGTH_MISMATCH(期望 3+2=5,实际 4 字节)
+        let err = parse_custom_frame(&[0xAA, 0x03, 0x2A, 0x64], &def).unwrap_err();
+        assert_eq!(err.code, "LENGTH_MISMATCH");
+        // 帧短到读不出长度字段 → FRAME_TOO_SHORT
+        let err = parse_custom_frame(&[0xAA], &def).unwrap_err();
+        assert_eq!(err.code, "FRAME_TOO_SHORT");
+    }
+
+    #[test]
+    fn binary_dynamic_length_u16_little_endian() {
+        // raw=0x0100(LE 读出 256),adjust=-253 → 总长 3;数据区只有字节 2
+        let mut def = temp_def(vec![field("a", 2, "u8")]);
+        def.length_field = Some(LengthFieldDef {
+            offset: 0,
+            field_type_tag: "u16".to_string(),
+            byte_order: "le".to_string(),
+            adjust: -253,
+        });
+        let frame = [0x00, 0x01, 0x7B];
+        let parsed = parse_custom_frame(&frame, &def).unwrap();
+        assert_eq!(parsed[0].value, 123.0);
+        // 折算出非正总长 → LENGTH_MISMATCH
+        let mut bad = def.clone();
+        bad.length_field.as_mut().unwrap().adjust = -257;
+        let err = parse_custom_frame(&frame, &bad).unwrap_err();
+        assert_eq!(err.code, "LENGTH_MISMATCH");
+    }
+
+    #[test]
+    fn binary_tail_delimiter_and_crc_interaction() {
+        // 帧: 01 02 03 | sum8=06 | 尾部 0D 0A
+        // sum8 只覆盖剥离 tail 后的 01 02 03 06;tail 不参与校验也不算长度
+        let mut def = temp_def(vec![field("a", 0, "u8"), field("b", 1, "u8")]);
+        def.checksum = Some(ChecksumDef {
+            checksum_type: "sum8".to_string(),
+        });
+        def.tail = Some("0D 0A".to_string());
+        let frame = [0x01, 0x02, 0x03, 0x06, 0x0D, 0x0A];
+        let parsed = parse_custom_frame(&frame, &def).unwrap();
+        assert_eq!(parsed[0].value, 1.0);
+        assert_eq!(parsed[1].value, 2.0);
+        // 尾部不匹配 → TAIL_MISMATCH
+        let err = parse_custom_frame(&[0x01, 0x02, 0x03, 0x06, 0x0D, 0x0B], &def).unwrap_err();
+        assert_eq!(err.code, "TAIL_MISMATCH");
+        // tail + 动态长度:raw=3+adjust1=4 → 帧体 4 字节,再接 tail
+        let mut dyn_def = temp_def(vec![field("a", 3, "u8")]);
+        dyn_def.length_field = Some(LengthFieldDef {
+            offset: 0,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            adjust: 1,
+        });
+        dyn_def.tail = Some("0D 0A".to_string());
+        let frame = [0x03, 0x01, 0x02, 0x2A, 0x0D, 0x0A];
+        let parsed = parse_custom_frame(&frame, &dyn_def).unwrap();
+        assert_eq!(parsed[0].value, 42.0);
+    }
+
+    #[test]
+    fn validate_length_field_conflicts_and_overlaps() {
+        // 定长 + 长度字段同时存在
+        let mut def = temp_def(vec![field("a", 3, "u8")]);
+        def.length = Some(5);
+        def.length_field = Some(LengthFieldDef {
+            offset: 1,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            adjust: 0,
+        });
+        let issues = validate_definition(&def);
+        assert!(issues.iter().any(|i| i.contains("不能同时使用")));
+        // 字段与长度字段重叠(字段@1 u16 覆盖长度字段@1 u8)
+        let mut def = temp_def(vec![field("a", 1, "u16")]);
+        def.length_field = Some(LengthFieldDef {
+            offset: 1,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            adjust: 0,
+        });
+        let issues = validate_definition(&def);
+        assert!(issues.iter().any(|i| i.contains("与长度字段重叠")));
+        // 长度字段撞帧头 + 类型/字节序非法 + 坏 tail hex
+        let mut def = temp_def(vec![field("a", 4, "u8")]);
+        def.head = Some("AA BB".to_string());
+        def.tail = Some("ZZ".to_string());
+        def.length_field = Some(LengthFieldDef {
+            offset: 1,
+            field_type_tag: "u32".to_string(),
+            byte_order: "xx".to_string(),
+            adjust: 0,
+        });
+        let issues = validate_definition(&def);
+        assert!(issues.iter().any(|i| i.contains("长度字段与帧头重叠")));
+        assert!(issues.iter().any(|i| i.contains("长度字段类型非法")));
+        assert!(issues.iter().any(|i| i.contains("长度字段字节序非法")));
+        assert!(issues.iter().any(|i| i.contains("尾部定界 HEX 不合法")));
+    }
+
+    #[test]
+    fn parse_rejects_field_overlapping_length_field() {
+        let mut def = temp_def(vec![field("a", 1, "u16")]);
+        def.length_field = Some(LengthFieldDef {
+            offset: 1,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            adjust: 1,
+        });
+        // 帧长 3(raw=2+1),字段@1 u16 与长度字段@1 重叠
+        let err = parse_custom_frame(&[0x00, 0x02, 0x2A], &def).unwrap_err();
+        assert_eq!(err.code, "FIELD_OUT_OF_RANGE");
+        assert!(err.message.contains("与长度字段重叠"));
     }
 
     #[test]
@@ -734,6 +1025,7 @@ mod tests {
             "mode": "binary",
             "head": "01 03",
             "length": 7,
+            "tail": "0D 0A",
             "checksum": { "type": "crc16-modbus" },
             "fields": [
                 { "name": "temp1", "offset": 3, "fieldType": "i16", "byteOrder": "be", "scale": 0.1, "unit": "℃" }
@@ -742,7 +1034,22 @@ mod tests {
         let def: FrameDefinition = serde_json::from_value(raw).unwrap();
         assert_eq!(def.fields[0].field_type_tag, "i16");
         assert_eq!(def.checksum.as_ref().unwrap().checksum_type, "crc16-modbus");
+        assert_eq!(def.tail.as_deref(), Some("0D 0A"));
+        assert!(def.length_field.is_none());
         assert!((def.fields[0].scale - 0.1).abs() < 1e-12);
+        // lengthField camelCase 往返
+        let raw = serde_json::json!({
+            "name": "动态长度",
+            "mode": "binary",
+            "lengthField": { "offset": 2, "fieldType": "u16", "byteOrder": "le", "adjust": -3 },
+            "fields": [{ "name": "a", "offset": 5, "fieldType": "u8" }]
+        });
+        let def: FrameDefinition = serde_json::from_value(raw).unwrap();
+        let lf = def.length_field.unwrap();
+        assert_eq!(lf.offset, 2);
+        assert_eq!(lf.field_type_tag, "u16");
+        assert_eq!(lf.byte_order, "le");
+        assert_eq!(lf.adjust, -3);
         // 未知字段拒绝
         assert!(
             serde_json::from_value::<FrameDefinition>(serde_json::json!({
