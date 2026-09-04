@@ -9,10 +9,11 @@ const SCANNED_EXTENSIONS = new Set([
   ".js", ".cjs", ".mjs", ".json", ".html", ".css", ".txt", ".md", ".ps1",
 ]);
 const SKIP_PATH_FRAGMENTS = [
-  "resources/app/node_modules/.package-lock.json",
+  "resources/app/node_modules/",
   "/LICENSE",
   "/LICENCE",
   "/NOTICE",
+  "LICENSES.chromium.html",
 ];
 const PLACEHOLDER_VALUES = new Set([
   "",

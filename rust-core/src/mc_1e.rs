@@ -249,22 +249,35 @@ pub fn parse_1e_response(bytes: &[u8], cmd: u8, points: u16) -> Result<OneERespo
     }
     match cmd {
         CMD1E_BIT_READ => {
-            let nbytes = (points as usize + 7) / 8;
-            if bytes.len() < 2 + nbytes {
+            // 位读响应存在两种语义族(真设备差异:HSL MelsecA1ENet 为每点 1 字节 00/01;
+            // mcprotocol 库/FX3U-ENET 资料为每字节 8 点打包)。按数据长度自适应:
+            // 够 points 字节 → 逐点判定;够 ceil(points/8) 字节 → 打包(bit0=首点)。
+            let points = points as usize;
+            let packed_bytes = (points + 7) / 8;
+            let need = packed_bytes.min(points.max(1));
+            if bytes.len() < 2 + need {
                 return Err(err(
                     "MC_1E_RESPONSE_TOO_SHORT",
                     format!(
-                        "位读响应 {} 字节,{} 点需 {} 字节",
+                        "位读响应 {} 字节,{} 点至少需 {} 字节(逐点 {}) / {}(打包 {})",
                         bytes.len(),
                         points,
-                        2 + nbytes
+                        2 + need,
+                        points,
+                        2 + packed_bytes,
+                        packed_bytes
                     ),
                 ));
             }
-            // bit i → 第 i/8 字节的第 i%8 位(等价于第 i/16 组 LE u16 的第 i%16 位)
-            let bits = (0..points as usize)
-                .map(|i| (bytes[2 + i / 8] >> (i % 8)) & 1 == 1)
-                .collect();
+            let data = &bytes[2..];
+            let bits = if data.len() >= points {
+                (0..points).map(|i| data[i] == 1).collect()
+            } else {
+                // bit i → 第 i/8 字节的第 i%8 位(等价于第 i/16 组 LE u16 的第 i%16 位)
+                (0..points)
+                    .map(|i| (data[i / 8] >> (i % 8)) & 1 == 1)
+                    .collect()
+            };
             Ok(OneEResponse::Bits(bits))
         }
         CMD1E_WORD_READ => {

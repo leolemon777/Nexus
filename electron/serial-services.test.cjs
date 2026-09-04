@@ -185,3 +185,107 @@ test("panasonic readData: build→transact(mewtocol)→parse(station/expectedCom
   assert.strictEqual(calls[1][1].expectedCommand, "RD");
   assert.strictEqual(tcalls[0].framing, "mewtocol");
 });
+
+// ─── FX 编程口位软元件(2026-08-25 真机缺陷 4:M5 强制 ON 却显示 M0 ON) ──
+
+test("fx progRead 位软元件:M0×6 请求按点数折算字,响应按 8 点/字节 LSB 解包(真机缺陷回归)", async () => {
+  const { request, calls } = recordingRequest({
+    fx_prog_build_read: {
+      fields: { device: "string", address: "string", words: "number" },
+      reply: (p) => {
+        // 位软元件 6 点 → 请求 1 字(2 字节,16 位,只读多读)
+        if (p.device === "M" && p.words === 1) return { frame: [2] };
+        throw new Error("位读请求字数折算错误: " + JSON.stringify(p));
+      },
+    },
+    // byte0=0x20(bit5=M5 ON) byte1=0x00 → ASCII "2000"
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "data", data: [50, 48, 48, 48], words: [0x0020] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progRead({ device: "M", address: "0", words: 6 });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.isBit, true);
+  assert.deepStrictEqual(r.values, [0, 0, 0, 0, 0, 1], "M5 应为 1(ON),其余 0 —— 用户真机场景");
+});
+
+test("fx progRead 位软元件跨字节:M0×10,byte0=0x01(M0) byte1=0x02(M9)", async () => {
+  const { request } = recordingRequest({
+    fx_prog_build_read: { fields: { device: "string", address: "string", words: "number" }, reply: { frame: [2] } },
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "data", data: [48, 49, 48, 50], words: [0x0102] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progRead({ device: "X", address: "0", words: 10 });
+  assert.deepStrictEqual(r.values, [1, 0, 0, 0, 0, 0, 0, 0, 0, 1], "X0 与 X9 应为 1");
+});
+
+test("fx progRead 字软元件不受影响:D0×1 仍走 words 语义", async () => {
+  const { request, calls } = recordingRequest({
+    fx_prog_build_read: { fields: { device: "string", address: "string", words: "number" }, reply: (p) => {
+      if (p.device === "D" && p.words === 1) return { frame: [2] };
+      throw new Error("字读请求不应折算: " + JSON.stringify(p));
+    } },
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "data", data: [51, 52, 49, 50], words: [4660] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progRead({ device: "D", address: "0", words: 1 });
+  assert.strictEqual(r.isBit, undefined);
+  assert.deepStrictEqual(r.values, [4660]);
+});
+
+// ─── FX 编程口位写打包 + 位地址(2026-08-26 HSL 对照发现的缺陷 5 回归) ──
+
+test("fx progWrite 位软元件:值按 8 点/字节 LSB 打包后写入(缺陷 5 回归)", async () => {
+  const { request, calls } = recordingRequest({
+    fx_prog_build_write: {
+      fields: { device: "string", address: "string", values: "object" },
+      reply: (p) => {
+        // M0 起 5 点 [0,0,0,0,0,1,0,0]... 用户场景:M5=1 → 打包 1 字节 0x20
+        if (p.device === "M" && JSON.stringify(p.values) === "[32]") return { frame: [2] };
+        throw new Error("位写打包错误: " + JSON.stringify(p));
+      },
+    },
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "ack", data: [], words: [] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progWrite({ device: "M", address: "5", values: [1] });
+  assert.strictEqual(r.ok, true);
+});
+
+test("fx progWrite 位软元件跨字节:16 点 → 2 字节", async () => {
+  const { request } = recordingRequest({
+    fx_prog_build_write: {
+      fields: { device: "string", address: "string", values: "object" },
+      reply: (p) => {
+        // X0=1(bit0) 与 X10(=8dec 位 8 → byte1 bit0)=1 → [0x01, 0x01]
+        if (p.device === "X" && JSON.stringify(p.values) === "[1,1]") return { frame: [2] };
+        throw new Error("跨字节打包错误: " + JSON.stringify(p));
+      },
+    },
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "ack", data: [], words: [] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progWrite({ device: "X", address: "0", values: [1, 0, 0, 0, 0, 0, 0, 0, 1] });
+  assert.strictEqual(r.ok, true);
+});
+
+test("fx progWrite 字软元件不受影响:D0 写字值原样传递", async () => {
+  const { request } = recordingRequest({
+    fx_prog_build_write: {
+      fields: { device: "string", address: "string", values: "object" },
+      reply: (p) => {
+        if (p.device === "D" && JSON.stringify(p.values) === "[4660]") return { frame: [2] };
+        throw new Error("字写不应打包: " + JSON.stringify(p));
+      },
+    },
+    fx_prog_parse: { fields: { frame: "object" }, reply: { status: "ack", data: [], words: [] } },
+  });
+  const { transact } = makeTransact([{ rx: [6] }]);
+  const svc = createFxSerialService({ request, transact });
+  const r = await svc.progWrite({ device: "D", address: "0", values: [4660] });
+  assert.strictEqual(r.ok, true);
+});

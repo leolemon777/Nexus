@@ -75,19 +75,57 @@ pub fn fx_prog_checksum(bytes: &[u8]) -> u8 {
     bytes.iter().fold(0u8, |acc, byte| acc.wrapping_add(*byte))
 }
 
-/// 读/写命令(CMD 0/1)组基地址表(§3.3.4 表一)。
-fn rw_base(device: &str) -> Option<u16> {
+/// 读/写命令(CMD 0/1)软元件编址:
+/// - 位软元件(X/Y/M/S/T/C 触点):基址 + 编号/8(每地址单元 1 字节 = 8 点;对照 HSL
+///   MelsecFxSerialHelper.CalculateBoolStartAddress:旧协议 X=80H+号/8,Y=A0H+号/8,
+///   M<8000=100H+号/8,M≥8000=1E0H+(号-8000)/8,S=号/8,T=C0H+号/8,C<200=1C0H+号/8,
+///   C≥200=3C0H+(号-200)/8)
+/// - 字软元件(TN/CN/CN32/D):基址 + 编号×2(每字 2 字节)。
+pub fn fx_prog_rw_address(device: &str, number: u32) -> Result<u16, CoreError> {
+    let device = device.to_ascii_uppercase();
+    let address: u32 = match device.as_str() {
+        // 位软元件:编号/8
+        "X" => 0x0080 + number / 8,
+        "Y" => 0x00A0 + number / 8,
+        "M" if number >= 8000 => 0x01E0 + (number - 8000) / 8,
+        "M" => 0x0100 + number / 8,
+        "S" => number / 8,
+        "T" => 0x00C0 + number / 8,
+        "C" if number >= 200 => 0x03C0 + (number - 200) / 8,
+        "C" => 0x01C0 + number / 8,
+        // 字软元件:编号×2
+        "D" if number >= 8000 => 0x0E00 + (number - 8000) * 2,
+        "CN32" if number < 200 => {
+            return Err(err(
+                "FX_PROG_NUMBER_INVALID",
+                "CN32 的编号从 C200 起(0~199 请用 CN)".into(),
+            ));
+        }
+        "CN32" => 0x0C00 + (number - 200) * 4,
+        other => {
+            let base = rw_word_base(other).ok_or_else(|| {
+                err(
+                    "FX_PROG_DEVICE_UNKNOWN",
+                    format!("未知软元件「{other}」(支持 X/Y/M/S/T/C/TN/CN/CN32/D)"),
+                )
+            })? as u32;
+            base + number * 2
+        }
+    };
+    u16::try_from(address).map_err(|_| {
+        err(
+            "FX_PROG_ADDR_OVERFLOW",
+            format!("软元件「{device}」编号 {number} 的地址 {address:#06X} 超出 4 位 hex 表示范围"),
+        )
+    })
+}
+
+/// 字软元件(TN/CN/D)基址表(编号×2 语义)。
+fn rw_word_base(device: &str) -> Option<u16> {
     match device {
-        "X" => Some(0x0080),    // X → 80H(X17(=15dec) → 9EH)
-        "Y" => Some(0x00A0),    // Y → A0H
-        "M" => Some(0x0100),    // M → 100H(M100 → 1C8H)
-        "S" => Some(0x0000),    // S → 0H
-        "T" => Some(0x00C0),    // T 触点 → C0H
-        "C" => Some(0x01C0),    // C 触点 → 1C0H
-        "TN" => Some(0x0800),   // T 当前值 → 800H
-        "CN" => Some(0x0A00),   // C 当前值(16 位) → A00H
-        "CN32" => Some(0x0C00), // C 当前值(32 位,C200 起) → C00H
-        "D" => Some(0x1000),    // D → 1000H(D123 → 10F6H)
+        "TN" => Some(0x0800), // T 当前值 → 800H
+        "CN" => Some(0x0A00), // C 当前值(16 位) → A00H
+        "D" => Some(0x1000),  // D → 1000H(D123 → 10F6H)
         _ => None,
     }
 }
@@ -103,39 +141,6 @@ fn force_base(device: &str) -> Option<u16> {
         "C" => Some(0x0400), // [实机验证]
         _ => None,
     }
-}
-
-/// 读/写命令地址 = 组基地址 + 编号×2(§3.3.4 表一)。
-///
-/// `number` 为十进制编号(X/Y 的八进制书写请先用 [fx_prog_parse_number] 转换)。
-/// D≥8000 走特殊 D 区,CN32 从 C200 起(步长 4,32 位)。
-pub fn fx_prog_rw_address(device: &str, number: u32) -> Result<u16, CoreError> {
-    let device = device.to_ascii_uppercase();
-    let address = match device.as_str() {
-        "D" if number >= 8000 => 0x0E00 + (number - 8000) * 2,
-        "CN32" if number < 200 => {
-            return Err(err(
-                "FX_PROG_NUMBER_INVALID",
-                "CN32 的编号从 C200 起(0~199 请用 CN)".into(),
-            ));
-        }
-        "CN32" => 0x0C00 + (number - 200) * 4,
-        other => {
-            let base = rw_base(other).ok_or_else(|| {
-                err(
-                    "FX_PROG_DEVICE_UNKNOWN",
-                    format!("未知软元件「{other}」(支持 X/Y/M/S/T/C/TN/CN/CN32/D)"),
-                )
-            })? as u32;
-            base + number * 2
-        }
-    };
-    u16::try_from(address).map_err(|_| {
-        err(
-            "FX_PROG_ADDR_OVERFLOW",
-            format!("软元件「{device}」编号 {number} 的地址 {address:#06X} 超出 4 位 hex 表示范围"),
-        )
-    })
 }
 
 /// 强制 ON/OFF 地址 = 编号÷8(整数)+ 强制基址(§3.3.4 表二)。
@@ -503,24 +508,43 @@ mod tests {
         );
     }
 
-    /// §3.3.4 表一(读/写基地址 + 编号×2)逐项核对
+    /// 读/写地址表逐项核对(位软元件=基址+编号/8,字软元件=基址+编号×2;
+    /// 位语义依据 HSL MelsecFxSerialHelper.CalculateBoolStartAddress 旧协议表)
     #[test]
     fn rw_address_table_matches_doc() {
+        // 位软元件:/8
         assert_eq!(fx_prog_rw_address("X", 0).unwrap(), 0x0080); // X0 → 80H
-        assert_eq!(fx_prog_rw_address("X", 15).unwrap(), 0x009E); // X17(=15dec) → 9EH
+        assert_eq!(fx_prog_rw_address("X", 7).unwrap(), 0x0080); // X0~X7 同字节
+        assert_eq!(fx_prog_rw_address("X", 8).unwrap(), 0x0081); // X10(=8dec) → 81H
+        assert_eq!(fx_prog_rw_address("X", 15).unwrap(), 0x0081); // X17(=15dec) → 81H
+        assert_eq!(fx_prog_rw_address("X", 16).unwrap(), 0x0082); // X20 → 82H
         assert_eq!(fx_prog_rw_address("Y", 0).unwrap(), 0x00A0);
+        assert_eq!(fx_prog_rw_address("Y", 8).unwrap(), 0x00A1); // Y10 → A1H
         assert_eq!(fx_prog_rw_address("M", 0).unwrap(), 0x0100);
-        assert_eq!(fx_prog_rw_address("M", 100).unwrap(), 0x01C8); // M100 → 1C8H
+        assert_eq!(fx_prog_rw_address("M", 7).unwrap(), 0x0100);
+        assert_eq!(fx_prog_rw_address("M", 8).unwrap(), 0x0101); // M8 → 101H
+        assert_eq!(fx_prog_rw_address("M", 100).unwrap(), 0x010C); // M100 → 10CH(100/8=12)
+        assert_eq!(fx_prog_rw_address("M", 7999).unwrap(), 0x04E7); // 0x100+7999/8(=999)
+        assert_eq!(fx_prog_rw_address("M", 8000).unwrap(), 0x01E0); // 特殊 M 区
+        assert_eq!(fx_prog_rw_address("M", 8008).unwrap(), 0x01E1);
         assert_eq!(fx_prog_rw_address("S", 0).unwrap(), 0x0000);
+        assert_eq!(fx_prog_rw_address("S", 40).unwrap(), 0x0005); // 40/8=5
         assert_eq!(fx_prog_rw_address("T", 0).unwrap(), 0x00C0);
+        assert_eq!(fx_prog_rw_address("T", 16).unwrap(), 0x00C2); // 16/8=2
         assert_eq!(fx_prog_rw_address("C", 0).unwrap(), 0x01C0);
+        assert_eq!(fx_prog_rw_address("C", 199).unwrap(), 0x01D8); // 0x1C0+199/8(=24)
+        assert_eq!(fx_prog_rw_address("C", 200).unwrap(), 0x03C0); // 32 位 C 触点段
+        assert_eq!(fx_prog_rw_address("C", 208).unwrap(), 0x03C1);
+        // 字软元件:×2
         assert_eq!(fx_prog_rw_address("TN", 0).unwrap(), 0x0800); // T 当前值
+        assert_eq!(fx_prog_rw_address("TN", 123).unwrap(), 0x08F6);
         assert_eq!(fx_prog_rw_address("CN", 0).unwrap(), 0x0A00); // C 当前值 16 位
+        assert_eq!(fx_prog_rw_address("CN", 199).unwrap(), 0x0B8E);
         assert_eq!(fx_prog_rw_address("CN32", 200).unwrap(), 0x0C00); // C200(32 位)
         assert_eq!(fx_prog_rw_address("CN32", 201).unwrap(), 0x0C04); // 步长 4
         assert_eq!(fx_prog_rw_address("D", 0).unwrap(), 0x1000);
         assert_eq!(fx_prog_rw_address("D", 123).unwrap(), 0x10F6); // 文档示例
-        assert_eq!(fx_prog_rw_address("D", 8000).unwrap(), 0x0E00); // 特殊 D(见文件头勘误)
+        assert_eq!(fx_prog_rw_address("D", 8000).unwrap(), 0x0E00); // 特殊 D
         assert_eq!(fx_prog_rw_address("D", 8001).unwrap(), 0x0E02);
     }
 
@@ -543,10 +567,10 @@ mod tests {
         assert_eq!(fx_prog_parse_number("Y", "10").unwrap(), 8);
         assert_eq!(fx_prog_parse_number("D", "123").unwrap(), 123);
         assert!(fx_prog_parse_number("X", "18").is_err()); // 8 不是八进制数字
-        // X17 的读地址 = 0x80 + 15×2 = 0x9E(§3.3.4 示例)
+        // X17 的读地址 = 0x80 + 15/8 = 0x81(位软元件÷8;与 HSL 旧协议一致)
         assert_eq!(
             fx_prog_rw_address("X", fx_prog_parse_number("X", "17").unwrap()).unwrap(),
-            0x009E
+            0x0081
         );
     }
 

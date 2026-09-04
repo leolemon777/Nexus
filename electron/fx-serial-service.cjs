@@ -40,6 +40,21 @@ function parseFxProgData(dataBytes, words) {
 }
 
 /**
+ * FX 编程口位软元件数据(ASCII hex,每字节 2 字符) → 位序列。
+ * 每字节 8 点、LSB 在前;`offset` = 起始编号%8(序列第 i 点位于 (offset+i)/8 字节的 (offset+i)%8 位)。
+ */
+function parseFxProgBits(dataBytes, points, offset = 0) {
+  const ascii = Buffer.from(dataBytes ?? []).toString("ascii");
+  const out = [];
+  for (let i = 0; i < points; i++) {
+    const pos = offset + i;
+    const byte = parseInt(ascii.slice((pos >> 3) * 2, (pos >> 3) * 2 + 2), 16) || 0;
+    out.push((byte >> (pos & 7)) & 1);
+  }
+  return out;
+}
+
+/**
  * 创建 FX 串口服务。
  * @param {{ request: (cmd: string, payload: any) => Promise<any>, transact: Function }} deps
  *        request = rustCore.request(JSONL);transact = serialService.transact 绑定 fx framing 的包装
@@ -85,14 +100,27 @@ function createFxSerialService({ request, transact }) {
 
   /**
    * FX 编程口读(CMD "0")。
+   * 位软元件(X/Y/M/S):点数按位计,请求 ceil(points/16) 字(接口按字,只读多读无害),
+   * 响应每字节 8 点、LSB 在前(HSL SoftBasic.ByteToBoolArray 同序),取前 points 位。
    */
   async function progRead({ device, address, words, timeoutMs }) {
-    const frame = (await request("fx_prog_build_read", { device, address, words })).frame;
+    const isBitDevice = /^(X|Y|M|S|T|C)$/i.test(String(device ?? "").trim());
+    const points = Number(words) || 0;
+    const requestWords = isBitDevice ? Math.max(1, Math.ceil(points / 16)) : points;
+    const frame = (await request("fx_prog_build_read", { device, address, words: requestWords })).frame;
     const rx = await transact({ request: frame, timeoutMs: timeoutMs ?? 1000, framing: "fx" });
     // fx_prog_parse 的信封字段是 frame(与 fx_links_parse 的 response 不同,Rust 端 deny_unknown_fields)
     const r = await request("fx_prog_parse", { frame: rx.rx });
     if (r.status === "nak") {
       return { ok: false, errorCode: r.errorCode, errorMessage: r.errorMessage };
+    }
+    if (isBitDevice) {
+      // 起始编号按 X/Y 八进制解析(与 rust 一致);请求地址由 rust 算(基址+编号/8),
+      // 解包按 字节内偏移=编号%8 对齐
+      const radix = /^(X|Y)$/i.test(String(device).trim()) ? 8 : 10;
+      const start = Number.parseInt(String(address ?? "0").trim(), radix) || 0;
+      const bits = parseFxProgBits(r.data, points, start % 8);
+      return { ok: true, status: r.status, values: bits, isBit: true };
     }
     // 编程口字数据低字节在前("3412"→0x1234),Rust 端 decode 已按序解码,直接取 words,勿用原始 data 朴素重解析
     return { ok: true, status: r.status, values: r.status === "data" && Array.isArray(r.words) ? r.words : [] };
@@ -100,9 +128,28 @@ function createFxSerialService({ request, transact }) {
 
   /**
    * FX 编程口写(CMD "1")。
+   * 位软元件(X/Y/M/S/T/C):值按 8 点/字节 LSB 打包(与读解包对称),写入字节序列;
+   * 字软元件:每字低字节在前(rust 端处理)。
    */
   async function progWrite({ device, address, values, timeoutMs }) {
-    const frame = (await request("fx_prog_build_write", { device, address, values })).frame;
+    const isBitDevice = /^(X|Y|M|S|T|C)$/i.test(String(device ?? "").trim());
+    let payloadValues = values;
+    if (isBitDevice) {
+      // X/Y 编号为八进制书写(与 rust fx_prog_parse_number 一致);字节内偏移 = 编号%8,
+      // 点 i 落在 (编号+i)/8 字节的 (编号+i)%8 位(与读解包对称;整字节写入会覆写同字节邻位,协议如此)
+      const radix = /^(X|Y)$/i.test(String(device).trim()) ? 8 : 10;
+      const start = Number.parseInt(String(address ?? "0").trim(), radix) || 0;
+      const bytes = [];
+      for (let i = 0; i < values.length; i++) {
+        if (!values[i]) continue;
+        const pos = start + i;
+        const byteIdx = pos >> 3;
+        while (bytes.length <= byteIdx) bytes.push(0);
+        bytes[byteIdx] |= 1 << (pos & 7);
+      }
+      payloadValues = bytes;
+    }
+    const frame = (await request("fx_prog_build_write", { device, address, values: payloadValues })).frame;
     const rx = await transact({ request: frame, timeoutMs: timeoutMs ?? 1000, framing: "fx" });
     const r = await request("fx_prog_parse", { frame: rx.rx });
     if (r.status === "nak") {
@@ -127,4 +174,4 @@ function createFxSerialService({ request, transact }) {
   return { linksRead, linksWrite, progRead, progWrite, mcC24Read };
 }
 
-module.exports = { createFxSerialService, parseFxLinksData, parseFxProgData, DEFAULT_FX_SERIAL };
+module.exports = { createFxSerialService, parseFxLinksData, parseFxProgData, parseFxProgBits, DEFAULT_FX_SERIAL };
