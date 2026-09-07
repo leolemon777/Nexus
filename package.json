@@ -34,7 +34,7 @@
     "rehearse:desktop": "node scripts/rehearse-desktop.cjs all",
     "rehearse:hardware": "node scripts/rehearse-hardware.cjs check",
     "soak:r0": "node scripts/soak-r0.cjs",
-    "test:electron": "node --test electron/*.test.cjs scripts/generate-release-metadata.test.cjs scripts/release-notes.test.cjs scripts/build-evidence.test.cjs scripts/toolchain-preflight.test.cjs scripts/supply-chain-report.test.cjs scripts/license-report.test.cjs scripts/release-secret-scan.test.cjs scripts/serial-plot.test.cjs scripts/record-service.test.cjs scripts/replay-scheduler.test.cjs",
+    "test:electron": "node --test electron/*.test.cjs scripts/generate-release-metadata.test.cjs scripts/release-notes.test.cjs scripts/build-evidence.test.cjs scripts/toolchain-preflight.test.cjs scripts/supply-chain-report.test.cjs scripts/license-report.test.cjs scripts/release-secret-scan.test.cjs scripts/serial-plot.test.cjs scripts/frame-color-rules.test.cjs scripts/record-service.test.cjs scripts/replay-scheduler.test.cjs",
     "test:rust-core": "cargo test --manifest-path rust-core/Cargo.toml",
     "test:rust-jsonl": "pwsh -NoProfile -File scripts/test-rust-jsonl.ps1",
     "test:bacnet-bacstack": "node --test scripts/bacnet-bacstack-integration.test.cjs",

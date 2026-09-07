@@ -528,18 +528,64 @@ function normalizeCurrentProjectDocument(raw) {
       simulators: normalizeSimulators(raw.workspace?.simulators),
       lastHelpReference: normalizeHelpReference(raw.workspace?.lastHelpReference),
       frameDefinitions: normalizeFrameDefinitions(raw.workspace?.frameDefinitions),
+      colorRules: normalizeColorRules(raw.workspace?.colorRules),
     },
   };
 }
 
 const MAX_FRAME_DEFINITIONS = 50;
 const MAX_FRAME_FIELDS = 64;
-const ALLOWED_FRAME_MODES = new Set(["binary", "ascii-delimited"]);
+const MAX_FRAME_EXPR = 256; // 与 rust-core frame_expr::MAX_EXPR_LEN 一致
+const ALLOWED_FRAME_MODES = new Set(["binary", "ascii-delimited", "script"]);
 const ALLOWED_FRAME_TYPES = new Set(["u8", "u16", "i16", "u32", "i32", "f32"]);
 const ALLOWED_FRAME_LENGTH_TYPES = new Set(["u8", "u16"]);
 const ALLOWED_FRAME_BYTE_ORDERS = new Set(["be", "le"]);
 const ALLOWED_FRAME_CHECKSUMS = new Set(["none", "sum8", "xor8", "crc16-modbus"]);
 const ALLOWED_FRAME_LINE_ENDINGS = new Set(["\n", "\r\n"]);
+
+/** 脚本表达式/条件文本:裁边、限长;空串归 null。 */
+function normalizeScriptExpr(value) {
+  const text = boundedString(value, "", MAX_FRAME_EXPR).trim();
+  return text ? text : null;
+}
+
+const MAX_COLOR_RULES = 32;
+const COLOR_RULE_SOURCES = new Set(["direction", "length", "field"]);
+const COLOR_RULE_OPS = new Set(["==", "!=", ">", ">=", "<", "<="]);
+const COLOR_RULE_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** 着色规则归一化(spec B.9):单条非法剔除(渲染层 validateColorRule 同口径)。 */
+function normalizeColorRules(list) {
+  if (!Array.isArray(list)) return [];
+  const result = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    if (result.length >= MAX_COLOR_RULES) break;
+    const source = COLOR_RULE_SOURCES.has(raw.source) ? raw.source : null;
+    const op = COLOR_RULE_OPS.has(raw.op) ? raw.op : null;
+    const color = COLOR_RULE_COLOR_RE.test(String(raw.color)) ? String(raw.color).toUpperCase() : null;
+    if (!source || !op || !color) continue;
+    if (source === "direction") {
+      const value = boundedString(raw.value, "", 4).trim().toUpperCase();
+      if (value !== "TX" && value !== "RX") continue;
+      if (op !== "==" && op !== "!=") continue;
+      result.push({ source, op, value, color });
+      continue;
+    }
+    if (source === "field") {
+      const field = boundedString(raw.field, "", 50).trim();
+      if (!field) continue;
+      const value = Number(raw.value);
+      if (!Number.isFinite(value)) continue;
+      result.push({ source, field, op, value, color });
+      continue;
+    }
+    const value = Number(raw.value);
+    if (!Number.isFinite(value)) continue;
+    result.push({ source, op, value, color });
+  }
+  return result;
+}
 
 /** 帧定义归一化:只保留已知字段并夹紧边界;单条非法剔除而不是整份拒绝(调试工具容忍度优先)。 */
 function normalizeFrameDefinitions(list) {
@@ -564,12 +610,13 @@ function normalizeFrameDefinitions(list) {
       const scale = Number(field.scale);
       fields.push({
         name: fieldName,
-        offset,
-        index,
+        offset: mode === "script" ? null : offset,
+        index: mode === "script" ? null : index,
         fieldType: ALLOWED_FRAME_TYPES.has(field.fieldType) ? field.fieldType : "u16",
         byteOrder: ALLOWED_FRAME_BYTE_ORDERS.has(field.byteOrder) ? field.byteOrder : "be",
         scale: Number.isFinite(scale) && Math.abs(scale) >= 1e-9 && Math.abs(scale) <= 1e9 ? scale : 1,
         unit: boundedString(field.unit, "", 16),
+        expr: mode === "script" ? normalizeScriptExpr(field.expr) : null,
       });
     }
     if (fields.length === 0) continue;
@@ -594,10 +641,12 @@ function normalizeFrameDefinitions(list) {
       head: mode === "binary" ? boundedString(raw.head, "", 130).trim() : "",
       length: mode === "binary" ? boundedInteger(raw.length, null, 1, 65_535) : null,
       lengthField: mode === "binary" ? lengthField : null,
-      checksum: checksumType ? { type: checksumType } : null,
+      checksum: mode === "binary" && checksumType ? { type: checksumType } : null,
       tail: mode === "binary" ? boundedString(raw.tail, "", 130).trim() : "",
       lineEnding: ALLOWED_FRAME_LINE_ENDINGS.has(raw.lineEnding) ? raw.lineEnding : "\n",
       separator: boundedString(raw.separator, ",", 8) || ",",
+      accept: mode === "script" ? normalizeScriptExpr(raw.accept) : null,
+      verify: mode === "script" ? normalizeScriptExpr(raw.verify) : null,
       fields,
     });
   }

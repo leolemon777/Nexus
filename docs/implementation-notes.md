@@ -21,6 +21,18 @@
 - R3 构建证据已接入：`scripts/build-evidence.cjs` 按安全 JSON 计划顺序执行命令，记录脱敏 stdout/stderr、退出码、耗时、日志大小和 SHA-256，并自动复核。当前 `evidence/build/candidate/` 为 dirty-source candidate，5/5 通过；见 `docs/build-evidence-runbook.md`。
 - 下方历史批次中的测试数字是当时快照；若与最新基线冲突，以本节和当前命令输出为准。
 
+## 功能批次：自定义帧解析 v3 —— B.7 收官：脚本表达式 + 条件着色 + Y 轴缩放（2026-09-07）
+
+- 规格：`docs/spec-plan-serial-plot-parse-replay.md` B.7 后三项（B.8/B.9/B.10 小节，本批增补）。串口可视化三件套规格至此全部关闭。
+- **B.8 脚本解析引擎**：选型=自研微型表达式语言（`rust-core/src/frame_expr.rs`，约 480 行含测试），**零第三方依赖**。决策依据：JS 进渲染层需 CSP 开 `unsafe-eval`（安全倒退）；rhai 等脚本 crate 扩供应链面（rust-core 仅 serde/serde_json/thiserror）；表达式语言不可表达赋值/循环/函数定义/IO——**沙箱即语言本身**。契约：`mode:"script"` + 字段级 `expr` + 定义级 `accept`/`verify`（可空布尔条件）；数值单类型 f64，变量 `frame[i]`/`len`，运算符与 C 同优先级、三目右结合、`&&`/`||` 短路，纯函数 `bit/bcd/sum/xor/crc16/abs/min/max`；限额 256 字符/16 层/4096 步（区间函数按覆盖字节数计步，任意帧长下解析耗时受限）。字段值 = 表达式 × `scale`。复用 `custom_frame_parse`/`custom_frame_validate` 命令，**IPC 白名单零改动**。新错误码：`EXPR_SYNTAX`/`EXPR_EVAL`/`EXPR_LIMIT`/`FRAME_REJECTED`/`SCRIPT_VERIFY_FAILED`。
+- **两处实现期发现的真 bug/陷阱**：①词法器双字符运算符 guard 首参应为当前字符（`!=`/`<=`/`>=` 曾写成第二字符比对，单测抓出）；②C 优先级 `& | ^` 低于 `==`——校验表达式必须写 `(sum(0,len-2) & 0xFF) == frame[len-1]`（连 spec 初稿示例都写错过，已修正并在 UI tooltip 与 spec 中提醒）。
+- **B.9 条件着色**：渲染层纯模块 `src/frame-color-rules.js`（`validateColorRule`/`evaluateColorRules`，规则按序首中即停，坏规则跳过不中断）；来源 direction/length/field（解析字段），命中行加 3px 左色条（`.color-flagged` box-shadow，不动文字色）。**两段式着色**：行到达即涂方向/帧长规则；帧定义解析结果经 ≤50ms 合批异步回来后按 `record.timestamp` 回填上下文补涂字段规则（`debugRowIndex` Map 与日志 200 行同量级）。持久化 `workspace.colorRules`（上限 32 条，`project-file-service` 归一化单条非法剔除，脱敏导出保留——纯结构无凭据）；`.nexus.json` schemaVersion 仍为 2（只增可选键）。
+- **B.10 Y 轴缩放**：`serial-plot.js` 把绘制内的量程计算抽成纯函数 `computeYRange(store, override, tStart)`（自动=窗口 min/max + 8% padding + 退化保护，与原绘制行为逐位一致——含空数据 0..1 也加 padding 的口径）；合法 `{min,max}`（有限且 min<max）时精确使用不加 padding，非法回退自动。UI：曲线卡「Y 轴手动」勾选 + 上/下限输入（未勾选/不完整自动禁用回退）。会话级视图状态，不持久化（与主站趋势口径一致）。
+- UI 细节：帧解析卡模式加「脚本表达式」，字段表按模式切换表头与行布局（脚本=名称/表达式/缩放/单位；binary/ascii 原布局），模式切换保留已录入的名称/缩放/单位；着色规则编辑器为收发记录卡内折叠 `<details>`（来源/字段/条件/值/颜色/删除 + datalist 字段提示）；新输入全部带自解释 placeholder 与易混字段 title tooltip。
+- 验证（2026-09-07）：`cargo test` 全量 **649/649**（lib 477 + integration 172，+12：frame_expr 7 + frame_definition 4 + custom_frame e2e 1）、`cargo fmt --check` 通过；Electron **341/341**（+5：frame-color-rules 3 + computeYRange 1 + 脚本持久化 1；`project-v1.expected.json` 黄金样本补 `colorRules: []`）；Vite build、`audit-ui-layout` debug 视图 **0 违规**（master 3/interfaces 1 存量不变）、冒烟双 OK。黄金向量见 `docs/custom-frame-golden-vectors.md` V23–V30。
+- 遗留小项：着色规则的模式切换与帧定义切换不联动重涂字段规则（规则不变时无影响）；`cargo test` 全量基线由 637 升 649。
+- L2 边界：脚本模式真机价值在 BCD/私有校验类非标设备（如 DL/T 645 表计），软件向量不等于设备级验收；RS-485 温度模块批次待硬件。
+
 ## 功能批次：自定义帧解析 v2 —— 动态长度 + 尾部定界（2026-09-04）
 
 - 规格：`docs/spec-plan-serial-plot-parse-replay.md` B.7 前两项。目标设备形态：长度字节自述帧长的非标模块（常见温湿度/称重）与带 `CR/LF` 类尾界定界的帧。

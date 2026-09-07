@@ -479,6 +479,15 @@
             <div class="card">
               <div class="card-header"><strong>收发记录</strong><span style="margin-left:auto"></span><button class="btn-text" id="dbg-clear-log" type="button">清空</button></div>
               <div class="card-body">
+                <details id="color-rules-details">
+                  <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">着色规则（按方向 / 帧长 / 解析字段给记录行加色条）</summary>
+                  <datalist id="color-field-options"></datalist>
+                  <div class="form-row" style="margin-top:6px">
+                    <button class="btn-ghost" id="color-rule-add" type="button">+ 规则</button>
+                    <span class="field-meta">规则自上而下生效，命中即停；解析字段规则在该帧成功解析后补上色条；规则随项目保存</span>
+                  </div>
+                  <div class="data-grid" style="margin-top:6px"><table><thead><tr><th style="width:104px">来源</th><th style="width:130px">字段</th><th style="width:76px">条件</th><th style="width:90px">值</th><th style="width:64px">颜色</th><th style="width:36px"></th></tr></thead><tbody id="color-rules-rows"><tr class="empty-row"><td colspan="6" class="console-empty">点「+ 规则」添加着色规则</td></tr></tbody></table></div>
+                </details>
                 <div class="data-grid debug-log-grid"><table><thead><tr><th style="width:110px">时间</th><th style="width:35px">方向</th><th>HEX</th><th>解析</th></tr></thead><tbody id="dbg-log-rows"><tr class="empty-row"><td colspan="4">暂无记录</td></tr></tbody></table></div>
               </div>
             </div>
@@ -500,6 +509,9 @@
                   <label title="勾选后按所选传输格式自动解析收包，发现 Modbus 寄存器通道（FC03 保持/FC04 输入）"><input type="checkbox" id="plot-auto-parse" checked /> 自动解析收包</label>
                   <label class="form-label" for="plot-parse-transport" title="自动解析所用的传输格式；RS-232/485 串口设备通常为 RTU，字符帧以冒号开头选 ASCII">解析传输</label>
                   <select id="plot-parse-transport" class="input" style="width:88px"><option value="rtu" selected>RTU</option><option value="ascii">ASCII</option><option value="tcp">TCP</option><option value="auto">自动</option></select>
+                  <label title="勾选后用手动 Y 轴范围（精确值，不加自动边距）；取消勾选或输入不完整时回退自动量程"><input type="checkbox" id="plot-y-manual" /> Y 轴手动</label>
+                  <label class="form-label" for="plot-y-min" title="Y 轴下限；手动模式生效，留空回退自动">下限</label><input id="plot-y-min" class="input" style="width:64px" placeholder="0" disabled />
+                  <label class="form-label" for="plot-y-max" title="Y 轴上限；必须大于下限，否则回退自动">上限</label><input id="plot-y-max" class="input" style="width:64px" placeholder="100" disabled />
                 </div>
                 <details style="margin-top:8px">
                   <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">手动字节偏移通道（非 Modbus 协议设备）</summary>
@@ -532,7 +544,7 @@
               <div class="card-body">
                 <div class="form-row">
                   <label class="form-label" for="fd-name">名称</label><input id="fd-name" class="input" style="width:118px" placeholder="RS485 温度模块" />
-                  <label class="form-label" for="fd-mode">模式</label><select id="fd-mode" class="input" style="width:118px"><option value="binary" selected>定长二进制</option><option value="ascii-delimited">分隔 ASCII</option></select>
+                  <label class="form-label" for="fd-mode">模式</label><select id="fd-mode" class="input" style="width:118px"><option value="binary" selected>定长二进制</option><option value="ascii-delimited">分隔 ASCII</option><option value="script">脚本表达式</option></select>
                   <span id="fd-binary-opts">
                     <label class="form-label" for="fd-head" title="只解析以该帧头开头的收包；不填则对每个收包生效">帧头HEX</label><input id="fd-head" class="input" style="width:112px" placeholder="01 03（可空）" />
                     <label class="form-label" for="fd-len-src" title="定长=整帧字节数固定；动态=帧内某字节就是长度">长度方式</label><select id="fd-len-src" class="input" style="width:74px"><option value="fixed" selected>定长</option><option value="field">动态</option></select>
@@ -542,6 +554,10 @@
                   <span id="fd-ascii-opts" style="display:none">
                     <label class="form-label" for="fd-line-ending">行结束</label><select id="fd-line-ending" class="input" style="width:92px"><option value="lf" selected>LF (\n)</option><option value="crlf">CRLF (\r\n)</option></select>
                     <label class="form-label" for="fd-separator">分隔符</label><select id="fd-separator" class="input" style="width:92px"><option value="," selected>, 逗号</option><option value=" ">空格</option><option value=";">; 分号</option><option value="tab">Tab</option></select>
+                  </span>
+                  <span id="fd-script-opts" style="display:none">
+                    <label class="form-label" for="fd-accept" title="布尔条件，求值为 0 的帧直接拒绝并报 FRAME_REJECTED；留空 = 不过滤">接受条件</label><input id="fd-accept" class="input" style="width:158px" placeholder="frame[0] == 0x55（可空）" />
+                    <label class="form-label" for="fd-verify" title="布尔条件，求值为 0 报校验失败；注意 & | ^ 的优先级低于 ==，位运算与比较之间要加括号">校验条件</label><input id="fd-verify" class="input" style="width:210px" placeholder="(sum(0,len-2) &amp; 0xFF) == frame[len-1]" />
                   </span>
                 </div>
                 <div class="form-row" id="fd-binary-row2" style="display:none;margin-top:8px">
@@ -553,7 +569,8 @@
                   </span>
                   <label class="form-label" for="fd-tail" title="帧必须以这些字节结尾；解析前先剥离，不计入长度与校验">尾部HEX</label><input id="fd-tail" class="input" style="width:104px" placeholder="0D 0A（可空）" />
                 </div>
-                <div class="data-grid" style="margin-top:8px"><table><thead><tr><th style="width:110px">字段名</th><th style="width:60px" title="binary 模式：数据起始字节，帧首字节为 0">偏移</th><th style="width:60px" title="ascii 模式：分隔后第几段，从 0 起">序号</th><th style="width:70px">类型</th><th style="width:76px">字节序</th><th style="width:64px">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th></tr></thead><tbody id="fd-fields-rows"><tr class="empty-row"><td colspan="8" class="console-empty">点「+ 字段」添加要提取的数值</td></tr></tbody></table></div>
+                <div class="field-meta" id="fd-script-hint" style="display:none;margin-top:6px">表达式可用：frame[i]（第 i 字节）· len（帧长）· bit(x,n) 取位 · bcd(x) BCD 转十进制 · sum/xor/crc16(a,b) 区间校验 · abs/min/max；字段值 = 表达式 × 缩放；位运算与比较之间要加括号</div>
+                <div class="data-grid" style="margin-top:8px"><table><thead><tr id="fd-fields-head"><th style="width:110px">字段名</th><th style="width:60px" title="binary 模式：数据起始字节，帧首字节为 0">偏移</th><th style="width:60px" title="ascii 模式：分隔后第几段，从 0 起">序号</th><th style="width:70px">类型</th><th style="width:76px">字节序</th><th style="width:64px">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th></tr></thead><tbody id="fd-fields-rows"><tr class="empty-row"><td colspan="8" class="console-empty">点「+ 字段」添加要提取的数值</td></tr></tbody></table></div>
                 <div class="form-row" style="margin-top:8px">
                   <button class="btn-ghost" id="fd-add-field" type="button">+ 字段</button>
                   <button class="btn-ghost" id="fd-try" type="button" title="取最近一个收包，按当前表单定义调 Rust 试算">用最近收包试算</button>

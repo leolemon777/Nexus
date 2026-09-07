@@ -29,6 +29,7 @@ import {
   parseHeadHex,
   PLOT_MAX_DISCOVERED,
 } from "./serial-plot.js";
+import { validateColorRule, evaluateColorRules } from "./frame-color-rules.js";
 import { ReplayScheduler, normalizeReplayRecords } from "./replay-scheduler.js";
 
 const elements = {
@@ -126,6 +127,9 @@ const elements = {
   plotExport: document.querySelector("#plot-export"),
   plotAutoParse: document.querySelector("#plot-auto-parse"),
   plotParseTransport: document.querySelector("#plot-parse-transport"),
+  plotYManual: document.querySelector("#plot-y-manual"),
+  plotYMin: document.querySelector("#plot-y-min"),
+  plotYMax: document.querySelector("#plot-y-max"),
   plotManName: document.querySelector("#plot-man-name"),
   plotManHead: document.querySelector("#plot-man-head"),
   plotManOffset: document.querySelector("#plot-man-offset"),
@@ -153,6 +157,11 @@ const elements = {
   fdBinaryRow2: document.querySelector("#fd-binary-row2"),
   fdLfOpts: document.querySelector("#fd-lf-opts"),
   fdAsciiOpts: document.querySelector("#fd-ascii-opts"),
+  fdScriptOpts: document.querySelector("#fd-script-opts"),
+  fdScriptHint: document.querySelector("#fd-script-hint"),
+  fdAccept: document.querySelector("#fd-accept"),
+  fdVerify: document.querySelector("#fd-verify"),
+  fdFieldsHead: document.querySelector("#fd-fields-head"),
   fdHead: document.querySelector("#fd-head"),
   fdLenSrc: document.querySelector("#fd-len-src"),
   fdLength: document.querySelector("#fd-length"),
@@ -169,6 +178,8 @@ const elements = {
   fdAddField: document.querySelector("#fd-add-field"),
   fdTry: document.querySelector("#fd-try"),
   fdPreview: document.querySelector("#fd-preview"),
+  colorRuleAdd: document.querySelector("#color-rule-add"),
+  colorRulesRows: document.querySelector("#color-rules-rows"),
   parserView: document.querySelector("#parser-view"),
   parserTransport: document.querySelector("#parser-transport"),
   parserInput: document.querySelector("#parser-input"),
@@ -956,6 +967,24 @@ let plotLastDrawAt = 0;
 let plotCanvasW = 0;
 let plotCanvasH = 0;
 
+/** Y 轴手动量程(B.10): 勾选且 min<max 都填好才生效,否则回退自动。 */
+function plotYOverrideChange() {
+  const manual = elements.plotYManual?.checked;
+  if (elements.plotYMin) elements.plotYMin.disabled = !manual;
+  if (elements.plotYMax) elements.plotYMax.disabled = !manual;
+  if (!manual) {
+    plotStore.yOverride = null;
+    return;
+  }
+  const minText = (elements.plotYMin?.value ?? "").trim();
+  const maxText = (elements.plotYMax?.value ?? "").trim();
+  const min = Number(minText);
+  const max = Number(maxText);
+  plotStore.yOverride = minText !== "" && maxText !== "" && Number.isFinite(min) && Number.isFinite(max) && min < max
+    ? { min, max }
+    : null;
+}
+
 /** onDebugFrame 入口: 手动规则同步求值(仅收包);自动解析按 50ms 合批走 parse_frame_online */
 function plotFeedRecord(record) {
   if (!record || !Array.isArray(record.bytes)) return;
@@ -1012,6 +1041,7 @@ async function flushPlotBatch() {
               }
               plotStore.feed(key, record.timestamp, field.value);
             }
+            colorApplyParsedFields(record.timestamp, custom.fields);
           }
         } catch { /* 单帧解析失败静默跳过 */ }
       }
@@ -1174,6 +1204,8 @@ function startPlotLoop() {
 let frameDefs = []; // 已保存的帧定义(随 .nexus.json workspace 持久化)
 let activeFrameDef = null; // 已"应用到曲线"的定义;null=未启用
 let lastDebugRxBytes = null; // 最近一个收包(帧解析试算用)
+let colorRules = []; // 收发记录着色规则(随 .nexus.json workspace 持久化)
+const debugRowIndex = new Map(); // record.timestamp -> {row,direction,length,fields} 着色上下文,与日志行数同量级
 let recRecording = false;
 let replayScheduler = null;
 let replayPath = null; // 最近加载的录制文件(导出 CSV 用)
@@ -1183,18 +1215,38 @@ const FD_LINE_ENDING_REV = { "\n": "lf", "\r\n": "crlf" };
 const FD_SEPARATOR = { ",": ",", " ": " ", ";": ";", tab: "\t" };
 const FD_SEPARATOR_REV = { ",": ",", " ": " ", ";": ";", "\t": "tab" };
 
+/** 当前帧定义模式(binary / ascii-delimited / script)。 */
+function fdCurrentMode() {
+  const value = elements.fdMode?.value;
+  return value === "ascii-delimited" || value === "script" ? value : "binary";
+}
+
 function fdUpdateModeVisibility() {
-  const binary = elements.fdMode?.value !== "ascii-delimited";
+  const mode = fdCurrentMode();
+  const binary = mode === "binary";
   if (elements.fdBinaryOpts) elements.fdBinaryOpts.style.display = binary ? "" : "none";
   if (elements.fdBinaryRow2) elements.fdBinaryRow2.style.display = binary ? "" : "none";
-  if (elements.fdAsciiOpts) elements.fdAsciiOpts.style.display = binary ? "none" : "";
+  if (elements.fdAsciiOpts) elements.fdAsciiOpts.style.display = mode === "ascii-delimited" ? "" : "none";
+  if (elements.fdScriptOpts) elements.fdScriptOpts.style.display = mode === "script" ? "" : "none";
+  if (elements.fdScriptHint) elements.fdScriptHint.style.display = mode === "script" ? "" : "none";
   const dynamic = binary && elements.fdLenSrc?.value === "field";
   if (elements.fdLfOpts) elements.fdLfOpts.style.display = dynamic ? "" : "none";
   if (elements.fdLengthLabel) elements.fdLengthLabel.style.visibility = dynamic ? "hidden" : "";
   if (elements.fdLength) elements.fdLength.style.visibility = dynamic ? "hidden" : "";
+  // 模式切换时按新模式重渲染表头与已录入字段(名称/缩放/单位保留)
+  fdRenderFields(fdCollectFields());
 }
 
-function fdFieldRow(field = {}) {
+const FD_FIELDS_HEAD_STANDARD = '<th style="width:110px">字段名</th><th style="width:60px" title="binary 模式：数据起始字节，帧首字节为 0">偏移</th><th style="width:60px" title="ascii 模式：分隔后第几段，从 0 起">序号</th><th style="width:70px">类型</th><th style="width:76px">字节序</th><th style="width:64px">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th>';
+const FD_FIELDS_HEAD_SCRIPT = '<th style="width:110px">字段名</th><th>表达式</th><th style="width:64px" title="字段值 = 表达式 × 缩放">缩放</th><th style="width:56px">单位</th><th style="width:36px"></th>';
+
+function fdRenderFieldsHead(mode) {
+  if (elements.fdFieldsHead) {
+    elements.fdFieldsHead.innerHTML = mode === "script" ? FD_FIELDS_HEAD_SCRIPT : FD_FIELDS_HEAD_STANDARD;
+  }
+}
+
+function fdFieldRow(field = {}, mode = "binary") {
   const row = document.createElement("tr");
   const cell = () => row.insertCell(-1);
   const input = (props, width, titleText) => {
@@ -1216,6 +1268,30 @@ function fdFieldRow(field = {}) {
     }
     return el;
   };
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "btn-text";
+  remove.textContent = "×";
+  remove.setAttribute("aria-label", "删除字段");
+  remove.addEventListener("click", () => { row.remove(); });
+  if (mode === "script") {
+    row.dataset.mode = "script";
+    const name = input({ placeholder: "temp1", value: field.name ?? "" }, "100px");
+    const expr = input(
+      { placeholder: "bcd(frame[1]) * 100 + bcd(frame[2])", value: field.expr ?? "" },
+      "100%",
+      "帧字节表达式：frame[i] 取第 i 字节、len 为帧长；位运算(& | ^)与比较(==)之间要加括号",
+    );
+    const scale = input({ value: field.scale ?? 1 }, "56px", "字段值 = 表达式 × 缩放");
+    const unit = input({ placeholder: "℃", value: field.unit ?? "" }, "50px");
+    cell().append(name);
+    cell().append(expr);
+    cell().append(scale);
+    cell().append(unit);
+    cell().append(remove);
+    return row;
+  }
+  row.dataset.mode = "standard";
   const name = input({ placeholder: "temp1", value: field.name ?? "" }, "100px");
   const offset = input({ type: "number", min: 0, max: 65535, value: field.offset ?? "" }, "52px", "binary:数据起始字节,帧首字节为 0");
   const index = input({ type: "number", min: 0, max: 65535, value: field.index ?? "" }, "52px", "ascii:分隔后第几段,从 0 起");
@@ -1223,12 +1299,6 @@ function fdFieldRow(field = {}) {
   const order = select([["be", "大端"], ["le", "小端"]], field.byteOrder ?? "be", "68px");
   const scale = input({ value: field.scale ?? 1 }, "56px", "原始值 × 缩放 = 曲线值");
   const unit = input({ placeholder: "℃", value: field.unit ?? "" }, "50px");
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "btn-text";
-  remove.textContent = "×";
-  remove.setAttribute("aria-label", "删除字段");
-  remove.addEventListener("click", () => { row.remove(); });
   cell().append(name);
   cell().append(offset);
   cell().append(index);
@@ -1241,6 +1311,8 @@ function fdFieldRow(field = {}) {
 }
 
 function fdRenderFields(fields = []) {
+  const mode = fdCurrentMode();
+  fdRenderFieldsHead(mode);
   const body = elements.fdFieldsRows;
   if (!body) return;
   body.replaceChildren();
@@ -1248,19 +1320,34 @@ function fdRenderFields(fields = []) {
     const empty = document.createElement("tr");
     empty.className = "empty-row";
     const cellNode = empty.insertCell(-1);
-    cellNode.colSpan = 8;
+    cellNode.colSpan = mode === "script" ? 5 : 8;
     cellNode.className = "console-empty";
-    cellNode.textContent = "点「+ 字段」添加要提取的数值";
+    cellNode.textContent = mode === "script"
+      ? "点「+ 字段」添加要提取的数值（每字段一条表达式）"
+      : "点「+ 字段」添加要提取的数值";
     body.append(empty);
     return;
   }
-  for (const field of fields) body.append(fdFieldRow(field));
+  for (const field of fields) body.append(fdFieldRow(field, mode));
 }
 
 function fdCollectFields() {
   const fields = [];
   const rows = elements.fdFieldsRows?.querySelectorAll("tr:not(.empty-row)") ?? [];
   for (const row of rows) {
+    if (row.dataset.mode === "script") {
+      const [name, expr, scale, unit] = row.querySelectorAll("input,select");
+      const nameValue = (name?.value ?? "").trim();
+      if (!nameValue) continue;
+      const scaleValue = Number(scale?.value);
+      fields.push({
+        name: nameValue,
+        expr: (expr?.value ?? "").trim() || null,
+        scale: Number.isFinite(scaleValue) && scaleValue !== 0 ? scaleValue : 1,
+        unit: (unit?.value ?? "").trim(),
+      });
+      continue;
+    }
     const [name, offset, index, type, order, scale, unit] = row.querySelectorAll("input,select");
     const nameValue = (name?.value ?? "").trim();
     if (!nameValue) continue;
@@ -1281,7 +1368,7 @@ function fdCollectFields() {
 }
 
 function fdCollectDefinition() {
-  const mode = elements.fdMode?.value === "ascii-delimited" ? "ascii-delimited" : "binary";
+  const mode = fdCurrentMode();
   const lengthValue = Number(elements.fdLength?.value);
   const def = {
     schemaVersion: 1,
@@ -1306,16 +1393,22 @@ function fdCollectDefinition() {
     def.tail = (elements.fdTail?.value || "").trim();
     const checksum = elements.fdChecksum?.value || "none";
     def.checksum = checksum === "none" ? null : { type: checksum };
-  } else {
+  } else if (mode === "ascii-delimited") {
     def.lineEnding = FD_LINE_ENDING[elements.fdLineEnding?.value] ?? "\n";
     def.separator = FD_SEPARATOR[elements.fdSeparator?.value] ?? ",";
+  } else {
+    // script: 布尔条件可空;字段表达式由 fdCollectFields 收集
+    def.accept = (elements.fdAccept?.value || "").trim() || null;
+    def.verify = (elements.fdVerify?.value || "").trim() || null;
   }
   return def;
 }
 
 function fdFillForm(def) {
   if (elements.fdName) elements.fdName.value = def.name ?? "";
-  if (elements.fdMode) elements.fdMode.value = def.mode === "ascii-delimited" ? "ascii-delimited" : "binary";
+  if (elements.fdMode) {
+    elements.fdMode.value = def.mode === "ascii-delimited" || def.mode === "script" ? def.mode : "binary";
+  }
   if (elements.fdHead) elements.fdHead.value = def.head ?? "";
   if (elements.fdLenSrc) elements.fdLenSrc.value = def.lengthField ? "field" : "fixed";
   if (elements.fdLength) elements.fdLength.value = def.length ?? "";
@@ -1327,6 +1420,8 @@ function fdFillForm(def) {
   if (elements.fdChecksum) elements.fdChecksum.value = def.checksum?.type ?? "none";
   if (elements.fdLineEnding) elements.fdLineEnding.value = FD_LINE_ENDING_REV[def.lineEnding] ?? "lf";
   if (elements.fdSeparator) elements.fdSeparator.value = FD_SEPARATOR_REV[def.separator] ?? ",";
+  if (elements.fdAccept) elements.fdAccept.value = def.accept ?? "";
+  if (elements.fdVerify) elements.fdVerify.value = def.verify ?? "";
   fdRenderFields(def.fields ?? []);
   fdUpdateModeVisibility();
 }
@@ -1413,6 +1508,7 @@ async function fdApplyToCurve() {
     return;
   }
   activeFrameDef = def;
+  refreshColorFieldOptions();
   for (const field of def.fields) {
     const key = `fd:${def.name}.${field.name}`;
     if (!plotDiscovered.has(key) && plotDiscovered.size < PLOT_MAX_DISCOVERED) {
@@ -1444,6 +1540,144 @@ async function fdTryParse() {
   } catch (error) {
     elements.fdPreview.textContent = `✗ ${error.message || String(error)}`;
   }
+}
+
+// --- 条件着色(B.9): 规则编辑器在收发记录卡,求值在 frame-color-rules.js ---
+
+const COLOR_SOURCE_OPTIONS = [["direction", "方向"], ["length", "帧长"], ["field", "解析字段"]];
+const COLOR_OP_OPTIONS = [["==", "=="], ["!=", "!="], [">", ">"], [">=", ">="], ["<", "<"], ["<=", "<="]];
+
+function colorRuleRow(rule = {}) {
+  const row = document.createElement("tr");
+  const cell = () => row.insertCell(-1);
+  const source = document.createElement("select");
+  source.className = "input";
+  source.style.width = "96px";
+  for (const [val, label] of COLOR_SOURCE_OPTIONS) source.append(new Option(label, val));
+  source.value = rule.source === "length" || rule.source === "field" ? rule.source : "direction";
+  const field = document.createElement("input");
+  field.className = "input";
+  field.setAttribute("list", "color-field-options");
+  field.placeholder = "temp";
+  field.title = "当前已应用帧定义的字段名；帧成功解析后字段规则才参与着色";
+  field.value = rule.field ?? "";
+  field.style.width = "100%";
+  const op = document.createElement("select");
+  op.className = "input";
+  op.style.width = "70px";
+  for (const [val, label] of COLOR_OP_OPTIONS) op.append(new Option(label, val));
+  op.value = COLOR_OP_OPTIONS.some(([val]) => val === rule.op) ? rule.op : "==";
+  const value = document.createElement("input");
+  value.className = "input";
+  value.style.width = "100%";
+  value.value = rule.value ?? "";
+  value.title = "方向填 TX 或 RX；帧长/字段填数字";
+  const color = document.createElement("input");
+  color.type = "color";
+  color.className = "input";
+  color.style.width = "44px";
+  color.style.height = "30px";
+  color.style.padding = "1px";
+  color.value = /^#[0-9a-fA-F]{6}$/.test(String(rule.color ?? "")) ? rule.color : "#D52B1E";
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "btn-text";
+  remove.textContent = "×";
+  remove.setAttribute("aria-label", "删除规则");
+  const syncSource = () => {
+    const isField = source.value === "field";
+    field.disabled = !isField;
+    field.style.visibility = isField ? "" : "hidden";
+    value.placeholder = source.value === "direction" ? "RX 或 TX" : "50";
+  };
+  syncSource();
+  for (const el of [source, field, op, value, color]) {
+    el.addEventListener("change", () => { syncSource(); colorRulesChanged(); });
+  }
+  remove.addEventListener("click", () => { row.remove(); colorRulesChanged(); });
+  cell().append(source);
+  cell().append(field);
+  cell().append(op);
+  cell().append(value);
+  cell().append(color);
+  cell().append(remove);
+  return row;
+}
+
+function colorRenderRules(rules = colorRules) {
+  const body = elements.colorRulesRows;
+  if (!body) return;
+  body.replaceChildren();
+  if (rules.length === 0) {
+    const empty = document.createElement("tr");
+    empty.className = "empty-row";
+    const cellNode = empty.insertCell(-1);
+    cellNode.colSpan = 6;
+    cellNode.className = "console-empty";
+    cellNode.textContent = "点「+ 规则」添加着色规则";
+    body.append(empty);
+    return;
+  }
+  for (const rule of rules) body.append(colorRuleRow(rule));
+}
+
+function colorCollectRules() {
+  const rules = [];
+  const rows = elements.colorRulesRows?.querySelectorAll("tr:not(.empty-row)") ?? [];
+  for (const row of rows) {
+    const [source, field, op, value, color] = row.querySelectorAll("input,select");
+    rules.push({
+      source: source?.value || "direction",
+      field: (field?.value ?? "").trim(),
+      op: op?.value || "==",
+      value: (value?.value ?? "").trim(),
+      color: color?.value ?? "",
+    });
+  }
+  return rules;
+}
+
+function colorRulesChanged() {
+  // 坏规则不入库存(表单仍显示,保存/求值只认合法规则)
+  colorRules = colorCollectRules().filter((rule) => validateColorRule(rule) === null);
+  repaintDebugLogColors();
+}
+
+function applyRowColor(entry) {
+  const color = evaluateColorRules(colorRules, entry);
+  entry.row.classList.toggle("color-flagged", Boolean(color));
+  entry.row.style.setProperty("--rule-color", color || "transparent");
+}
+
+function repaintDebugLogColors() {
+  for (const entry of debugRowIndex.values()) applyRowColor(entry);
+}
+
+/** 帧异步解析完成后回填着色上下文(字段规则此时才可命中)并重涂该行。 */
+function colorApplyParsedFields(timestamp, fields) {
+  const entry = debugRowIndex.get(timestamp);
+  if (!entry) return;
+  entry.fields = Array.isArray(fields)
+    ? fields.map((field) => ({ name: field.name, value: Number(field.value) }))
+    : null;
+  applyRowColor(entry);
+}
+
+/** 应用/切换帧定义后刷新着色规则字段下拉的可选项。 */
+function refreshColorFieldOptions() {
+  const datalist = document.querySelector("#color-field-options");
+  if (!datalist) return;
+  datalist.replaceChildren();
+  for (const field of activeFrameDef?.fields ?? []) {
+    if (field?.name) datalist.append(new Option(field.name));
+  }
+}
+
+/** 项目打开/新建时恢复着色规则(只恢复列表并重涂现有行)。 */
+function restoreColorRules(rules) {
+  colorRules = (Array.isArray(rules) ? rules : []).filter((rule) => validateColorRule(rule) === null);
+  colorRenderRules();
+  repaintDebugLogColors();
 }
 
 // --- 会话录制(批次 3) ---
@@ -2656,6 +2890,16 @@ function appendDebugLog(record) {
     }
   };
   elements.dbgLogRows.prepend(row);
+  // 着色上下文登记(与日志 200 行上限同步裁剪;字段解析结果异步回填)
+  const entry = {
+    row,
+    direction: record.direction,
+    length: Array.isArray(record.bytes) ? record.bytes.length : 0,
+    fields: null,
+  };
+  debugRowIndex.set(record.timestamp, entry);
+  if (debugRowIndex.size > 220) debugRowIndex.delete(debugRowIndex.keys().next().value);
+  applyRowColor(entry);
   // 限制行数
   const rows = elements.dbgLogRows.querySelectorAll("tr");
   if (rows.length > 200) rows[rows.length - 1].remove();
@@ -2697,6 +2941,7 @@ async function debugClearLog() {
     elements.dbgLogRows.replaceChildren();
     elements.dbgLogRows.innerHTML = '<tr><td colspan="4" class="console-empty">暂无收发记录</td></tr>';
   }
+  debugRowIndex.clear();
   await callBackend("debug_clear_log", {});
 }
 
@@ -7785,6 +8030,7 @@ function buildProjectDocument() {
         checksum: def.checksum ? { ...def.checksum } : (def.checksum ?? null),
         fields: (def.fields ?? []).map((field) => ({ ...field })),
       })),
+      colorRules: colorRules.map((rule) => ({ ...rule })),
     },
   };
 }
@@ -7859,6 +8105,7 @@ async function openProject() {
     replaceProjectSessions(project.sessions, project.activeSession);
     replaceCommandList(project.workspace?.commandList ?? []);
     restoreFrameDefinitions(project.workspace?.frameDefinitions ?? []);
+    restoreColorRules(project.workspace?.colorRules ?? []);
     restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
     restoreHelpReference(project.workspace?.lastHelpReference ?? null);
     activateView(project.activeView);
@@ -7939,6 +8186,7 @@ async function restoreLastProject() {
     replaceProjectSessions(project.sessions, project.activeSession);
     replaceCommandList(project.workspace?.commandList ?? []);
     restoreFrameDefinitions(project.workspace?.frameDefinitions ?? []);
+    restoreColorRules(project.workspace?.colorRules ?? []);
     restoreSimulatorWorkspace(project.workspace?.simulators ?? {});
     restoreHelpReference(project.workspace?.lastHelpReference ?? null);
     activateView(project.activeView);
@@ -9356,6 +9604,9 @@ async function initialise() {
   if (elements.plotClear) elements.plotClear.addEventListener("click", plotClearAll);
   if (elements.plotExport) elements.plotExport.addEventListener("click", () => void plotExportCsv());
   if (elements.plotManAdd) elements.plotManAdd.addEventListener("click", plotAddManual);
+  if (elements.plotYManual) elements.plotYManual.addEventListener("change", plotYOverrideChange);
+  if (elements.plotYMin) elements.plotYMin.addEventListener("input", plotYOverrideChange);
+  if (elements.plotYMax) elements.plotYMax.addEventListener("input", plotYOverrideChange);
   if (elements.plotChannelSelect) {
     // 打开下拉前刷新通道列表(发现结果随收包动态变化)
     elements.plotChannelSelect.addEventListener("focus", plotRefreshChannelOptions);
@@ -9366,13 +9617,19 @@ async function initialise() {
   if (elements.fdLenSrc) elements.fdLenSrc.addEventListener("change", fdUpdateModeVisibility);
   if (elements.fdAddField) elements.fdAddField.addEventListener("click", () => {
     elements.fdFieldsRows?.querySelector(".empty-row")?.remove();
-    elements.fdFieldsRows?.append(fdFieldRow({}));
+    elements.fdFieldsRows?.append(fdFieldRow({}, fdCurrentMode()));
   });
   if (elements.fdSave) elements.fdSave.addEventListener("click", () => void fdSaveDefinition());
   if (elements.fdLoad) elements.fdLoad.addEventListener("click", fdLoadSelected);
   if (elements.fdDelete) elements.fdDelete.addEventListener("click", fdDeleteSelected);
   if (elements.fdApply) elements.fdApply.addEventListener("click", () => void fdApplyToCurve());
   if (elements.fdTry) elements.fdTry.addEventListener("click", () => void fdTryParse());
+  // 着色规则(B.9)
+  if (elements.colorRuleAdd) elements.colorRuleAdd.addEventListener("click", () => {
+    elements.colorRulesRows?.querySelector(".empty-row")?.remove();
+    elements.colorRulesRows?.append(colorRuleRow({}));
+  });
+  colorRenderRules();
   fdRenderFields([]);
   fdUpdateModeVisibility();
   // 会话录制/回放(批次 3)

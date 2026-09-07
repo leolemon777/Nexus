@@ -20,6 +20,7 @@ export class SeriesStore {
     this.maxPoints = maxPoints;
     this.series = new Map();
     this.paused = false; // 仅冻结绘制,数据继续入环(暂停可回补)
+    this.yOverride = null; // 手动 Y 轴量程 {min,max} | null=自动(B.10)
   }
 
   /** @returns {boolean} 是否新增成功(key 已存在时 false) */
@@ -212,6 +213,37 @@ function formatTime(t) {
   return `${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
 }
 
+/**
+ * Y 轴量程(B.10,纯函数): 自动 = 窗口内 min/max + 8% padding + 退化保护;
+ * override 为合法 {min,max}(有限且 min<max)时精确使用、不加 padding。
+ * @param {SeriesStore} store 通道集合
+ * @param {{min:number,max:number}|null} override 手动量程(空/非法 = 自动)
+ * @param {number} tStart 窗口起点(ms),调用方传入保持纯函数
+ */
+export function computeYRange(store, override, tStart) {
+  if (
+    override
+    && Number.isFinite(override.min)
+    && Number.isFinite(override.max)
+    && override.min < override.max
+  ) {
+    return { min: override.min, max: override.max };
+  }
+  let min = Infinity;
+  let max = -Infinity;
+  for (const series of store.entries()) {
+    for (const p of series.dataPoints) {
+      if (p.t < tStart) continue;
+      if (p.v < min) min = p.v;
+      if (p.v > max) max = p.v;
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) { min = 0; max = 1; }
+  if (min === max) { min -= 1; max += 1; }
+  const padY = (max - min) * 0.08;
+  return { min: min - padY, max: max + padY };
+}
+
 /** 绘制曲线卡画布: 统一 Y 轴 / 60s 滚动窗口 / HiDPI(实现口径与主站 drawTrendChart 一致)。 */
 export function drawSerialPlot(canvas, store, { legendHost = null, emptyText = "添加通道后开始绘制" } = {}) {
   if (!canvas) return;
@@ -240,21 +272,7 @@ export function drawSerialPlot(canvas, store, { legendHost = null, emptyText = "
 
   const now = Date.now();
   const tStart = now - store.windowMs;
-
-  let min = Infinity;
-  let max = -Infinity;
-  for (const series of store.entries()) {
-    for (const p of series.dataPoints) {
-      if (p.t < tStart) continue;
-      if (p.v < min) min = p.v;
-      if (p.v > max) max = p.v;
-    }
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) { min = 0; max = 1; }
-  if (min === max) { min -= 1; max += 1; }
-  const padY = (max - min) * 0.08;
-  min -= padY;
-  max += padY;
+  const { min, max } = computeYRange(store, store.yOverride, tStart);
 
   const labelTexts = [];
   for (let i = 0; i <= 5; i++) labelTexts.push(formatTick(max - ((max - min) * i) / 5));

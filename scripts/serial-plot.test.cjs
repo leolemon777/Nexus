@@ -140,3 +140,38 @@ test("buildCsvRows: 重名列追加通道 key 去重", async () => {
   assert.equal(row["V"], 1);
   assert.equal(row["V#m:b"], 2);
 });
+
+test("computeYRange: 自动量程(8% padding/退化/空)与手动覆盖(B.10)", async () => {
+  const { SeriesStore, computeYRange } = await modPromise;
+  const store = new SeriesStore({ windowMs: 60_000 });
+  store.add("a", { name: "A" });
+
+  // 空 → 0..1 再加 8% padding(与原绘制行为一致)
+  assert.deepEqual(computeYRange(store, null, 1000), { min: -0.08, max: 1.08 });
+
+  // 窗口内 10..20 → padding 8% = 0.8
+  store.feed("a", 2000, 10);
+  store.feed("a", 3000, 20);
+  assert.deepEqual(computeYRange(store, null, 1500), { min: 9.2, max: 20.8 });
+  // 窗口外点被忽略(1500 起点,2000 在内;另一窗口起点 2500 时 2000 被排除)
+  const only = computeYRange(store, null, 2500); // 只剩单点 20 → 19..21 → padding
+  assert.equal(only.min, 18.84);
+  assert.equal(only.max, 21.16);
+
+  // 退化 min==max → ±1 再 padding
+  const flat = new SeriesStore();
+  flat.add("a", { name: "A" });
+  flat.feed("a", 1000, 5);
+  assert.deepEqual(computeYRange(flat, null, 0), { min: 3.84, max: 6.16 });
+
+  // 手动覆盖:精确值、不加 padding
+  assert.deepEqual(computeYRange(store, { min: 0, max: 100 }, 1500), { min: 0, max: 100 });
+  // 非法覆盖回退自动:min>=max / NaN / Infinity / null
+  assert.deepEqual(computeYRange(store, { min: 100, max: 0 }, 1500), { min: 9.2, max: 20.8 });
+  assert.deepEqual(computeYRange(store, { min: Number.NaN, max: 10 }, 1500), { min: 9.2, max: 20.8 });
+  assert.deepEqual(
+    computeYRange(store, { min: Number.NEGATIVE_INFINITY, max: Number.POSITIVE_INFINITY }, 1500),
+    { min: 9.2, max: 20.8 },
+  );
+  assert.deepEqual(computeYRange(store, null, 1500), { min: 9.2, max: 20.8 });
+});

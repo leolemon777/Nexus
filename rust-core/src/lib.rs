@@ -12,6 +12,7 @@ pub mod fins_address;
 pub mod fins_frame;
 pub mod fins_slave;
 pub mod frame_definition;
+pub mod frame_expr;
 pub mod frame_parser;
 pub mod fuji_sph;
 pub mod fx_links;

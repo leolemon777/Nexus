@@ -48,7 +48,7 @@ Serial Studio（github.com/Serial-Studio/Serial-Studio）是 Qt/C++ 开源遥测
 ### 范围外
 
 - FFT、GPS 地图、相机画面、Painter 类 JS 插件控件、仪表盘控件（后续按需）
-- Lua/JavaScript 脚本式解析引擎（表单定义覆盖大多数场景；脚本解析递延）
+- 脚本式解析（原计划 Lua/JavaScript 递延项；2026-09-07 以自研表达式语言交付，见 B.8——刻意不用 Lua/JS 运行时）
 - Serial Studio 项目文件格式兼容（刻意不做，许可隔离）
 - 长期历史数据库（SQLite 会话库）、告警导出（留在 ROADMAP 功能池）
 - MQTT/BLE 等非串口数据源（协议矩阵另有规划）
@@ -178,9 +178,49 @@ ASCII 分隔模式：
 
 - ✅ lengthField 动态长度（2026-09-04 交付：`lengthField {offset,fieldType u8/u16,byteOrder,adjust}`，与定长互斥，帧总长=raw+adjust、不含尾部定界）
 - ✅ 尾部定界符（2026-09-04 交付：`tail` HEX，解析前剥离，不计入长度与校验；空串=不使用）
-- ⬜ 脚本解析引擎
-- ⬜ 条件着色
-- ⬜ Y 轴缩放
+- ✅ 脚本解析引擎（2026-09-07 交付，见 B.8）
+- ✅ 条件着色（2026-09-07 交付，见 B.9）
+- ✅ Y 轴缩放（2026-09-07 交付，见 B.10）
+
+### B.8 脚本解析引擎（表达式模式）
+
+**选型决策**：自研微型表达式语言，纯 Rust 零第三方依赖，不引入 Lua/rhai/JS。
+理由：① JS 进渲染层需 CSP 开 `unsafe-eval`，安全倒退；② rhai 等第三方脚本 crate 扩大供应链面（rust-core 现仅 serde/serde_json/thiserror 三个依赖）；③ 表单已覆盖定长/动态长度/校验场景，脚本的剩余价值是自由算术（BCD、位提取、合成字段、自定义校验表达式），表达式语言足够；④ 沙箱边界即语言本身——不可表达赋值/循环/函数定义/I-O，无内存访问。
+
+数据模型（frame definition schemaVersion 1，增补可选字段）：
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "BCD 温湿度",
+  "mode": "script",
+  "accept": "frame[0] == 0x55",
+  "verify": "(sum(0, len - 2) & 0xFF) == frame[len - 1]",
+  "fields": [
+    { "name": "temp", "expr": "bcd(frame[1]) * 100 + bcd(frame[2])", "scale": 0.01, "unit": "℃" }
+  ]
+}
+```
+
+- 语言：数值单类型（f64，整型位运算内部转 i64）；变量 `frame[i]`（字节，越界=显式错误）、`len`；运算符 `+ - * / % & | ^ << >> ~ ( ) == != < <= > >= && || ! ?:`；字面量十进制/`0x` 十六进制。
+- 内置函数（全纯函数）：`bit(x,n)` 取位、`bcd(x)` BCD→二进制、`sum(a,b)`/`xor(a,b)` 帧字节区间累加/异或（含端点）、`crc16(a,b)` 区间 CRC16-MODBUS、`abs/min/max`。
+- 限额（防失控）：单表达式 ≤256 字符、AST 深度 ≤16、求值步数 ≤10000、除零/非有限结果/索引越界一律显式错误码（`EXPR_SYNTAX`/`EXPR_EVAL`/`EXPR_LIMIT`），绝不静默。
+- 语义：`accept`（可空）求值 0=拒帧（`FRAME_REJECTED`）；`verify`（可空）求值 0=校验失败（`SCRIPT_VERIFY_FAILED`）；字段值 = `expr` 求值 × `scale`，单位沿用 `unit`；脚本模式不支持 head/length/lengthField/tail/checksum（validate 显式报问题）。优先级与 C 一致——`& | ^` 低于 `==`，位与比较要写 `(sum(0,len-2) & 0xFF) == frame[len-1]`（UI tooltip 同步提醒）。
+- 接线：复用 `custom_frame_parse`/`custom_frame_validate` 命令（definition 内联传入），IPC 白名单零改动；UI 表单模式选择加「脚本表达式」，字段表在脚本模式下呈现 名称/表达式/缩放/单位 列。
+
+### B.9 条件着色（收发记录）
+
+- 规则模型：`{ source, op, value, color }`；source ∈ `direction`（TX/RX）、`length`（帧字节数）、`field:<字段名>`（当前已应用帧定义的解析值）；op ∈ `== != > >= < <= contains`（contains 仅 direction/field 文本与 length 无意义时忽略）；color 必须为 `#RRGGBB`。
+- 求值：渲染层纯模块 `src/frame-color-rules.js`（`validateColorRule`/`evaluateColorRules`，node:test 单测），规则按序首中即停。
+- 两段式着色：行到达即应用 direction/length 规则；`field:` 规则在该帧异步解析完成（≤50ms 合批）后回填同一行（timestamp→行 索引）。
+- 命中样式：行左侧 4px 色条（不动文字色，保可读性）。
+- 持久化：`workspace.colorRules`（可选数组，上限 32 条，单条非法剔除）；随项目保存/恢复，脱敏导出保留（纯结构无凭据）。
+
+### B.10 Y 轴缩放（曲线卡）
+
+- `serial-plot.js` 抽出纯函数 `computeYRange(store, override)`：自动=现行为（窗口内 min/max + 8% padding + 退化保护）；override 为合法 `{min,max}`（有限且 min<max）时精确使用，不加 padding。
+- UI：曲线卡工具行加「Y 轴」手动 min/max 输入（空=自动），即刻生效；会话级视图状态，不持久化（与主站趋势口径一致）。
+- 测试：`scripts/serial-plot.test.cjs` 增 computeYRange 用例（自动/覆盖/非法忽略/退化）。
 
 ## C. 批次 3：会话录制与回放
 

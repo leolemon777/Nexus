@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::frame_expr;
 use crate::frame_parser::parse_hex_string;
 use crate::modbus_rtu::crc16_modbus;
 
@@ -46,6 +47,9 @@ pub struct FieldDef {
     pub scale: f64,
     #[serde(default)]
     pub unit: String,
+    /// script 模式必填: 字段表达式(frame[len-1] 等,见 frame_expr 模块)
+    #[serde(default)]
+    pub expr: Option<String>,
 }
 
 fn default_field_type() -> String {
@@ -118,6 +122,12 @@ pub struct FrameDefinition {
     pub separator: String,
     #[serde(default)]
     pub fields: Vec<FieldDef>,
+    /// script 模式可选: 帧接受条件,求值 0 = 拒帧(FRAME_REJECTED)
+    #[serde(default)]
+    pub accept: Option<String>,
+    /// script 模式可选: 校验条件,求值 0 = 校验失败(SCRIPT_VERIFY_FAILED)
+    #[serde(default)]
+    pub verify: Option<String>,
 }
 
 fn default_line_ending() -> String {
@@ -197,12 +207,10 @@ pub fn validate_definition(def: &FrameDefinition) -> Vec<String> {
                 }
             }
             if let Some(tail) = &def.tail {
-                match parse_hex_string(tail) {
-                    Err(e) => issues.push(format!("尾部定界 HEX 不合法: {e}")),
-                    // 空字符串 = 不使用(与帧头 head 的既有约定一致)
-                    Ok(_) => {}
-                    Ok(_) => {}
+                if let Err(e) = parse_hex_string(tail) {
+                    issues.push(format!("尾部定界 HEX 不合法: {e}"));
                 }
+                // 空字符串 = 不使用(与帧头 head 的既有约定一致)
             }
             let length_field_range = def.length_field.as_ref().map(|lf| {
                 let size = if lf.field_type_tag == "u16" { 2 } else { 1 };
@@ -289,7 +297,41 @@ pub fn validate_definition(def: &FrameDefinition) -> Vec<String> {
                 }
             }
         }
-        other => issues.push(format!("模式非法: {other}(应为 binary 或 ascii-delimited)")),
+        "script" => {
+            if def.head.is_some()
+                || def.length.is_some()
+                || def.length_field.is_some()
+                || def.tail.is_some()
+                || def.checksum.is_some()
+            {
+                issues.push("脚本模式不支持帧头/定长/长度字段/校验/尾部定界".to_string());
+            }
+            for field in &def.fields {
+                match field
+                    .expr
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    None => issues.push(format!("脚本模式字段 {} 缺少表达式", field.name)),
+                    Some(src) => {
+                        if let Err(e) = frame_expr::compile(src) {
+                            issues.push(format!("字段 {} 表达式错误: {}", field.name, e.message));
+                        }
+                    }
+                }
+            }
+            for (label, src) in [("接受条件", &def.accept), ("校验条件", &def.verify)] {
+                if let Some(src) = src.as_deref() {
+                    if let Err(e) = frame_expr::compile(src) {
+                        issues.push(format!("{label}表达式错误: {}", e.message));
+                    }
+                }
+            }
+        }
+        other => issues.push(format!(
+            "模式非法: {other}(应为 binary、ascii-delimited 或 script)"
+        )),
     }
     issues
 }
@@ -657,6 +699,76 @@ fn parse_ascii(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>, 
     Ok(result)
 }
 
+/// script 模式: accept/verify 条件 + 每字段一条表达式(frame_expr 引擎)。
+/// 表达式引擎的错误码(EXPR_SYNTAX/EXPR_EVAL/EXPR_LIMIT)原样透传给渲染层。
+fn parse_script(bytes: &[u8], def: &FrameDefinition) -> Result<Vec<ParsedField>, FrameDefError> {
+    fn to_def_err(e: frame_expr::ExprError) -> FrameDefError {
+        FrameDefError {
+            code: e.code,
+            message: e.message,
+        }
+    }
+    fn eval_cond(bytes: &[u8], src: &str) -> Result<bool, FrameDefError> {
+        let expr = frame_expr::compile(src).map_err(to_def_err)?;
+        Ok(expr.eval(bytes).map_err(to_def_err)? != 0.0)
+    }
+    if let Some(accept) = def
+        .accept
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if !eval_cond(bytes, accept)? {
+            return Err(FrameDefError::new(
+                "FRAME_REJECTED",
+                "accept 条件不满足,帧被拒绝",
+            ));
+        }
+    }
+    if let Some(verify) = def
+        .verify
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if !eval_cond(bytes, verify)? {
+            return Err(FrameDefError::new(
+                "SCRIPT_VERIFY_FAILED",
+                "verify 校验条件不满足",
+            ));
+        }
+    }
+    let mut result = Vec::with_capacity(def.fields.len());
+    for field in &def.fields {
+        let Some(src) = field
+            .expr
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            return Err(FrameDefError::new(
+                "FRAME_DEF_INVALID",
+                format!("字段 {} 缺少表达式", field.name),
+            ));
+        };
+        let expr = frame_expr::compile(src).map_err(to_def_err)?;
+        let raw = expr.eval(bytes).map_err(to_def_err)?;
+        let value = raw * field.scale;
+        if !value.is_finite() {
+            return Err(FrameDefError::new(
+                "EXPR_EVAL",
+                format!("字段 {} 表达式 × 缩放后非有限", field.name),
+            ));
+        }
+        result.push(ParsedField {
+            name: field.name.clone(),
+            value,
+            unit: field.unit.clone(),
+        });
+    }
+    Ok(result)
+}
+
 /// 解析一帧。定义/帧不匹配返回显式错误,绝不静默。
 pub fn parse_custom_frame(
     bytes: &[u8],
@@ -665,6 +777,7 @@ pub fn parse_custom_frame(
     match def.mode.as_str() {
         "binary" => parse_binary(bytes, def),
         "ascii-delimited" => parse_ascii(bytes, def),
+        "script" => parse_script(bytes, def),
         other => Err(FrameDefError::new(
             "FRAME_DEF_INVALID",
             format!("模式非法: {other}"),
@@ -690,6 +803,8 @@ mod tests {
             line_ending: "\n".to_string(),
             separator: ",".to_string(),
             fields,
+            accept: None,
+            verify: None,
         }
     }
 
@@ -702,6 +817,7 @@ mod tests {
             byte_order: "be".to_string(),
             scale: 1.0,
             unit: String::new(),
+            expr: None,
         }
     }
 
@@ -933,6 +1049,7 @@ mod tests {
             byte_order: "be".to_string(),
             scale: 0.1,
             unit: "℃".to_string(),
+            expr: None,
         }];
         let bytes = b"ST,251,760\n";
         let parsed = parse_custom_frame(bytes, &def).unwrap();
@@ -966,6 +1083,7 @@ mod tests {
             byte_order: "be".to_string(),
             scale: 1.0,
             unit: String::new(),
+            expr: None,
         }
     }
 
@@ -984,6 +1102,135 @@ mod tests {
         def.mode = "websocket".to_string();
         let err = parse_custom_frame(&[0x01], &def).unwrap_err();
         assert_eq!(err.code, "FRAME_DEF_INVALID");
+    }
+
+    #[test]
+    fn script_mode_bcd_with_accept_and_verify() {
+        // 帧: 55 | BCD 25 | 12 | sum8 校验;accept 匹配帧头,verify 验 sum8
+        let frame = [0x55, 0x25, 0x12, (0x55 + 0x25 + 0x12) & 0xFF];
+        let mut def = temp_def(vec![]);
+        def.mode = "script".to_string();
+        def.accept = Some("frame[0] == 0x55".to_string());
+        // 注意 & 优先级低于 ==,位与必须加括号(C 同款陷阱)
+        def.verify = Some("(sum(0, len - 2) & 0xFF) == frame[len - 1]".to_string());
+        def.fields = vec![FieldDef {
+            name: "temp".to_string(),
+            offset: None,
+            index: None,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            scale: 0.01,
+            unit: "℃".to_string(),
+            expr: Some("bcd(frame[1])".to_string()),
+        }];
+        let parsed = parse_custom_frame(&frame, &def).unwrap();
+        assert_eq!(parsed[0].name, "temp");
+        assert!((parsed[0].value - 0.25).abs() < 1e-12);
+        assert_eq!(parsed[0].unit, "℃");
+        // accept 不满足 → FRAME_REJECTED
+        let bad_head = [0x54, 0x25, 0x12, (0x54 + 0x25 + 0x12) & 0xFF];
+        let err = parse_custom_frame(&bad_head, &def).unwrap_err();
+        assert_eq!(err.code, "FRAME_REJECTED");
+        // verify 校验失败 → SCRIPT_VERIFY_FAILED
+        let mut bad_sum = frame;
+        bad_sum[3] ^= 0xFF;
+        let err = parse_custom_frame(&bad_sum, &def).unwrap_err();
+        assert_eq!(err.code, "SCRIPT_VERIFY_FAILED");
+        // 表达式索引越界 → EXPR_EVAL 透传
+        let mut short_def = def.clone();
+        short_def.verify = None;
+        short_def.accept = None;
+        short_def.fields[0].expr = Some("frame[9]".to_string());
+        let err = parse_custom_frame(&frame, &short_def).unwrap_err();
+        assert_eq!(err.code, "EXPR_EVAL");
+    }
+
+    #[test]
+    fn script_mode_missing_expr_and_syntax_error() {
+        let mut def = temp_def(vec![]);
+        def.mode = "script".to_string();
+        def.fields = vec![field("a", 0, "u8")]; // 无 expr
+        let err = parse_custom_frame(&[0x01], &def).unwrap_err();
+        assert_eq!(err.code, "FRAME_DEF_INVALID");
+        assert!(err.message.contains("缺少表达式"));
+        let mut bad = def.clone();
+        bad.fields[0].expr = Some("frame[0] ++".to_string());
+        let err = parse_custom_frame(&[0x01], &bad).unwrap_err();
+        assert_eq!(err.code, "EXPR_SYNTAX");
+        // 位合成字段: 两字节拼 16 位
+        let mut comb = temp_def(vec![]);
+        comb.mode = "script".to_string();
+        comb.fields = vec![FieldDef {
+            name: "raw".to_string(),
+            offset: None,
+            index: None,
+            field_type_tag: "u16".to_string(),
+            byte_order: "be".to_string(),
+            scale: 1.0,
+            unit: String::new(),
+            expr: Some("frame[0] << 8 | frame[1]".to_string()),
+        }];
+        let parsed = parse_custom_frame(&[0x12, 0x34], &comb).unwrap();
+        assert_eq!(parsed[0].value, 4660.0);
+    }
+
+    #[test]
+    fn validate_definition_script_issues() {
+        // 干净的脚本定义
+        let mut def = temp_def(vec![]);
+        def.mode = "script".to_string();
+        def.fields = vec![FieldDef {
+            name: "a".to_string(),
+            offset: None,
+            index: None,
+            field_type_tag: "u8".to_string(),
+            byte_order: "be".to_string(),
+            scale: 1.0,
+            unit: String::new(),
+            expr: Some("frame[0] * 2".to_string()),
+        }];
+        def.accept = Some("len > 0".to_string());
+        assert!(validate_definition(&def).is_empty());
+        // 缺表达式 + 坏 accept + 混入表单字段
+        def.fields[0].expr = None;
+        def.accept = Some("foo".to_string());
+        def.length = Some(4);
+        def.checksum = Some(ChecksumDef {
+            checksum_type: "sum8".to_string(),
+        });
+        let issues = validate_definition(&def);
+        assert!(issues.iter().any(|i| i.contains("缺少表达式")));
+        assert!(issues.iter().any(|i| i.contains("接受条件表达式错误")));
+        assert!(issues.iter().any(|i| i.contains("脚本模式不支持")));
+    }
+
+    #[test]
+    fn serde_script_fields_roundtrip() {
+        let raw = serde_json::json!({
+            "name": "BCD 表",
+            "mode": "script",
+            "accept": "frame[0] == 0x55",
+            "verify": "sum(0, len - 2) & 0xFF == frame[len - 1]",
+            "fields": [
+                { "name": "temp", "expr": "bcd(frame[1])", "scale": 0.01, "unit": "℃" }
+            ]
+        });
+        let def: FrameDefinition = serde_json::from_value(raw).unwrap();
+        assert_eq!(def.mode, "script");
+        assert_eq!(def.accept.as_deref(), Some("frame[0] == 0x55"));
+        assert_eq!(
+            def.verify.as_deref().unwrap(),
+            "sum(0, len - 2) & 0xFF == frame[len - 1]"
+        );
+        assert_eq!(def.fields[0].expr.as_deref(), Some("bcd(frame[1])"));
+        assert!(validate_definition(&def).is_empty());
+        // 旧 schema(无 expr/accept/verify)反序列化为 None
+        let legacy = serde_json::json!({
+            "name": "旧", "mode": "binary", "fields": [{ "name": "a", "offset": 0 }]
+        });
+        let def: FrameDefinition = serde_json::from_value(legacy).unwrap();
+        assert!(def.fields[0].expr.is_none());
+        assert!(def.accept.is_none() && def.verify.is_none());
     }
 
     #[test]

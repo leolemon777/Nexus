@@ -521,6 +521,65 @@ test("migrates v1 projects to v2 with empty frameDefinitions and sanitizes defin
   assert.equal(bad.tail, "ZZ");
 });
 
+test("normalizes script frame definitions (expr/accept/verify) and strips binary keys", () => {
+  const dirty = validProject({
+    workspace: {
+      commandList: [],
+      frameDefinitions: [
+        {
+          name: "BCD 温湿度",
+          mode: "script",
+          accept: "  frame[0] == 0x55  ",
+          verify: "(sum(0, len - 2) & 0xFF) == frame[len - 1]",
+          // 脚本模式混入的 binary 字段应被剥掉
+          head: "AA",
+          length: 9,
+          checksum: { type: "sum8" },
+          tail: "0D 0A",
+          fields: [
+            { name: "temp", expr: "bcd(frame[1])", scale: 0.01, unit: "℃", offset: 3, fieldType: "i16" },
+            { name: "flag", expr: "   ", scale: 1 }, // 空白表达式归 null(Rust validate 显式报缺)
+          ],
+        },
+        {
+          name: "脚本坏条件",
+          mode: "script",
+          accept: "x".repeat(300), // 超限被裁断(256)
+          fields: [{ name: "a", expr: "frame[0] * 2" }],
+        },
+        {
+          name: "binary 不带脚本键",
+          mode: "binary",
+          fields: [{ name: "a", offset: 0, expr: "frame[0]" }], // 非脚本模式 expr 应被清掉
+        },
+      ],
+    },
+  });
+  const defs = normalizeProjectDocument(dirty).workspace.frameDefinitions;
+  assert.equal(defs.length, 3);
+
+  const script = defs[0];
+  assert.equal(script.mode, "script");
+  assert.equal(script.accept, "frame[0] == 0x55");
+  assert.equal(script.verify, "(sum(0, len - 2) & 0xFF) == frame[len - 1]");
+  assert.equal(script.head, "");
+  assert.equal(script.length, null);
+  assert.equal(script.checksum, null);
+  assert.equal(script.tail, "");
+  assert.equal(script.fields[0].expr, "bcd(frame[1])");
+  assert.equal(script.fields[0].scale, 0.01);
+  assert.equal(script.fields[0].offset, null); // 归一化输出以 null 表达"无此键"
+  assert.equal(script.fields[1].expr, null);
+
+  assert.equal(defs[1].accept.length, 256);
+
+  const binary = defs[2];
+  assert.equal(binary.mode, "binary");
+  assert.equal(binary.fields[0].expr, null);
+  assert.equal(binary.accept, null);
+  assert.equal(binary.verify, null);
+});
+
 test("rejects excessive workspace collections and deeply nested project input", () => {
   const trendSelection = Array.from({ length: 33 }, (_, index) => `reg-HR-${index}`);
   assert.throws(() => normalizeProjectDocument(validProject({

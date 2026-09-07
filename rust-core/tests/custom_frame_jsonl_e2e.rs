@@ -290,6 +290,98 @@ fn jsonl_parses_dynamic_length_and_tail_delimiter_frames() {
     );
 }
 
+#[test]
+fn jsonl_script_mode_accept_verify_and_expr_errors() {
+    let mut sidecar = Sidecar::spawn();
+    // 帧: 55 | BCD 25 | 12 | sum8;与 docs/custom-frame-golden-vectors.md 脚本向量一致
+    let def = json!({
+        "schemaVersion": 1,
+        "name": "BCD 温湿度",
+        "mode": "script",
+        "accept": "frame[0] == 0x55",
+        "verify": "(sum(0, len - 2) & 0xFF) == frame[len - 1]",
+        "fields": [
+            { "name": "temp", "expr": "bcd(frame[1])", "scale": 0.01, "unit": "℃" },
+            { "name": "flag", "expr": "bit(frame[2], 4)" }
+        ]
+    });
+    let frame: Vec<u8> = vec![0x55, 0x25, 0x12, (0x55 + 0x25 + 0x12) & 0xFF];
+    let result = sidecar.ok(
+        "script-ok",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": frame }),
+    );
+    assert_eq!(result["status"], "ok");
+    let fields = result["fields"].as_array().unwrap();
+    assert_eq!(fields[0]["name"], "temp");
+    assert_eq!(fields[0]["value"], json!(0.25)); // bcd(0x25)=25 ×0.01
+    assert_eq!(fields[0]["unit"], "℃");
+    assert_eq!(fields[1]["value"], json!(1.0)); // 0x12 bit4 = 1
+
+    // accept 不满足 → FRAME_REJECTED
+    let bad_head: Vec<u8> = vec![0x54, 0x25, 0x12, (0x54 + 0x25 + 0x12) & 0xFF];
+    let result = sidecar.ok(
+        "script-reject",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": bad_head }),
+    );
+    assert_eq!(result["status"], "error");
+    assert_eq!(result["error"]["code"], "FRAME_REJECTED");
+
+    // verify 校验失败 → SCRIPT_VERIFY_FAILED
+    let mut bad_sum = frame.clone();
+    bad_sum[3] ^= 0xFF;
+    let result = sidecar.ok(
+        "script-verify",
+        "custom_frame_parse",
+        json!({ "definition": def, "bytes": bad_sum }),
+    );
+    assert_eq!(result["error"]["code"], "SCRIPT_VERIFY_FAILED");
+
+    // 表达式索引越界 → EXPR_EVAL;语法错 → EXPR_SYNTAX
+    let mut oob = def.clone();
+    oob["fields"][0]["expr"] = json!("frame[9]");
+    let result = sidecar.ok(
+        "script-oob",
+        "custom_frame_parse",
+        json!({ "definition": oob, "bytes": frame }),
+    );
+    assert_eq!(result["error"]["code"], "EXPR_EVAL");
+    let mut syn = def.clone();
+    syn["fields"][0]["expr"] = json!("frame[0] ++");
+    let result = sidecar.ok(
+        "script-syn",
+        "custom_frame_parse",
+        json!({ "definition": syn, "bytes": frame }),
+    );
+    assert_eq!(result["error"]["code"], "EXPR_SYNTAX");
+
+    // validate: 缺表达式 + 混入表单字段 → 显式问题列表
+    let bad_def = json!({
+        "name": "坏脚本",
+        "mode": "script",
+        "length": 4,
+        "fields": [ { "name": "a", "fieldType": "u8" } ]
+    });
+    let result = sidecar.ok(
+        "script-validate",
+        "custom_frame_validate",
+        json!({ "definition": bad_def }),
+    );
+    assert_eq!(result["valid"], false);
+    let issues = result["issues"].as_array().unwrap();
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.as_str().unwrap().contains("缺少表达式"))
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.as_str().unwrap().contains("脚本模式不支持"))
+    );
+}
+
 /// 与 modbus_rtu::crc16_modbus 相同的多项式实现,测试内自证(不引 crate 私有模块)。
 fn crc16_modbus_test_helper(bytes: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;

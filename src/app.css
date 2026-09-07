@@ -2677,3 +2677,8 @@ details summary::-webkit-details-marker {
     animation: none !important;
   }
 }
+
+/* 收发记录条件着色(spec B.9):命中规则旧行首加 3px 色条,不动文字色保可读性 */
+.debug-log-grid tr.color-flagged td:first-child {
+  box-shadow: inset 3px 0 0 var(--rule-color, transparent);
+}
