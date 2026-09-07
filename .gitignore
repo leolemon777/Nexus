@@ -2,6 +2,7 @@
 node_modules/
 dist/
 rust-core/target/
+poc/*/target/
 output/
 audit-ui/
 screenshots/

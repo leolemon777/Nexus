@@ -33,6 +33,12 @@
 - 遗留小项：着色规则的模式切换与帧定义切换不联动重涂字段规则（规则不变时无影响）；`cargo test` 全量基线由 637 升 649。
 - L2 边界：脚本模式真机价值在 BCD/私有校验类非标设备（如 DL/T 645 表计），软件向量不等于设备级验收；RS-485 温度模块批次待硬件。
 
+## 证据批次：R0 Soak-A 1 小时 + OPC UA 复活 PoC（2026-09-07）
+
+- **R0 Soak-A（1h）**：按 `docs/r0-soak-runbook.md` 完整执行，证据 `evidence/r0/soak-20260907-1h.json`（UTC 15:09:31→16:09:31，`actualDurationMs` 3600260）。9 项 checks 全 true：28865 次轮询成功 / 0 数据错误 / 0 流错误 / 无静默；RSS 增长 69632 B（限额 128 MB）、句柄增长 -1（限额 100）、最大 transport latency 未超阈值；流/连接/虚拟从站/sidecar 清理全部成功，退出码 0。证据如实记录 `workingTreeDirty: true`（运行起点仓库含未提交文件，runbook 判定项不含此项；树级干净要求由本批 formal 构建证据满足）。工具边界不变：不含拔线/断电/丢包类物理故障注入，不代表设备 L2；**8 小时 Soak-B 尚未执行**，需 8 小时挂机窗口。
+- **OPC UA 复活 PoC**：`docs/opcua-blocked.md` 复活条件 #1 满足并记录。选型 async-opcua 0.19.0（FreeOpcUa fork），`async-opcua-crypto` 全 RustCrypto，`cargo tree` 确认整树 **0 个 openssl 系 crate**，Windows MSVC 零 C 工具链编译链接运行全通——原 open62541 FFI 路线不再需要。PoC 为独立 crate `poc/opcua-server-poc/`（不动 rust-core 三依赖纪律，`Cargo.lock` 入库保复现）：内嵌 server（动态端口 + SecurityPolicy::None 匿名端点 + temp1/temp2 静态与 counter 动态点表）+ 同进程 client 直接 Read 闭环；两次运行均 `POC RESULT {...}` 退出码 0。实现期踩坑：async-opcua 0.19 `ServerConfig.user_tokens` 无 serde 默认值（生成的最小 conf 需显式 `user_tokens: {}`）；`AddressSpace::add_variables` 返回 `Vec<bool>` 而非 `Result`。PoC 未覆盖加密端点/订阅/浏览/真实 PLC 互操作——正式接入属新批次另行排期。
+- 验证（2026-09-07）：PoC `cargo build --release` 零警告、`cargo fmt --check` 通过、双次运行结果一致；soak 证据经 node 脚本逐字段核验（passed/checks/counters/source）。
+
 ## 功能批次：自定义帧解析 v2 —— 动态长度 + 尾部定界（2026-09-04）
 
 - 规格：`docs/spec-plan-serial-plot-parse-replay.md` B.7 前两项。目标设备形态：长度字节自述帧长的非标模块（常见温湿度/称重）与带 `CR/LF` 类尾界定界的帧。

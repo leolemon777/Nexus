@@ -1,0 +1,14 @@
+[package]
+name = "nexus-opcua-server-poc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 独立 PoC crate：验证 docs/opcua-blocked.md 的复活条件 #1。
+# 不属于 rust-core，不受 rust-core 三依赖纪律约束。
+[dependencies]
+async-opcua = { version = "0.19", default-features = false, features = ["server", "client"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+[profile.release]
+# 保持默认，PoC 只关心能否编译运行，不追求产物尺寸
