@@ -28,5 +28,42 @@ cargo run --manifest-path poc/opcua-server-poc/Cargo.toml --release
 ```
 
 工作目录使用系统临时目录（`%TEMP%\nexus-opcua-poc-<pid>`），pki 与 `server.conf`
-不会落在仓库内。本 crate 独立于 rust-core，不受其三依赖纪律约束；`Cargo.lock`
-随仓库提交以保证 PoC 可复现。
+不会落在仓库内。**跑通了就整个删掉**（里面是自签私钥，没有留存价值）；**失败则保留现场**
+并在 stderr 打出路径——生成的 `server.conf` 和 pki 往往就是排查起点，排查完请自行删除。
+本 crate 独立于 rust-core，不受其三依赖纪律约束；`Cargo.lock` 随仓库提交以保证 PoC 可复现。
+
+端口不再是"绑 0 拿号再释放、等 server 自己重绑"：现在 listener 绑好后直接交给
+`Server::run_with()`，中间没有可被别的进程抢走的窗口。
+
+## 门禁
+
+本 crate 已挂进候选构建证据清单（`scripts/build-evidence.candidate.json` 的
+`opcua-poc-selfcheck`），避免它在没人看的时候烂掉。门禁跑的是**完整自闭环**而不是
+只编译——PoC 的判定标准本来就是退出码，只 build 挡不住行为层面的腐烂：
+
+```powershell
+npm run run:opcua-poc
+```
+
+只想确认能编译（不占端口）时用：
+
+```powershell
+npm run build:opcua-poc
+```
+
+格式检查是独立的一条，没有进门禁：
+
+```powershell
+npm run fmt:opcua-poc
+```
+
+工具链沿用仓库根的活动工具链（由 `npm run preflight:toolchain` 锁定为
+`rust-core/rust-toolchain.toml` 里的版本），本 crate 不单独放 `rust-toolchain.toml`
+——rustup 按当前目录取 pin，而这里的构建命令都是从仓库根用 `--manifest-path` 发起的，
+放了也不生效。
+
+## 这份代码不是正式接入的模板
+
+重试循环、手写 YAML 配置、`Result<_, String>` 错误、以及 None + 匿名 + 全信任的安全
+配置，都是只在"连自己进程内的 server"这个前提下才成立的写法。正式接入的硬约束见
+[docs/opcua-blocked.md](../../docs/opcua-blocked.md) 的「正式接入的硬约束」一节。

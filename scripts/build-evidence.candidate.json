@@ -42,6 +42,13 @@
       "script": "audit",
       "title": "npm security audit",
       "timeoutMs": 300000
+    },
+    {
+      "id": "opcua-poc-selfcheck",
+      "kind": "npm",
+      "script": "run:opcua-poc",
+      "title": "OPC UA revival PoC builds and closes its server/client loop",
+      "timeoutMs": 900000
     }
   ]
 }
