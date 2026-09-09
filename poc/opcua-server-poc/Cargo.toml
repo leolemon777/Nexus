@@ -8,7 +8,9 @@ publish = false
 # 不属于 rust-core，不受 rust-core 三依赖纪律约束。
 [dependencies]
 async-opcua = { version = "0.19", default-features = false, features = ["server", "client"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# net：main.rs 自己绑 TcpListener 再交给 server.run_with()。async-opcua 已经开了这个
+# feature，此处显式列出是不想依赖 feature 统一的隐式结果；mio/socket2 已在 Cargo.lock 内。
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
 
 [profile.release]
 # 保持默认，PoC 只关心能否编译运行，不追求产物尺寸

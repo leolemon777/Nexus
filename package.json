@@ -42,6 +42,9 @@
     "test:soak-harness": "node --test scripts/soak-r0.test.cjs",
     "audit": "npm audit --audit-level=moderate",
     "fmt:rust-core": "cargo fmt --manifest-path rust-core/Cargo.toml --all -- --check",
+    "build:opcua-poc": "cargo build --release --manifest-path poc/opcua-server-poc/Cargo.toml",
+    "run:opcua-poc": "cargo run --release --manifest-path poc/opcua-server-poc/Cargo.toml",
+    "fmt:opcua-poc": "cargo fmt --manifest-path poc/opcua-server-poc/Cargo.toml --all -- --check",
     "tauri": "tauri"
   },
   "dependencies": {
